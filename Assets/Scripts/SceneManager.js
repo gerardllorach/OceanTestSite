@@ -9,6 +9,8 @@ import { OceanEntity } from '/OceanTestSite/Assets/Ocean/OceanEntity.js';
 
 import { TextMeshEntity } from '/CasablancaBuoy/Assets/TextMesh/TextMeshEntity.js';
 
+import { Recorder } from './Recorder.js';
+
 
 class SceneManager{
 
@@ -24,7 +26,7 @@ class SceneManager{
 
     //const canvas = document.querySelector('#c');
     const renderer = new THREE.WebGLRenderer({ canvas });
-    renderer.outputEncoding = THREE.sRGBEncoding;
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer = renderer;
 
     const fov = 45;
@@ -41,14 +43,11 @@ class SceneManager{
     // Surface
     camera.position.set(10, 7.5, 10);
     controls.target.set(0, 1, 0);
-  // OBSEA base
-  // camera.position.set(3, -16, 3);
-  // controls.target.set(6,-19, -1);
+
 
     controls.update();
     controls.enableDamping = true;
-  // controls.autoRotate = true;
-  // controls.autoRotateSpeed = 1;
+
 
     // STATS
     let stats = new Stats();
@@ -145,6 +144,12 @@ class SceneManager{
       scene.add(light);
       scene.add(light.target);
     }
+
+
+    // RECORDER
+    this.recorder = new Recorder(scene);
+
+    
 
 
   }
