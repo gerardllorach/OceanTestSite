@@ -147,7 +147,7 @@ class SceneManager{
 
 
     // RECORDER
-    this.recorder = new Recorder(scene);
+    this.recorder = new Recorder(scene, this.ocean);
 
     
 

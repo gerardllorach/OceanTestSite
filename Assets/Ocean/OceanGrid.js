@@ -266,7 +266,8 @@ export class OceanGrid {
 
 
   // PUBLIC
-  update = function(oceanMesh){
+  update = function(oceanMesh, camera){
+    this.cameraUser = camera || this.cameraUser;
     // Update camera grid
     this.updateCameraGrid();
 
