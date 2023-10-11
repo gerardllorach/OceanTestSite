@@ -73,40 +73,40 @@ class OceanEntity {
     // Create ocean material
     // Define material and shaders
     let oceanProjectedGridMaterial = new THREE.ShaderMaterial({
-    blending: THREE.NormalBlending,
-    transparent: true,
-    // lights: true, // https://github.com/mrdoob/three.js/issues/16656
-    uniforms: {
-      u_time: { value: this.time },
-      u_fogUnderwaterColor: { value: new THREE.Vector3(scene.fog.color.r, scene.fog.color.g, scene.fog.color.b)},
-      u_fogDensity: {value: scene.fog.density},
-      u_paramsTexture: {value: paramsTexture},
-      u_imgSize: {value: new THREE.Vector2(imgSize, imgSize)},
-      u_steepnessFactor: { value: 0.2 },
-      // u_wavelength: { value: 7.0 },
-      // u_direction: { value: new THREE.Vector2(1, 0) },
-      u_wave1Params: { value: new THREE.Vector4(0.1, 0.1, 0.0, 1.0) }, // steepness, waveHeight, directionx, directionz
-      u_wave2Params: { value: new THREE.Vector4(0.05, 0.2, 0.5, 1.0) }, // steepness, waveHeight, directionx, directionz
-      u_normalTexture: {value: normalTexture}, // TODO: WHAT IF THE TEXTURE TAKES TOO LONG TO LOAD?
+      blending: THREE.NormalBlending,
+      transparent: true,
+      // lights: true, // https://github.com/mrdoob/three.js/issues/16656
+      uniforms: {
+        u_time: { value: this.time },
+        u_fogUnderwaterColor: { value: new THREE.Vector3(scene.fog.color.r, scene.fog.color.g, scene.fog.color.b)},
+        u_fogDensity: {value: scene.fog.density},
+        u_paramsTexture: {value: paramsTexture},
+        u_imgSize: {value: new THREE.Vector2(imgSize, imgSize)},
+        u_steepnessFactor: { value: 0.2 },
+        // u_wavelength: { value: 7.0 },
+        // u_direction: { value: new THREE.Vector2(1, 0) },
+        u_wave1Params: { value: new THREE.Vector4(0.1, 0.1, 0.0, 1.0) }, // steepness, waveHeight, directionx, directionz
+        u_wave2Params: { value: new THREE.Vector4(0.05, 0.2, 0.5, 1.0) }, // steepness, waveHeight, directionx, directionz
+        u_normalTexture: {value: normalTexture}, // TODO: WHAT IF THE TEXTURE TAKES TOO LONG TO LOAD?
 
-      // Projected grid parameters
-      u_cameraModelMatrix: {value: this.gridEntity.cameraGrid.matrix},
-      u_cameraGridPosition: {value: this.gridEntity.cameraGrid.position},
-      u_cameraViewportScale: {value: new THREE.Vector2(1, 1)},
-    },
-    vertexShader: OceanProjectedGridVertShader,
-    fragmentShader: OceanProjectedGridFragShader,
-  });
+        // Projected grid parameters
+        u_cameraModelMatrix: {value: this.gridEntity.cameraGrid.matrix},
+        u_cameraGridPosition: {value: this.gridEntity.cameraGrid.position},
+        u_cameraViewportScale: {value: new THREE.Vector2(1, 1)},
+      },
+      vertexShader: OceanProjectedGridVertShader,
+      fragmentShader: OceanProjectedGridFragShader,
+    });
 
-  oceanProjectedGridMaterial.side = THREE.DoubleSide;
+    oceanProjectedGridMaterial.side = THREE.DoubleSide;
 
-  // Create mesh
-  this.oceanTile = new THREE.Mesh( this.gridEntity.gridGeom, oceanProjectedGridMaterial );
-  this.oceanTile.frustrumCulled = false; // DELETE AT SOME POINT
+    // Create mesh
+    this.oceanTile = new THREE.Mesh( this.gridEntity.gridGeom, oceanProjectedGridMaterial );
+    this.oceanTile.frustrumCulled = false; // DELETE AT SOME POINT
 
-  scene.add(this.oceanTile);
+    scene.add(this.oceanTile);
 
-  this.isLoaded = true;
+    this.isLoaded = true;
 
     
   }
