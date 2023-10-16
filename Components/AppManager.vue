@@ -11,6 +11,8 @@
 
     <!-- RIGHT ICONS -->
     <div class="top-right-icons-container">
+      <!-- Record button -->
+      <div class="clickable icon-str" @click="recordClicked">🔴</div>
       <!-- FPS button -->
       <div class="clickable icon-str" @click="fpsClicked">fps</div>
       <!-- github button -->
@@ -61,6 +63,9 @@ export default {
     },
     fpsClicked: function() {
       window.eventBus.emit('AppManager_fpsButtonClicked');
+    },
+    recordClicked: function() {
+      window.eventBus.emit('AppManager_recordClicked');
     }
   },
   components: {

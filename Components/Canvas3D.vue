@@ -41,6 +41,9 @@ export default {
     window.eventBus.on('AppManager_fpsButtonClicked', () => {
       this.sceneManager.showHideFPS();
     });
+    window.eventBus.on('AppManager_recordClicked', () => {
+      this.sceneManager.record();
+    });
 
     // ***** TOP-RIGHT ICONS *****
     // Face northward
