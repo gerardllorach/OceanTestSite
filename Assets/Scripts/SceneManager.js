@@ -36,7 +36,7 @@ class SceneManager{
     const near = 0.1;
     const far = 2000;
     const camera = new THREE.PerspectiveCamera(fov, aspect, near, far);
-    this.camera = camera;
+    this.selectedCamera = this.camera = camera;
 
     // CAMERA CONTROLS
     const controls = new OrbitControls(camera, canvas);
@@ -152,9 +152,6 @@ class SceneManager{
     // RECORDER
     this.recorder = new Recorder(scene, this.ocean);
 
-    
-    canvas.style.display = 'none';
-
   }
 
 
@@ -269,10 +266,19 @@ class SceneManager{
         this.recorder.renderRight();
         await this.recorder.savePNG('R_' + time.toFixed(2));
       }
-    } else {
+
+      this.isRecording = false;
       this.startRender();
     }
-      
+  }
+
+  changeCamera = function(value){
+    if (value == 'F')
+      this.selectedCamera = this.camera;
+    else if (value == 'R')
+      this.selectedCamera = this.recorder.cameraR;
+    else if (value == 'L')
+      this.selectedCamera = this.recorder.cameraL;
   }
 
 
@@ -307,6 +313,9 @@ class SceneManager{
     // Ocean updates
     if (this.ocean && this.camera.position.y > -4) { // Limiting the updates by camera position does not improve performance in my PC 
       if (this.ocean.isLoaded) {
+
+        // Update ocean grid
+        this.ocean.gridEntity.update(this.ocean.oceanTile, this.selectedCamera);
         this.ocean.update(dt);
 
       }
@@ -354,11 +363,11 @@ class SceneManager{
 
     this.update(time);
 
-    this.renderer.render(this.scene, this.camera);
+    this.renderer.render(this.scene, this.selectedCamera);
 
     this.controls.update();
 
-    this.recorder.renderLeft();
+    //this.recorder.renderLeft();
 
     requestAnimationFrame(this.render.bind(this));
   }

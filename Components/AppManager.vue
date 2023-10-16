@@ -9,10 +9,8 @@
     <central-panel></central-panel>
 
 
-    <!-- RIGHT ICONS -->
+    <!-- TOP RIGHT ICONS -->
     <div class="top-right-icons-container">
-      <!-- Record button -->
-      <div class="clickable icon-str" @click="recordClicked">🔴</div>
       <!-- FPS button -->
       <div class="clickable icon-str" @click="fpsClicked">fps</div>
       <!-- github button -->
@@ -23,6 +21,20 @@
       </a>
       <!-- information button -->
       <div class="clickable icon-str" @click="infoIconClicked" title='information'>i</div>
+
+    </div>
+
+    <!-- RECORDING ICONS -->
+    <div class="recording-icons-container top-right-icons-container">
+      <!-- Record button -->
+      <div class="clickable icon-str" @click="recordClicked">🔴</div>
+      <!-- Right cam button -->
+      <div class="clickable icon-str" @click="camClicked('R')">R</div>
+      <!-- Left cam button -->
+      <div class="clickable icon-str" @click="camClicked('L')">L</div>
+      <!-- Free cam button -->
+      <div class="clickable icon-str" @click="camClicked('F')">F</div>
+
 
     </div>
     
@@ -66,6 +78,9 @@ export default {
     },
     recordClicked: function() {
       window.eventBus.emit('AppManager_recordClicked');
+    },
+    camClicked: function(value){
+      window.eventBus.emit('AppManager_cameraClicked', value);
     }
   },
   components: {
@@ -123,6 +138,14 @@ export default {
   margin: 5px;
   z-index: 10;
 }
+
+
+
+.recording-icons-container{
+  top: 60px;
+}
+
+
 
 .github-logo {
   background: white;

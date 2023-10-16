@@ -44,6 +44,9 @@ export default {
     window.eventBus.on('AppManager_recordClicked', () => {
       this.sceneManager.record();
     });
+    window.eventBus.on('AppManager_cameraClicked', (value) => {
+      this.sceneManager.changeCamera(value);
+    })
 
     // ***** TOP-RIGHT ICONS *****
     // Face northward
