@@ -43,8 +43,9 @@ class SceneManager{
     this.controls = controls;
     // TODO: limit orbit controls
     // Surface
-    camera.position.set(10, 7.5, 10);
-    controls.target.set(0, 1, 0);
+    //camera.position.set(10, 7.5, 10);
+    camera.position.set(-32, 62, 32)
+    controls.target.set(0, 1, -30);
 
 
     controls.update();
@@ -262,9 +263,10 @@ class SceneManager{
         let time = i/fps;
         this.update(1000 * time);
         this.recorder.renderLeft();
-        await this.recorder.savePNG('L_' + time.toFixed(2));
+        let timeStr = String(time.toFixed(2)).padStart(6, '0');
+        await this.recorder.savePNG('L_' + timeStr);
         this.recorder.renderRight();
-        await this.recorder.savePNG('R_' + time.toFixed(2));
+        await this.recorder.savePNG('R_' + timeStr);
       }
 
       this.isRecording = false;

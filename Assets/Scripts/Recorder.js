@@ -55,26 +55,40 @@ class Recorder {
     this.cameraR.rotation.set(- this.camInclination * Math.PI / 180, 0, 0);
     this.cameraL.rotation.set(- this.camInclination * Math.PI / 180, 0, 0);
 
+    // Create objects for left and right cameras
+    // Update camera's matrices
+    this.cameraR.updateWorldMatrix();
+    this.cameraL.updateWorldMatrix();
+    // Create helpers
+    this.helper = new THREE.CameraHelper( this.cameraR );
+    scene.add( this.helper );
+    this.helper2= new THREE.CameraHelper( this.cameraL );
+    scene.add( this.helper2 );
 
-    // TODO: OCEAN DEPENDS ON CAMERA, WE NEED TO CONNECT OCEAN ENTITY TO CAMERA-LEFT AND CAMERA-RIGHT
-    
-
-    document.body.appendChild( this.canvas );
+    //document.body.appendChild( this.canvas );
   }
 
 
   renderLeft = () => {
     // Update ocean grid
     this.ocean.gridEntity.update(this.ocean.oceanTile, this.cameraL);
+    // Hide helpers
+    this.displayHelpers(false);
     // Paint canvas
     this.renderer.render( this.scene, this.cameraL );
+    // Show helpers
+    this.displayHelpers(true);
     
   }
   renderRight = ()=>{
     // Update ocean grid
     this.ocean.gridEntity.update(this.ocean.oceanTile, this.cameraR);
+    // Hide helpers
+    this.displayHelpers(false);
     // Paint canvas
     this.renderer.render( this.scene, this.cameraR );
+    // Show helpers
+    this.displayHelpers(true);
   }
 
 
@@ -89,6 +103,11 @@ class Recorder {
     })
     
     
+  }
+
+  displayHelpers = function(state){
+    this.helper.visible = state;
+    this.helper2.visible = state;
   }
 }
 
