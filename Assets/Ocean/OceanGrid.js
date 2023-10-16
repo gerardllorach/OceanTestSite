@@ -19,7 +19,7 @@ export class OceanGrid {
     // Create grid geometry
     this.size = 5;
     // Public
-    this.gridGeom = this.createPlaneGeometry(numVertices, 20);
+    this.gridGeom = this.createPlaneGeometry(numVertices, 4);
     this.distanceFrontCamera = this.size / Math.tan(this.cameraUser.fov*Math.PI/180); // HACK WARN TODO: CHECK THIS FORMULA
 
     // Compression on the height of the plane geometry (useful when frustrum above horizon)

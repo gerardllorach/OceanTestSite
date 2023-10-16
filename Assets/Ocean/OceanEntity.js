@@ -67,7 +67,7 @@ class OceanEntity {
 
     
     // Create geometry
-    this.gridEntity = new OceanGrid(scene.camera, 300000);
+    this.gridEntity = new OceanGrid(scene.camera, 1 * 10e5);
     
 
     // Create ocean material
