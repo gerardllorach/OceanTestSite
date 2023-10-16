@@ -17,6 +17,8 @@ class SceneManager{
   stats;
   prevTime = 0;
 
+  isRecording = false;
+
   constructor(canvas){
     // Add loading screen
     this.addLoadingScreen();
@@ -73,6 +75,7 @@ class SceneManager{
 
     // Fog
     scene.fog = new THREE.FogExp2(new THREE.Color(0x47A0B9), 0.02);
+    scene.fog.density = 0;
     // Fog only below water
     THREE.ShaderChunk.fog_fragment = FogShader.fogFrag;
     THREE.ShaderChunk.fog_pars_fragment = FogShader.fogFragParams;
@@ -150,7 +153,7 @@ class SceneManager{
     this.recorder = new Recorder(scene, this.ocean);
 
     
-
+    canvas.style.display = 'none';
 
   }
 
@@ -249,6 +252,32 @@ class SceneManager{
 
 
 
+  // Record frames
+  record = async function(){
+    this.isRecording = !this.isRecording;
+    if (this.isRecording){
+
+      // Iterate through time
+      const fps = 10;
+      const duration = 1;
+
+      for (let i = 0; i < fps * duration; i++){
+        let time = i/fps;
+        this.update(1000 * time);
+        this.recorder.renderLeft();
+        await this.recorder.savePNG('L_' + time.toFixed(2));
+        this.recorder.renderRight();
+        await this.recorder.savePNG('R_' + time.toFixed(2));
+      }
+    } else {
+      this.startRender();
+    }
+      
+  }
+
+
+
+
   // WINDOW RESIZE (called from Canvas3D.vue)
   windowWasResized = function(){
     if (this.resizeRendererToDisplaySize(this.renderer)) {
@@ -311,7 +340,8 @@ class SceneManager{
 
   // RENDER
   render = function (time) {
-
+    if (this.isRecording)
+      return;
     // // Tween update
     // if (TWEEN)
     //   TWEEN.update();
@@ -327,6 +357,8 @@ class SceneManager{
     this.renderer.render(this.scene, this.camera);
 
     this.controls.update();
+
+    this.recorder.renderLeft();
 
     requestAnimationFrame(this.render.bind(this));
   }

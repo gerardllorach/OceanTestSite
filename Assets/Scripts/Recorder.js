@@ -49,10 +49,10 @@ class Recorder {
     this.cameraL = new THREE.PerspectiveCamera(fov, aspect, near, far);
     
     // Camera positions
-    //this.cameraR.position.set( this.distBetweenCams / 2, this.camElevation, 0);
+    this.cameraR.position.set( this.distBetweenCams / 2, this.camElevation, 0);
     this.cameraL.position.set(- this.distBetweenCams / 2, this.camElevation, 0);
     // Camera rotation
-    //this.cameraR.rotation.set(- this.camInclination * Math.PI / 180, 0, 0);
+    this.cameraR.rotation.set(- this.camInclination * Math.PI / 180, 0, 0);
     this.cameraL.rotation.set(- this.camInclination * Math.PI / 180, 0, 0);
 
 
@@ -63,15 +63,31 @@ class Recorder {
   }
 
 
-  render = () => {
-
-    // TODO: TEST
+  renderLeft = () => {
     // Update ocean grid
-    this.ocean.gridEntity.update(this.ocean.oceanTile, this.cameraL)
-
-    //this.renderer.render( this.scene, this.cameraR );
+    this.ocean.gridEntity.update(this.ocean.oceanTile, this.cameraL);
+    // Paint canvas
     this.renderer.render( this.scene, this.cameraL );
+    
+  }
+  renderRight = ()=>{
+    // Update ocean grid
+    this.ocean.gridEntity.update(this.ocean.oceanTile, this.cameraR);
+    // Paint canvas
+    this.renderer.render( this.scene, this.cameraR );
+  }
 
+
+  savePNG = async function(filename){
+    return new Promise((resolve) => {
+      const link = document.createElement('a');
+      link.download = filename + '.png';
+      link.href = this.canvas.toDataURL();
+      link.click();
+      link.delete;
+      setTimeout(resolve, 10);
+    })
+    
     
   }
 }
