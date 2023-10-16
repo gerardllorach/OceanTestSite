@@ -149,6 +149,7 @@ export const OceanProjectedGridVertShader = /* glsl */ `
     float distanceStart = 200.0;
     distanceToCenter = min(10000.0, max(distanceStart, distanceToCenter));
     float distanceFactor = max(0.0001, distanceStart/(distanceToCenter));
+    distanceFactor = 1.0;
 
     // Declare tangent and binormal
     vec3 tangent = vec3(1.0, 0.0, 0.0);
