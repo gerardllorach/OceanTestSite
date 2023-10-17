@@ -24,7 +24,7 @@
 
     </div>
 
-    <!-- RECORDING ICONS -->
+    <!-- CAMERA ICONS -->
     <div class="camera-icons-container top-right-icons-container">
       <!-- Left cam button -->
       <div class="clickable icon-str fa" @click="camClicked('L')" title="Left sided camera">&#xf03d;</div>

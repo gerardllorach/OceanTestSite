@@ -110,6 +110,24 @@ class OceanEntity {
   }
 
   
+  addWave = function(hm0, T, dir, index){
+    this.numWaves++;
+
+    let params = this.oceanParams;
+    // Update
+    if (index == undefined){
+      params.waveHeights.push(hm0);
+      params.wavePeriods.push(T);
+      params.waveDirections.push(dir);
+    } else {
+      params.waveHeights[index] = hm0;
+      params.wavePeriods[index] = T;
+      params.waveDirections[index] = dir;
+    }
+    
+    
+    this.updateParamsTexture();
+  }
 
 
 
@@ -118,9 +136,9 @@ class OceanEntity {
 
   // USER INPUT 
   // Steepness range slider
-  updateSteepness = function(steepness){
+  updateSteepness = function(steepnessFactor){
     if (this.oceanTile)
-      this.oceanTile.material.uniforms.u_steepnessFactor.value = steepness;
+      this.oceanTile.material.uniforms.u_steepnessFactor.value = steepnessFactor;
   }
   // updateSwell = function(varName, value, index){
   //   if (!this.oceanTile)
