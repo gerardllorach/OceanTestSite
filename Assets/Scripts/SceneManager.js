@@ -297,6 +297,22 @@ class SceneManager{
       this.selectedCamera = this.recorder.cameraL;
   }
 
+  faceNorthward = function(){
+    // Tween camera position to face northward
+    let dist = this.camera.position.distanceTo(this.controls.target);
+    let newZ = Math.sqrt(dist * dist - Math.pow(this.camera.position.y-this.controls.target.y, 2));
+
+    this.controls.target.x = 0;
+    this.camera.position.set(this.controls.target.x, this.camera.position.y, newZ*0.5);
+    this.controls.update();
+
+    // new TWEEN.Tween(this.camera.position)
+    //   .to({ x: this.controls.target.x, z: newZ }, 4000)
+    //   .easing(TWEEN.Easing.Cubic.InOut)
+    //   .onUpdate(()=>this.controls.update())
+    //   .start();
+  }
+
 
 
 
