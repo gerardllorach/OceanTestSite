@@ -28,10 +28,10 @@ class OceanEntity {
   oceanSteepness;
 
   // Swell parameters
-  swellParameters = [
-    { Hm0: 0.1, Mdir: 0, Steepness: 0.1 },
-    { Hm0: 0.2, Mdir: 129, Steepness: 0.05 },
-  ]
+  // swellParameters = [
+  //   { Hm0: 0.1, Mdir: 0, Steepness: 0.1 },
+  //   { Hm0: 0.2, Mdir: 129, Steepness: 0.05 },
+  // ]
 
 
 
@@ -85,8 +85,6 @@ class OceanEntity {
         u_steepnessFactor: { value: 0.2 },
         // u_wavelength: { value: 7.0 },
         // u_direction: { value: new THREE.Vector2(1, 0) },
-        u_wave1Params: { value: new THREE.Vector4(0.1, 0.1, 0.0, 1.0) }, // steepness, waveHeight, directionx, directionz
-        u_wave2Params: { value: new THREE.Vector4(0.05, 0.2, 0.5, 1.0) }, // steepness, waveHeight, directionx, directionz
         u_normalTexture: {value: normalTexture}, // TODO: WHAT IF THE TEXTURE TAKES TOO LONG TO LOAD?
 
         // Projected grid parameters
@@ -124,31 +122,31 @@ class OceanEntity {
     if (this.oceanTile)
       this.oceanTile.material.uniforms.u_steepnessFactor.value = steepness;
   }
-  updateSwell = function(varName, value, index){
-    if (!this.oceanTile)
-      return;
-    index = index || 0;
-    let uniformParams;
-    if (index == 0)
-      uniformParams = this.oceanTile.material.uniforms.u_wave1Params;
-    else if (index == 1)
-      uniformParams = this.oceanTile.material.uniforms.u_wave2Params;
-    if (varName == 'height'){
-      this.swellParameters[index].Hm0 = value;
-      uniformParams.value.y = value;// steepness, waveHeight, directionx, directionz
-    } else if (varName == 'direction'){
-      this.swellParameters[index].Mdir = value;
-      value += 90;
-      let dirX = Math.cos(value * Math.PI / 180);
-      let dirZ = Math.sin(value * Math.PI / 180);
+  // updateSwell = function(varName, value, index){
+  //   if (!this.oceanTile)
+  //     return;
+  //   index = index || 0;
+  //   let uniformParams;
+  //   if (index == 0)
+  //     uniformParams = this.oceanTile.material.uniforms.u_wave1Params;
+  //   else if (index == 1)
+  //     uniformParams = this.oceanTile.material.uniforms.u_wave2Params;
+  //   if (varName == 'height'){
+  //     this.swellParameters[index].Hm0 = value;
+  //     uniformParams.value.y = value;// steepness, waveHeight, directionx, directionz
+  //   } else if (varName == 'direction'){
+  //     this.swellParameters[index].Mdir = value;
+  //     value += 90;
+  //     let dirX = Math.cos(value * Math.PI / 180);
+  //     let dirZ = Math.sin(value * Math.PI / 180);
       
-      uniformParams.value.z = dirX;
-      uniformParams.value.w = dirZ;
-    } else if (varName == 'steepness'){
-      this.swellParameters[index].Steepness = value;
-      uniformParams.value.x = value;
-    }
-  }
+  //     uniformParams.value.z = dirX;
+  //     uniformParams.value.w = dirZ;
+  //   } else if (varName == 'steepness'){
+  //     this.swellParameters[index].Steepness = value;
+  //     uniformParams.value.x = value;
+  //   }
+  // }
   // Update wave significant height
   updateWaveSignificantHeight = function(waveSignificantHeight){
     this.oceanParams.updateWaveSignificantHeight(waveSignificantHeight);
@@ -258,15 +256,15 @@ class OceanEntity {
 
 
 
-  getNormalAndPositionAt = function(position, normal){
+  // getNormalAndPositionAt = function(position, normal){
 
-    let calcNormal = this.getGerstnerNormal(position, 
-      this.swellParameters[0], 
-      this.swellParameters[1]);
+  //   let calcNormal = this.getGerstnerNormal(position, 
+  //     this.swellParameters[0], 
+  //     this.swellParameters[1]);
 
-    normal.set(calcNormal.x, calcNormal.y, calcNormal.z);
+  //   normal.set(calcNormal.x, calcNormal.y, calcNormal.z);
 
-  }
+  // }
 
 
 

@@ -77,9 +77,9 @@ export default {
       this.sceneManager.ocean.updateSteepness(steepness);
 
       // Swell 1
-      this.generateSwell(dataValues['Primary swell wave significant height'].value, dataValues['Primary swell wave direction'].value);
+      // this.generateSwell(dataValues['Primary swell wave significant height'].value, dataValues['Primary swell wave direction'].value);
       // Swell 2
-      this.generateSwell(dataValues['Secondary swell wave significant height'].value, dataValues['Secondary swell wave direction'].value, 1);
+      // this.generateSwell(dataValues['Secondary swell wave significant height'].value, dataValues['Secondary swell wave direction'].value, 1);
 
       // Flag
       this.sceneManager.flag.showFlag();
@@ -107,7 +107,7 @@ export default {
           this.sceneManager.ocean.updateMeanWaveDirection(dataInTimestamp['Mdir']);
           this.sceneManager.ocean.updateDirectionalSpread(dataInTimestamp['Spr1']);
           // Generate swell
-          this.generateSwell(dataInTimestamp['Hm0'], dataInTimestamp['Mdir']);
+          // this.generateSwell(dataInTimestamp['Hm0'], dataInTimestamp['Mdir']);
           // Calculate steepness
           let steepness = 0.1 + 0.3 * Math.min(1, dataInTimestamp['Hm0'] / 6);
           this.sceneManager.ocean.updateSteepness(steepness);
@@ -117,7 +117,7 @@ export default {
           this.sceneManager.ocean.updateDirectionalSpread(180);
           this.sceneManager.ocean.updateSteepness(0.05);
           // Reset swell
-          this.generateSwell(0.05, 180);
+          // this.generateSwell(0.05, 180);
         }
       }
       // Wind
@@ -250,14 +250,14 @@ export default {
   },
   methods: {
     //onclick: function(e){},    
-    generateSwell: function(Hm0, Mdir, index) {
-      // Calculate steepness
-      let steepness = 0.1 + 0.2 * Math.min(1, Hm0/3);
-      if (Hm0 < 0.1) steepness = 0.05;
-      this.sceneManager.ocean.updateSwell('height', Hm0, index);
-      this.sceneManager.ocean.updateSwell('direction', Mdir, index);
-      this.sceneManager.ocean.updateSwell('steepness', steepness, index);
-    },
+    // generateSwell: function(Hm0, Mdir, index) {
+    //   // Calculate steepness
+    //   let steepness = 0.1 + 0.2 * Math.min(1, Hm0/3);
+    //   if (Hm0 < 0.1) steepness = 0.05;
+    //   this.sceneManager.ocean.updateSwell('height', Hm0, index);
+    //   this.sceneManager.ocean.updateSwell('direction', Mdir, index);
+    //   this.sceneManager.ocean.updateSwell('steepness', steepness, index);
+    // },
   },
   components: {
     //"ol-map": Map,
