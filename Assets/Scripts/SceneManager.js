@@ -249,6 +249,12 @@ class SceneManager{
   }
 
 
+  calibrate = function(){
+    // Create calibration frames
+    this.recorder.renderCalibration();
+  }
+
+
 
   // Record frames
   record = async function(){
