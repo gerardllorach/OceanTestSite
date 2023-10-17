@@ -25,18 +25,23 @@
     </div>
 
     <!-- RECORDING ICONS -->
+    <div class="camera-icons-container top-right-icons-container">
+      <!-- Left cam button -->
+      <div class="clickable icon-str fa" @click="camClicked('L')" title="Left sided camera">&#xf03d;</div>
+      <!-- Right cam button -->
+      <div class="clickable icon-str fa" @click="camClicked('R')" title="Right sided camera">&#xf03d;</div>
+      <!-- Free cam button -->
+      <div class="clickable icon-str fa-light fa" @click="camClicked('F')" title="Free view camera">&#xe0d8;</div>
+    </div>
+
+    <!-- RECORDING ICONS -->
     <div class="recording-icons-container top-right-icons-container">
       <!-- Record button -->
-      <div class="clickable icon-str" @click="recordClicked" title="Create stereo images">🔴</div>
+      <div class="clickable icon-str fa" @click="recordClicked" title="Create stereo images">&#xf03e;</div>
       <!-- Calibrate button -->
-      <div class="clickable icon-str" @click="calibrateClicked" title="Create calibration images">▚</div>
+      <div class="clickable icon-str fa" @click="calibrateClicked" title="Create calibration images">&#xf43c;</div>
       <!-- Right cam button -->
-      <div class="clickable icon-str" @click="camClicked('R')">R</div>
-      <!-- Left cam button -->
-      <div class="clickable icon-str" @click="camClicked('L')">L</div>
-      <!-- Free cam button -->
-      <div class="clickable icon-str" @click="camClicked('F')">F</div>
-
+      <div class="clickable icon-str fa" @click="exportJSONClicked" title="Export ocean params JSON">&#xf56d;</div>
 
     </div>
     
@@ -83,6 +88,9 @@ export default {
     },
     calibrateClicked: function(){
       window.eventBus.emit('AppManager_calibrateClicked');
+    },
+    exportJSONClicked: function(){
+      window.eventBus.emit('AppManager_exportJSONClicked');
     },
     camClicked: function(value){
       window.eventBus.emit('AppManager_cameraClicked', value);
@@ -147,6 +155,13 @@ export default {
 
 
 .recording-icons-container{
+  top: 120px;
+}
+.recording-icons-container > *{
+  color: rgb(255, 168, 168);
+}
+
+.camera-icons-container{
   top: 60px;
 }
 

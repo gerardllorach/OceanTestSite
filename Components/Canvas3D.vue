@@ -38,6 +38,7 @@ export default {
     window.eventBus.on('InstrumentsMenu_baseButtonClicked', () => {
       this.sceneManager.focusOnBase();
     });
+    // ***** APP MANAGER *****
     window.eventBus.on('AppManager_fpsButtonClicked', () => {
       this.sceneManager.showHideFPS();
     });
@@ -46,6 +47,9 @@ export default {
     });
     window.eventBus.on('AppManager_calibrateClicked', () => {
       this.sceneManager.calibrate();
+    });
+    window.eventBus.on('AppManager_exportJSONClicked', () => {
+      this.sceneManager.exportOceanParamsJSON();
     });
     window.eventBus.on('AppManager_cameraClicked', (value) => {
       this.sceneManager.changeCamera(value);
