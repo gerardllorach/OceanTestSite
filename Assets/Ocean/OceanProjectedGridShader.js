@@ -323,7 +323,7 @@ export const OceanProjectedGridFragShader = /* glsl */`
     // Add fog
     color = mix( color, fogColor, fogFactor );
 
-    gl_FragColor = vec4(color, 0.9 + fogFactor*0.1);
+    gl_FragColor = vec4(color, 1.0);//0.9 + fogFactor*0.1);
     //gl_FragColor = vec4(skyFresnel + waterFresnel + diffuseColor + specularColor, 0.92);
     
 
