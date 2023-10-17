@@ -39,8 +39,6 @@ export class OceanParameters{
     Spr1: 36.7,
     timestamp: '2019-11-14 02:05h',
   }
-
-  imgSize;
  
   waveHeights = [];
   waveDirections = [];
@@ -48,13 +46,12 @@ export class OceanParameters{
 
   WAVE_MAX = 6;
 
-  constructor(oceanParameters, imgSize){
+  constructor(oceanParameters, numWaves){
     // Assign given ocean parameters (if any)
     let keys = Object.keys(oceanParameters);
     keys.forEach(kk => this.oceanParameters[kk] = oceanParameters[kk]);
 
-    this.numWaves = imgSize * imgSize;
-    this.imgSize = imgSize;
+    this.numWaves = numWaves;
 
     this.generateDistributions();
     this.createHTMLGidget();
@@ -294,12 +291,12 @@ export class OceanParameters{
   getWaveParamsImageData = function(){
     // Create a texture
     let canvas = document.createElement("canvas");
-    canvas.width = this.imgSize;
-    canvas.height = this.imgSize;
+    canvas.width = this.numWaves;
+    canvas.height = 1;
 
     let context = canvas.getContext('2d');
     // Get pixels
-    let imageData = context.getImageData(0, 0, this.imgSize, this.imgSize);
+    let imageData = context.getImageData(0, 0, canvas.width, canvas.height);
 
     // Fill pixels and scale values from 0 to 255
     for (let i = 0; i < this.numWaves; i++) {

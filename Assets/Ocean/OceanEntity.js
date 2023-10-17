@@ -40,11 +40,11 @@ class OceanEntity {
   constructor(scene){
 
     // Creates a texture that has parameters for generating waves. It includes wave steepness, height, direction X, and direction Z (RGBA).
-    let imgSize = 4;
-    this.imgSize = imgSize;
-    this.oceanParams = new OceanParameters({}, imgSize);
-    let paramsData = this.oceanParams.getWaveParamsImageData();//createWaveParamsImageData({}, imgSize);
-    let paramsTexture = new THREE.DataTexture(paramsData, imgSize, imgSize, THREE.RGBAFormat, THREE.UnsignedByteType);
+    let numWaves = 10;
+    this.numWaves = numWaves;
+    this.oceanParams = new OceanParameters({}, numWaves);
+    let paramsData = this.oceanParams.getWaveParamsImageData();
+    let paramsTexture = new THREE.DataTexture(paramsData, numWaves, 1, THREE.RGBAFormat, THREE.UnsignedByteType);
     paramsTexture.magFilter = THREE.NearestFilter;
     paramsTexture.needsUpdate = true;
 
@@ -81,7 +81,7 @@ class OceanEntity {
         u_fogUnderwaterColor: { value: new THREE.Vector3(scene.fog.color.r, scene.fog.color.g, scene.fog.color.b)},
         u_fogDensity: {value: scene.fog.density},
         u_paramsTexture: {value: paramsTexture},
-        u_imgSize: {value: new THREE.Vector2(imgSize, imgSize)},
+        u_imgSize: {value: new THREE.Vector2(numWaves, 1)},
         u_steepnessFactor: { value: 0.2 },
         // u_wavelength: { value: 7.0 },
         // u_direction: { value: new THREE.Vector2(1, 0) },
@@ -173,7 +173,7 @@ class OceanEntity {
     if (!this.oceanTile)
       return;
     let paramsData = this.oceanParams.getWaveParamsImageData();
-    let paramsTexture = new THREE.DataTexture(paramsData, this.imgSize, this.imgSize, THREE.RGBAFormat, THREE.UnsignedByteType);
+    let paramsTexture = new THREE.DataTexture(paramsData, this.numWaves, 1, THREE.RGBAFormat, THREE.UnsignedByteType);
     paramsTexture.magFilter = THREE.NearestFilter;
     paramsTexture.needsUpdate = true;
     // Update uniforms
