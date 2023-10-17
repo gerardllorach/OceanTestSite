@@ -263,7 +263,7 @@ class SceneManager{
 
       // Iterate through time
       const fps = 10;
-      const duration = 1;
+      const duration = 0;
 
       for (let i = 0; i < fps * duration; i++){
         let time = i/fps;
@@ -275,9 +275,17 @@ class SceneManager{
         await this.recorder.savePNG('R_' + timeStr);
       }
 
+      // Export json
+      this.exportOceanParamsJSON();
+
       this.isRecording = false;
       this.startRender();
     }
+  }
+
+  // Export JSON
+  exportOceanParamsJSON = function(){
+    this.ocean.oceanParams.exportOceanParameters();
   }
 
   changeCamera = function(value){

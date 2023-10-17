@@ -322,6 +322,36 @@ export class OceanParameters{
   }
 
 
+  // Generate a JSON with wave parameters
+  getWaveParamsJSON = function(){
+    let out = [];
+    for (let i = 0; i < this.numWaves; i++){
+      let wave = {
+        hm0: this.waveHeights[i],
+        dir: this.waveDirections[i],
+        // steepness = 4 * Math.PI * Math.PI * hm0 * 0.5 / (T * T * 9.8);
+        // T = Math.sqrt(2*Math.PI*Math.PI*hm0/(9.8 * steepness))
+        T: Math.sqrt(2*Math.PI * Math.PI * this.waveHeights[i] / (9.8 * this.waveSteepness[i])),
+      };
+      out.push(wave);
+    }
+    return out;
+  }
+
+
+   // Export ocean parameters
+   exportOceanParameters = function(){
+    return new Promise((resolve) => {
+      const link = document.createElement('a');
+      link.download = 'oceanParameters.json';
+      let data = this.getWaveParamsJSON();
+      link.href = window.URL.createObjectURL(new Blob([JSON.stringify(data)], {type: 'text/json'}));
+      link.click();
+      link.delete;
+      setTimeout(resolve, 10);
+    })
+  }
+
 
 
   // Generate Gaussian Distribution
