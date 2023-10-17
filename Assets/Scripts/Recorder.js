@@ -13,6 +13,7 @@ https://doi.org/10.1016/j.ocemod.2018.06.007
 
 import * as THREE from 'three';
 import { OceanEntity } from '/OceanTestSite/Assets/Ocean/OceanEntity.js';
+import { GLTFLoader } from 'https://threejs.org/examples/jsm/loaders/GLTFLoader.js';
 
 class Recorder {
 
@@ -40,7 +41,7 @@ class Recorder {
 
     // Camera presets
     const fov = 45;
-    const aspect = 2;  // the canvas default
+    const aspect = this.imgWidth / this.imgHeight;  // the canvas default
     const near = 0.1;
     const far = 2000;
 
@@ -66,6 +67,78 @@ class Recorder {
     scene.add( this.helper2 );
 
     //document.body.appendChild( this.canvas );
+  }
+
+
+  // Create renders with checkerboard
+  renderCalibration = function(){
+    // Load checker board
+    // Load mesh
+    let gltfLoader = new GLTFLoader();
+
+    gltfLoader.load('/OceanTestSite/Assets/Calibration/checkerboard.glb', (gltf) => {
+
+      let checkerboard = gltf.scene.children[0];
+      this.scene.add(checkerboard);
+
+      // Positions
+      let pp = [
+        [0, 30, -10],
+        [0, 29, -5],
+        [5, 25, -15],
+        [-6, 26, -14],
+        [0.6, 30, -5],
+        [0.2, 29.5, -6],
+        [-0.7, 27.5, -8],
+        [-1.5, 31, -15],
+        [-10, 30, -17],
+        [10, 30, -17],
+
+        [0, 30, -17],
+        [0, 30.5, -13],
+        [1, 31, -19],
+        [2, 32, -10],
+        [-1, 26, -15],
+        [-3, 28, -12],
+      ];
+      // Rotations
+      let rr = [
+        [60, 0, 0],
+        [55, 0, 0],
+        [39, 0, 0],
+        [58, 0, 0],
+        [67, 0, 0],
+        [62, 0, 0],
+        [66, -0, 0],
+        [57, -0, 0],
+        [53, -0, -0],
+        [78, 0, 0],
+
+        [72, 0, 0],
+        [72, 0, 0],
+        [39, 0, 0],
+        [47, 0, 0],
+        [84, 0, 0],
+        [45, 0, 0],
+      ];
+      const DEG2RAD = Math.PI/180;
+      // Move checker board and store images
+      for (let i = 0; i < pp.length; i++){
+        //{let i = 0;
+        checkerboard.position.set(pp[i][0], pp[i][1], pp[i][2]);
+        checkerboard.rotation.set(rr[i][0] * DEG2RAD, rr[i][1] * DEG2RAD, rr[i][2] * DEG2RAD);
+      
+        checkerboard.updateWorldMatrix();
+
+        this.renderLeft();
+        this.savePNG('Calib_Left' + i);
+
+        this.renderRight();
+        this.savePNG('Calib_Right' + i);
+      }
+      
+    });
+
   }
 
 
