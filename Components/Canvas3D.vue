@@ -76,9 +76,10 @@ export default {
       let dirSpreading = Math.min(Math.max(30, angleDiff * 2), 180);
       this.sceneManager.ocean.updateDirectionalSpread(dirSpreading);
       // Steepness based on wind wave
-      let percentageWindWave = dataValues['Wind wave significant height'].value / dataValues['Wave significant height'].value;
-      let steepness = 0.05 + 0.25 * Math.min(1, percentageWindWave); // TODO: use wind wave directly?
-      this.sceneManager.ocean.updateSteepness(steepness);
+      // TODO: generate new parameters based on a relationship between wind and period
+      // let percentageWindWave = dataValues['Wind wave significant height'].value / dataValues['Wave significant height'].value;
+      // let steepness = 0.05 + 0.25 * Math.min(1, percentageWindWave); // TODO: use wind wave directly?
+      // this.sceneManager.ocean.updateSteepness(steepness);
 
       // Swell 1
       // this.generateSwell(dataValues['Primary swell wave significant height'].value, dataValues['Primary swell wave direction'].value);
@@ -113,13 +114,13 @@ export default {
           // Generate swell
           // this.generateSwell(dataInTimestamp['Hm0'], dataInTimestamp['Mdir']);
           // Calculate steepness
-          let steepness = 0.1 + 0.3 * Math.min(1, dataInTimestamp['Hm0'] / 6);
-          this.sceneManager.ocean.updateSteepness(steepness);
+          // let steepness = 0.1 + 0.3 * Math.min(1, dataInTimestamp['Hm0'] / 6);
+          // this.sceneManager.ocean.updateSteepness(steepness);
         } else { // No ocean data
           this.sceneManager.ocean.updateWaveSignificantHeight(0.1);
           this.sceneManager.ocean.updateMeanWaveDirection(0);
           this.sceneManager.ocean.updateDirectionalSpread(180);
-          this.sceneManager.ocean.updateSteepness(0.05);
+          // this.sceneManager.ocean.updateSteepness(0.05);
           // Reset swell
           // this.generateSwell(0.05, 180);
         }
@@ -133,8 +134,9 @@ export default {
           // Ocean steepness
           if (this.sceneManager.ocean){
             let windKMH = dataInTimestamp['WSPD'] * 3.6;
-            let steepness = 0.05 + 0.25 * Math.min(1, windKMH / 25);
-            this.sceneManager.ocean.updateSteepness(steepness);
+            // TODO: update ocean parameters according to wind
+            // let steepness = 0.05 + 0.25 * Math.min(1, windKMH / 25);
+            // this.sceneManager.ocean.updateSteepness(steepness);
           }
         } else { // Hide flag when there is no wind data
           this.sceneManager.flag.hideFlag();

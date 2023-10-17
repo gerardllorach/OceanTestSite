@@ -82,7 +82,7 @@ class OceanEntity {
         u_fogDensity: {value: scene.fog.density},
         u_paramsTexture: {value: paramsTexture},
         u_imgSize: {value: new THREE.Vector2(numWaves, 1)},
-        u_steepnessFactor: { value: 0.2 },
+        // u_steepnessFactor: { value: 0.2 },
         // u_wavelength: { value: 7.0 },
         // u_direction: { value: new THREE.Vector2(1, 0) },
         u_normalTexture: {value: normalTexture}, // TODO: WHAT IF THE TEXTURE TAKES TOO LONG TO LOAD?
@@ -136,10 +136,10 @@ class OceanEntity {
 
   // USER INPUT 
   // Steepness range slider
-  updateSteepness = function(steepnessFactor){
-    if (this.oceanTile)
-      this.oceanTile.material.uniforms.u_steepnessFactor.value = steepnessFactor;
-  }
+  // updateSteepness = function(steepnessFactor){
+  //   if (this.oceanTile)
+  //     this.oceanTile.material.uniforms.u_steepnessFactor.value = steepnessFactor;
+  // }
   // updateSwell = function(varName, value, index){
   //   if (!this.oceanTile)
   //     return;

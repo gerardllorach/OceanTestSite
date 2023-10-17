@@ -91,7 +91,7 @@ export class OceanParameters{
 
     // Generate steepness distribution
     this.waveSteepness = this.generateGaussianDistribution(0.25, 0.1, this.numWaves);
-    this.waveSteepness.forEach((el, index) => this.waveSteepness[index] = Math.abs(el));
+    this.waveSteepness.forEach((el, index) => this.waveSteepness[index] = 0.1 * Math.abs(el));
     //console.log("Maximum wave steepness: " + Math.max(...this.waveSteepness));
     //console.log("Minimum wave steepness: " + Math.min(...this.waveSteepness));
   }

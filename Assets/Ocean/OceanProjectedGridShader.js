@@ -45,7 +45,7 @@ export const OceanProjectedGridVertShader = /* glsl */ `
   uniform float u_time;
   uniform vec3 u_imgSize;
   uniform sampler2D u_paramsTexture;
-  uniform float u_steepnessFactor;
+  // uniform float u_steepnessFactor;
 
   // Grid reprojection
   uniform mat4 u_cameraModelMatrix;
@@ -162,7 +162,7 @@ export const OceanProjectedGridVertShader = /* glsl */ `
       for (int j = 0; j < int(u_imgSize.y); j++){
         vec4 params = texture2D(u_paramsTexture, vec2(float(i)/u_imgSize.x, float(j)/u_imgSize.y));
         // Steepness factor
-        params.r = params.r * u_steepnessFactor;
+        // params.r = params.r * u_steepnessFactor;
         // Wave height factor
         //params.g = params.g/(u_imgSize.x*u_imgSize.y);
         // Direction
