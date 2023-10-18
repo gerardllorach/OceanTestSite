@@ -2,7 +2,7 @@
   
   <div id="waves-properties-panel" class="content">
 
-    <h3>Wave's parameters</h3>
+    <h3>Properties of present waves</h3>
 
     <!-- TABLE -->
     <div class="container-vertical">
