@@ -6,6 +6,8 @@
       <!-- Closing cross -->
       <button class="closing-cross roundButton icon-svg" @click="closePanelClicked">X</button>
 
+      <!-- Ocean parameters -->
+      <ocean-parameters-panel v-show="panelName == 'oceanParams'"></ocean-parameters-panel>
 
     </div>
   </div>
@@ -21,6 +23,7 @@
 
 <script>
 
+import OceanParametersPanel from './Panels/OceanParametersPanel.vue';
 
 export default {
   name: "CentralPanel",
@@ -46,8 +49,8 @@ export default {
   },
   data() {
     return {
-      hidePanel: true,
-      panelName: '',
+      hidePanel: false,
+      panelName: 'oceanParams',
     }
   },
   methods: {
@@ -60,7 +63,7 @@ export default {
     },
   },
   components: {
-
+    "ocean-parameters-panel": OceanParametersPanel,
   }
 }
 </script>
