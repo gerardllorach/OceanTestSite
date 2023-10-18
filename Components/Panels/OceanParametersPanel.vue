@@ -18,9 +18,23 @@
       <div class="container-horizontal" v-for="(ww, index) in oceanParams">
         <button class="close-button clickable" :click="removeWave(index)"><span>x</span></button>
         <span>{{ index +1}}</span>
-        <span>{{ ww.hm0 }} m</span>
-        <span>{{ ww.T }} s</span>
-        <span>{{ ww.dir }}º</span>
+        <!-- Display numbers -->
+        <span class="editableSpan clickable" v-show="!isEditing" @click="startEditing">{{ ww.hm0 }} m</span>
+        <span class="editableSpan clickable" v-show="!isEditing" @click="startEditing">{{ ww.T }} s</span>
+        <span class="editableSpan clickable" v-show="!isEditing" @click="startEditing">{{ ww.dir }}º</span>
+        <!-- Input forms -->
+        <div v-show="isEditing">
+          <input  type="number" min="0.01" max="10" step="0.01" :value="ww.hm0" name="hm0" @change="onChange($event, index, 'hm0')"/>
+          <span> m</span>
+        </div>
+        <div v-show="isEditing">
+          <input  type="number" min="1" max="20" step="0.1" :value="ww.T" name="T" @change="onChange($event, index, 'T')"/>
+          <span> s</span>
+        </div>
+        <div v-show="isEditing">
+          <input  type="number" min="0" max="360" step="1" :value="ww.dir" name="dir" @change="onChange($event, index, 'dir')"/>
+          <span> º</span>
+        </div>
 
       </div>
       <!-- Add new wave -->
@@ -67,7 +81,8 @@ export default {
         {hm0: 2, T: 5, dir: 68},
         {hm0: 0.5, T: 2, dir: 76},
         {hm0: 0.2, T: 3, dir: 35},
-      ]
+      ],
+      isEditing: false,
     }
   },
   methods: {
@@ -80,6 +95,46 @@ export default {
     },
     exportData: function(){
       window.eventBus.emit('OceanParametersPanel_exportData');
+    },
+    // START / STOP EDITING VALUES
+    startEditing: function(e){
+      e.stopPropagation();
+      e.preventDefault();
+      this.isEditing = true;
+      // EVENTS
+      // Stops editing when clicking outside the input forms or pressing Enter / Escape
+      const stopEditing = (e)=>{
+        // Do not apply if clicking input EL
+        if (e.type == 'click'){
+          if (e.target.nodeName == 'INPUT')
+            return
+        }
+        // Apply only for escape
+        if (e.type == 'keyup'){
+          if (e.key != 'Escape' && e.key != 'NumpadEnter' && e.key != 'Enter')
+            return;
+        }
+        this.isEditing = false;
+        document.removeEventListener("click", stopEditing);        
+        window.removeEventListener("keyup", stopEditing);
+      };
+      document.addEventListener("click", stopEditing);
+      window.addEventListener("keyup", stopEditing);
+    },
+    onChange: function(e, index, key){
+      let value = e.target.valueAsNumber;
+      // Limit value
+      if (value > parseFloat(e.target.max) || isNaN(value)){
+        e.target.valueAsNumber = parseFloat(e.target.max);
+        e.target.value = value = e.target.max;
+      } else if (value < parseFloat(e.target.min) || isNaN(value)){
+        e.target.valueAsNumber = parseFloat(e.target.min);
+        e.target.value = value = e.target.min;
+      }
+      // TODO: TAKE INTO ACCOUNT RELATIONSHIP BETWEEN HM0 AND T (steepness below 0.5)
+      
+
+      this.oceanParams[index][key] = value;
     }
   },
   components: {
@@ -153,5 +208,13 @@ export default {
 
 .exportButton:hover{
   background: var(--blue);
+}
+
+.editableSpan {
+  cursor: pointer;
+}
+
+input {
+  text-align: center;
 }
 </style>
