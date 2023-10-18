@@ -4,6 +4,8 @@
 
     <h3>Properties of present waves</h3>
 
+    <p>You can also drag and drop a .json file with the wave's properties. Download the properties ("Export data" button) to see the format of the .json file.</p>
+
     <!-- TABLE -->
     <div class="container-vertical">
       <!-- ROW -->
@@ -19,9 +21,9 @@
         <button class="close-button clickable" @click="removeWave(index)"><span>x</span></button>
         <span>{{ index +1}}</span>
         <!-- Display numbers -->
-        <span class="editableSpan clickable" v-show="!isEditing" @click="startEditing">{{ ww.hm0 }} m</span>
-        <span class="editableSpan clickable" v-show="!isEditing" @click="startEditing">{{ ww.T }} s</span>
-        <span class="editableSpan clickable" v-show="!isEditing" @click="startEditing">{{ ww.dir }}º</span>
+        <span class="editableSpan clickable" v-show="!isEditing" @click="startEditing">{{ ww.hm0.toFixed(2) }} m</span>
+        <span class="editableSpan clickable" v-show="!isEditing" @click="startEditing">{{ ww.T.toFixed(1) }} s</span>
+        <span class="editableSpan clickable" v-show="!isEditing" @click="startEditing">{{ ww.dir.toFixed(0) }}º</span>
         <!-- Input forms -->
         <div v-show="isEditing">
           <input  type="number" min="0.01" max="10" step="0.01" :value="ww.hm0" name="hm0" @change="onChange($event, index, 'hm0')"/>
@@ -71,8 +73,8 @@ export default {
 
   },
   mounted() {
-
-
+    document.body.addEventListener("drop", this.onDropFile);
+    document.body.addEventListener("dragover", this.onDragOver);
   },
   data() {
     return {
@@ -86,14 +88,50 @@ export default {
     }
   },
   methods: {
+    // DRAG AND DROP
+    // DRAG & DROP FILES
+    onDragOver: function(event) {
+      event.preventDefault();
+      event.stopPropagation();
+    },
+    // On drop event
+    onDropFile: function(event) {
+      event.preventDefault();
+      event.stopPropagation();
+
+      let files = event.dataTransfer.files;
+      let file = files[files.length - 1]; // Latest file
+
+      let reader = new FileReader();
+      reader.fileName = file.name;
+      console.log("File dropped: " + file.name);
+
+      // On load file
+      reader.addEventListener('load', e => {
+        try {
+          this.wavesProperties = JSON.parse(reader.result);
+          window.eventBus.emit('WavesPropertiesPanel_setWavesProperties', this.wavesProperties);
+        } catch (e) {
+          console.error(e);
+          alert('Could not read .json\n' + e);
+        }
+      });
+      reader.addEventListener('error', e => {
+        console.error('Could not read file ' + reader.file.name);
+        console.error(e);
+      })
+      // Read as text
+      reader.readAsText(file);
+    
+    },
     // USER INPUT
     addWave: function(e){
       if (e){ e.preventDefault(); e.stopPropagation();}
       // Create wave
       this.wavesProperties.push({
-        hm0: (Math.random()*2.5+0.5).toFixed(1),
-        T: (Math.random()*4 + 2).toFixed(1),
-        dir: (Math.random()*360).toFixed(0),
+        hm0: (Math.random()*2.5+0.5),
+        T: (Math.random()*12 + 2),
+        dir: (Math.random()*360),
       });
       this.startEditing();
       window.eventBus.emit('WavesPropertiesPanel_setWavesProperties', this.wavesProperties);
