@@ -157,6 +157,101 @@ class SceneManager{
 
 
 
+
+
+
+
+
+
+
+
+
+  // Show/Hide FPS
+  showHideFPS = function(){
+    let stats = this.stats;
+    if (stats.isVisible){
+      stats.showPanel(false);
+      stats.isVisible = false;
+    } else{
+      stats.showPanel(0);
+      stats.isVisible = true;
+    }
+  }
+
+
+  calibrate = function(){
+    // Create calibration frames
+    this.recorder.renderCalibration();
+  }
+
+
+
+  // Record frames
+  record = async function(){
+    this.isRecording = !this.isRecording;
+    if (this.isRecording){
+
+      // Iterate through time
+      const fps = 10;
+      const duration = 0;
+
+      for (let i = 0; i < fps * duration; i++){
+        let time = i/fps;
+        this.update(1000 * time);
+        this.recorder.renderLeft();
+        let timeStr = String(time.toFixed(2)).padStart(6, '0');
+        await this.recorder.savePNG('L_' + timeStr);
+        this.recorder.renderRight();
+        await this.recorder.savePNG('R_' + timeStr);
+      }
+
+      // Export json
+      this.exportOceanParamsJSON();
+
+      this.isRecording = false;
+      this.startRender();
+    }
+  }
+
+  setWavesProperties = function(wavesProperties){
+    this.ocean.setWavesProperties(wavesProperties);
+  }
+
+  // Export JSON
+  exportOceanParamsJSON = function(){
+    this.ocean.oceanParams.exportOceanParameters();
+  }
+
+  changeCamera = function(value){
+    if (value == 'F')
+      this.selectedCamera = this.camera;
+    else if (value == 'R')
+      this.selectedCamera = this.recorder.cameraR;
+    else if (value == 'L')
+      this.selectedCamera = this.recorder.cameraL;
+  }
+
+  faceNorthward = function(){
+    // Tween camera position to face northward
+    let dist = this.camera.position.distanceTo(this.controls.target);
+    let newZ = Math.sqrt(dist * dist - Math.pow(this.camera.position.y-this.controls.target.y, 2));
+
+    this.controls.target.x = 0;
+    this.camera.position.set(this.controls.target.x, this.camera.position.y, newZ*0.5);
+    this.controls.update();
+
+    // new TWEEN.Tween(this.camera.position)
+    //   .to({ x: this.controls.target.x, z: newZ }, 4000)
+    //   .easing(TWEEN.Easing.Cubic.InOut)
+    //   .onUpdate(()=>this.controls.update())
+    //   .start();
+  }
+
+
+
+
+  
+
   // ADD LOADING SCREEN
   addLoadingScreen = function(){
     // Create
@@ -229,93 +324,6 @@ class SceneManager{
     };
   }
 
-
-
-
-
-
-
-
-  // Show/Hide FPS
-  showHideFPS = function(){
-    let stats = this.stats;
-    if (stats.isVisible){
-      stats.showPanel(false);
-      stats.isVisible = false;
-    } else{
-      stats.showPanel(0);
-      stats.isVisible = true;
-    }
-  }
-
-
-  calibrate = function(){
-    // Create calibration frames
-    this.recorder.renderCalibration();
-  }
-
-
-
-  // Record frames
-  record = async function(){
-    this.isRecording = !this.isRecording;
-    if (this.isRecording){
-
-      // Iterate through time
-      const fps = 10;
-      const duration = 0;
-
-      for (let i = 0; i < fps * duration; i++){
-        let time = i/fps;
-        this.update(1000 * time);
-        this.recorder.renderLeft();
-        let timeStr = String(time.toFixed(2)).padStart(6, '0');
-        await this.recorder.savePNG('L_' + timeStr);
-        this.recorder.renderRight();
-        await this.recorder.savePNG('R_' + timeStr);
-      }
-
-      // Export json
-      this.exportOceanParamsJSON();
-
-      this.isRecording = false;
-      this.startRender();
-    }
-  }
-
-  // Export JSON
-  exportOceanParamsJSON = function(){
-    this.ocean.oceanParams.exportOceanParameters();
-  }
-
-  changeCamera = function(value){
-    if (value == 'F')
-      this.selectedCamera = this.camera;
-    else if (value == 'R')
-      this.selectedCamera = this.recorder.cameraR;
-    else if (value == 'L')
-      this.selectedCamera = this.recorder.cameraL;
-  }
-
-  faceNorthward = function(){
-    // Tween camera position to face northward
-    let dist = this.camera.position.distanceTo(this.controls.target);
-    let newZ = Math.sqrt(dist * dist - Math.pow(this.camera.position.y-this.controls.target.y, 2));
-
-    this.controls.target.x = 0;
-    this.camera.position.set(this.controls.target.x, this.camera.position.y, newZ*0.5);
-    this.controls.update();
-
-    // new TWEEN.Tween(this.camera.position)
-    //   .to({ x: this.controls.target.x, z: newZ }, 4000)
-    //   .easing(TWEEN.Easing.Cubic.InOut)
-    //   .onUpdate(()=>this.controls.update())
-    //   .start();
-  }
-
-
-
-
   // WINDOW RESIZE (called from Canvas3D.vue)
   windowWasResized = function(){
     if (this.resizeRendererToDisplaySize(this.renderer)) {
@@ -324,7 +332,6 @@ class SceneManager{
       this.camera.updateProjectionMatrix();
     }
   }
-
 
 
 

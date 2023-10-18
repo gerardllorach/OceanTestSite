@@ -53,7 +53,11 @@ export default {
     });
     window.eventBus.on('AppManager_cameraClicked', (value) => {
       this.sceneManager.changeCamera(value);
-    })
+    });
+    // ***** WAVE PROPERTIES PANEL *****
+    window.eventBus.on('WavesPropertiesPanel_setWavesProperties', (wavesProperties) => {
+      this.sceneManager.setWavesProperties(wavesProperties);
+    });
 
     // ***** TOP-RIGHT ICONS *****
     // Face northward

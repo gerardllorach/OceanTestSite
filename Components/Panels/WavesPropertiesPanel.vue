@@ -96,11 +96,11 @@ export default {
         dir: (Math.random()*360).toFixed(0),
       });
       this.startEditing();
-      window.eventBus.emit('OceanParametersPanel_addWave', {hm0: 1, T: 5, dir: 0});
+      window.eventBus.emit('WavesPropertiesPanel_setWavesProperties', this.wavesProperties);
     },
     removeWave: function(index){
       this.wavesProperties.splice(index, 1);
-      window.eventBus.emit('OceanParametersPanel_removeWave', index);
+      window.eventBus.emit('WavesPropertiesPanel_setWavesProperties', this.wavesProperties);
     },
     exportData: function(){
       window.eventBus.emit('OceanParametersPanel_exportData');
@@ -142,10 +142,9 @@ export default {
         e.target.valueAsNumber = parseFloat(e.target.min);
         e.target.value = value = e.target.min;
       }
-      // TODO: TAKE INTO ACCOUNT RELATIONSHIP BETWEEN HM0 AND T (steepness below 0.5)
-
-
+       // TODO: TAKE INTO ACCOUNT RELATIONSHIP BETWEEN HM0 AND T (steepness below 0.5)
       this.wavesProperties[index][key] = value;
+      window.eventBus.emit('WavesPropertiesPanel_setWavesProperties', this.wavesProperties);
     }
   },
   components: {

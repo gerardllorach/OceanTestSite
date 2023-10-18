@@ -39,12 +39,12 @@ export class OceanParameters{
     Spr1: 36.7,
     timestamp: '2019-11-14 02:05h',
   }
- 
+
   waveHeights = [];
   waveDirections = [];
   waveSteepness = [];
 
-  WAVE_MAX = 6;
+  WAVE_MAX = 10;
 
   constructor(oceanParameters, numWaves){
     // Assign given ocean parameters (if any)
@@ -291,7 +291,7 @@ export class OceanParameters{
   getWaveParamsImageData = function(){
     // Create a texture
     let canvas = document.createElement("canvas");
-    canvas.width = this.numWaves;
+    canvas.width = this.numWaves || 1;
     canvas.height = 1;
 
     let context = canvas.getContext('2d');
@@ -301,7 +301,7 @@ export class OceanParameters{
     // Fill pixels and scale values from 0 to 255
     for (let i = 0; i < this.numWaves; i++) {
       // Steepness range
-      let waveSteep = Math.abs(this.waveSteepness[i]);
+      let waveSteep = this.waveSteepness[i];
       imageData.data[i * 4] = 255 * waveSteep;
       // Wave range
       let waveHeight = Math.abs(this.waveHeights[i]);
@@ -323,7 +323,7 @@ export class OceanParameters{
 
 
   // Generate a JSON with wave parameters
-  getWaveParamsJSON = function(){
+  getWavesPropertiesJSON = function(){
     let out = [];
     for (let i = 0; i < this.numWaves; i++){
       let wave = {
@@ -344,7 +344,7 @@ export class OceanParameters{
     return new Promise((resolve) => {
       const link = document.createElement('a');
       link.download = 'oceanParameters.json';
-      let data = this.getWaveParamsJSON();
+      let data = this.getWavesPropertiesJSON();
       link.href = window.URL.createObjectURL(new Blob([JSON.stringify(data)], {type: 'text/json'}));
       link.click();
       link.delete;

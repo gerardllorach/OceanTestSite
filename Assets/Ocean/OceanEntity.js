@@ -27,12 +27,6 @@ class OceanEntity {
   customWaveParameters = [];
   oceanSteepness;
 
-  // Swell parameters
-  // swellParameters = [
-  //   { Hm0: 0.1, Mdir: 0, Steepness: 0.1 },
-  //   { Hm0: 0.2, Mdir: 129, Steepness: 0.05 },
-  // ]
-
 
 
   
@@ -110,22 +104,22 @@ class OceanEntity {
   }
 
   
-  addWave = function(hm0, T, dir, index){
-    this.numWaves++;
 
+
+  setWavesProperties = function(wavesProperties){
+    this.numWaves = wavesProperties.length;
     let params = this.oceanParams;
-    // Update
-    if (index == undefined){
-      params.waveHeights.push(hm0);
-      params.wavePeriods.push(T);
-      params.waveDirections.push(dir);
-    } else {
-      params.waveHeights[index] = hm0;
-      params.wavePeriods[index] = T;
-      params.waveDirections[index] = dir;
+    params.numWaves = this.numWaves;
+    params.waveHeights = [];
+    params.waveSteepness = [];
+    params.waveDirections = [];
+    for (let i = 0; i < this.numWaves; i++){
+      params.waveHeights[i] = wavesProperties[i].hm0;
+      let T = wavesProperties[i].T;
+      params.waveSteepness[i] = 4 * Math.PI * Math.PI * wavesProperties[i].hm0 * 0.5 / (T * T * 9.8);
+      params.waveDirections[i] = wavesProperties[i].dir;
     }
-    
-    
+
     this.updateParamsTexture();
   }
 
@@ -191,7 +185,7 @@ class OceanEntity {
     if (!this.oceanTile)
       return;
     let paramsData = this.oceanParams.getWaveParamsImageData();
-    let paramsTexture = new THREE.DataTexture(paramsData, this.numWaves, 1, THREE.RGBAFormat, THREE.UnsignedByteType);
+    let paramsTexture = new THREE.DataTexture(paramsData, this.numWaves || 1, 1, THREE.RGBAFormat, THREE.UnsignedByteType);
     paramsTexture.magFilter = THREE.NearestFilter;
     paramsTexture.needsUpdate = true;
     // Update uniforms
