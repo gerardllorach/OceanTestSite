@@ -79,10 +79,10 @@ export default {
   data() {
     return {
       wavesProperties: [
-        {hm0: 1, T: 8, dir: 45},
-        {hm0: 2, T: 5, dir: 68},
-        {hm0: 0.5, T: 2, dir: 76},
-        {hm0: 0.2, T: 3, dir: 35},
+        {hm0: 0.92, T: 10, dir: 50},
+        {hm0: 0.15, T: 3.7, dir: 84},
+        {hm0: 0.53, T: 5.1, dir: 345},
+        {hm0: 0.18, T: 5.2, dir: 239},
       ],
       isEditing: false,
     }
@@ -129,9 +129,9 @@ export default {
       if (e){ e.preventDefault(); e.stopPropagation();}
       // Create wave
       this.wavesProperties.push({
-        hm0: (Math.random()*2.5+0.5),
+        hm0: (Math.random()*1+0.5),
         T: (Math.random()*12 + 2),
-        dir: (Math.random()*360),
+        dir: (Math.random()*20),
       });
       this.startEditing();
       window.eventBus.emit('WavesPropertiesPanel_setWavesProperties', this.wavesProperties);
@@ -176,14 +176,14 @@ export default {
       window.addEventListener("keyup", stopEditing);
     },
     onChange: function(e, index, key){
-      let value = e.target.valueAsNumber;
+      let value = parseFloat(e.target.valueAsNumber);
       // Limit value
       if (value > parseFloat(e.target.max) || isNaN(value)){
         e.target.valueAsNumber = parseFloat(e.target.max);
-        e.target.value = value = e.target.max;
+        e.target.value = value = parseFloat(e.target.max);
       } else if (value < parseFloat(e.target.min) || isNaN(value)){
         e.target.valueAsNumber = parseFloat(e.target.min);
-        e.target.value = value = e.target.min;
+        e.target.value = value = parseFloat(e.target.min);
       }
        // TODO: TAKE INTO ACCOUNT RELATIONSHIP BETWEEN HM0 AND T (steepness below 0.5)
       this.wavesProperties[index][key] = value;
