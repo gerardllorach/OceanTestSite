@@ -49,8 +49,8 @@ export default {
   },
   data() {
     return {
-      hidePanel: false,
-      panelName: 'wavesProperties',
+      hidePanel: true,
+      panelName: '',
     }
   },
   methods: {

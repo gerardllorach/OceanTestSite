@@ -9,7 +9,7 @@
     <central-panel></central-panel>
 
 
-    <!-- TOP RIGHT ICONS -->
+    <!-- ****** TOP RIGHT ICONS ****** -->
     <div class="top-right-icons-container">
       <!-- FPS button -->
       <div class="clickable icon-str" @click="fpsClicked">fps</div>
@@ -56,6 +56,13 @@
           <circle id="Center" class="center" cx="260" cy="257" r="10" />
         </svg>
       </button>
+    </div>
+
+
+
+    <!-- ****** TOP-LEFT ICONS ****** -->
+    <div class="top-left-icons-container">
+      <button class="clickable" @click="wavesPropsClicked"><span>Wave's properites </span><span class="fa">&#xf085;</span></button>
     </div>
     
   </div>
@@ -123,6 +130,10 @@ export default {
     compassButtonClicked: function (e) {
       window.eventBus.emit('TopRightMenu_compassButtonClicked');
     },
+
+    wavesPropsClicked: function(){
+      window.eventBus.emit('OpenCentralPanel', 'wavesProperties');
+    }
   },
   components: {
     "canvas3D": Canvas3D,
@@ -178,6 +189,17 @@ export default {
   padding: 0px;
   margin: 5px;
   z-index: 10;
+}
+
+
+.top-left-icons-container{
+  position: absolute;
+  top: 60px;
+  left: 20px;
+
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
 }
 
 
