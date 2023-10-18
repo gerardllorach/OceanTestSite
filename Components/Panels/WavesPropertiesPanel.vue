@@ -1,8 +1,8 @@
 <template>
   
-  <div id="ocean-parameters-panel" class="content">
+  <div id="waves-properties-panel" class="content">
 
-    <h3>Ocean parameters</h3>
+    <h3>Wave's parameters</h3>
 
     <!-- TABLE -->
     <div class="container-vertical">
@@ -15,7 +15,7 @@
         <span>Direction</span>
       </div>
 
-      <div class="container-horizontal" v-for="(ww, index) in oceanParams">
+      <div class="container-horizontal" v-for="(ww, index) in wavesProperties">
         <button class="close-button clickable" @click="removeWave(index)"><span>x</span></button>
         <span>{{ index +1}}</span>
         <!-- Display numbers -->
@@ -66,7 +66,7 @@
 
 
 export default {
-  name: "OceanParametersPanel",
+  name: "WavesPropertiesPanel",
   created() {
 
   },
@@ -76,7 +76,7 @@ export default {
   },
   data() {
     return {
-      oceanParams: [
+      wavesProperties: [
         {hm0: 1, T: 8, dir: 45},
         {hm0: 2, T: 5, dir: 68},
         {hm0: 0.5, T: 2, dir: 76},
@@ -90,7 +90,7 @@ export default {
     addWave: function(e){
       if (e){ e.preventDefault(); e.stopPropagation();}
       // Create wave
-      this.oceanParams.push({
+      this.wavesProperties.push({
         hm0: (Math.random()*2.5+0.5).toFixed(1),
         T: (Math.random()*4 + 2).toFixed(1),
         dir: (Math.random()*360).toFixed(0),
@@ -99,7 +99,7 @@ export default {
       window.eventBus.emit('OceanParametersPanel_addWave', {hm0: 1, T: 5, dir: 0});
     },
     removeWave: function(index){
-      this.oceanParams.splice(index, 1);
+      this.wavesProperties.splice(index, 1);
       window.eventBus.emit('OceanParametersPanel_removeWave', index);
     },
     exportData: function(){
@@ -145,7 +145,7 @@ export default {
       // TODO: TAKE INTO ACCOUNT RELATIONSHIP BETWEEN HM0 AND T (steepness below 0.5)
 
 
-      this.oceanParams[index][key] = value;
+      this.wavesProperties[index][key] = value;
     }
   },
   components: {
