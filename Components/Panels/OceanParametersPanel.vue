@@ -16,7 +16,7 @@
       </div>
 
       <div class="container-horizontal" v-for="(ww, index) in oceanParams">
-        <button class="close-button clickable" :click="removeWave(index)"><span>x</span></button>
+        <button class="close-button clickable" @click="removeWave(index)"><span>x</span></button>
         <span>{{ index +1}}</span>
         <!-- Display numbers -->
         <span class="editableSpan clickable" v-show="!isEditing" @click="startEditing">{{ ww.hm0 }} m</span>
@@ -39,7 +39,7 @@
       </div>
       <!-- Add new wave -->
       <div class="container-horizontal">
-        <button class="add-button clickable" :click="addWave"><span>+</span></button>
+        <button class="add-button clickable" @click="addWave"><span>+</span></button>
         <span></span>
         <span></span>
         <span></span>
@@ -47,7 +47,7 @@
       </div>
       
       <!-- Export button -->
-      <button class="exportButton clickable" :click="exportData">Export data <span class="fa">&#xf56d;</span></button>
+      <button class="exportButton clickable" @click="exportData">Export data <span class="fa">&#xf56d;</span></button>
 
     </div>
   </div>
@@ -87,10 +87,19 @@ export default {
   },
   methods: {
     // USER INPUT
-    addWave: function(){
+    addWave: function(e){
+      if (e){ e.preventDefault(); e.stopPropagation();}
+      // Create wave
+      this.oceanParams.push({
+        hm0: (Math.random()*2.5+0.5).toFixed(1),
+        T: (Math.random()*4 + 2).toFixed(1),
+        dir: (Math.random()*360).toFixed(0),
+      });
+      this.startEditing();
       window.eventBus.emit('OceanParametersPanel_addWave', {hm0: 1, T: 5, dir: 0});
     },
     removeWave: function(index){
+      this.oceanParams.splice(index, 1);
       window.eventBus.emit('OceanParametersPanel_removeWave', index);
     },
     exportData: function(){
@@ -98,8 +107,10 @@ export default {
     },
     // START / STOP EDITING VALUES
     startEditing: function(e){
-      e.stopPropagation();
-      e.preventDefault();
+      if (e !== undefined){
+        e.stopPropagation();
+        e.preventDefault();
+      }
       this.isEditing = true;
       // EVENTS
       // Stops editing when clicking outside the input forms or pressing Enter / Escape
@@ -132,7 +143,7 @@ export default {
         e.target.value = value = e.target.min;
       }
       // TODO: TAKE INTO ACCOUNT RELATIONSHIP BETWEEN HM0 AND T (steepness below 0.5)
-      
+
 
       this.oceanParams[index][key] = value;
     }
@@ -216,5 +227,6 @@ export default {
 
 input {
   text-align: center;
+  font-size: clamp(0.8rem, 1.2vw, 0.8rem);
 }
 </style>
