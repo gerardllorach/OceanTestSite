@@ -103,7 +103,12 @@ export default {
       window.eventBus.emit('WavesPropertiesPanel_setWavesProperties', this.wavesProperties);
     },
     exportData: function(){
-      window.eventBus.emit('OceanParametersPanel_exportData');
+      const link = document.createElement('a');
+      link.download = 'oceanParameters.json';
+      let data = this.wavesProperties;
+      link.href = window.URL.createObjectURL(new Blob([JSON.stringify(data)], {type: 'text/json'}));
+      link.click();
+      link.delete;
     },
     // START / STOP EDITING VALUES
     startEditing: function(e){
