@@ -48,7 +48,7 @@
     <!-- Compass button -->
     <div class="compass-icons-container top-right-icons-container">
       <button class="roundButton icon-big icon-str clickable" @click="compassButtonClicked" title='Camera orientation'>
-        <svg ref="compass-icon" xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+        <svg ref="compass-icon" xmlns="http://www.w3.org/2000/svg" width="35" height="35" viewBox="0 0 512 512">
           <path id="South" class="south"
             d="M332.782,253.277a25.947,25.947,0,0,1,0,15.446L261.812,461.8c-1.567,4.265-4.109,4.265-5.677,0l-70.97-193.073a25.947,25.947,0,0,1,0-15.446H332.782Z" />
           <path id="North" class="north"
