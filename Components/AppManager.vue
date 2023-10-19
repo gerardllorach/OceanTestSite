@@ -36,13 +36,8 @@
 
     <!-- RECORDING ICONS -->
     <div class="recording-icons-container top-right-icons-container">
-      <!-- Record button -->
-      <div class="clickable icon-str fa" @click="recordClicked" title="Create stereo images">&#xf03e;</div>
       <!-- Calibrate button -->
       <div class="clickable icon-str fa" @click="calibrateClicked" title="Create calibration images">&#xf43c;</div>
-      <!-- Right cam button -->
-      <div class="clickable icon-str fa" @click="exportJSONClicked" title="Export ocean params JSON">&#xf56d;</div>
-
     </div>
 
     <!-- Compass button -->
@@ -116,14 +111,8 @@ export default {
     fpsClicked: function() {
       window.eventBus.emit('AppManager_fpsButtonClicked');
     },
-    recordClicked: function() {
-      window.eventBus.emit('AppManager_recordClicked');
-    },
     calibrateClicked: function(){
       window.eventBus.emit('AppManager_calibrateClicked');
-    },
-    exportJSONClicked: function(){
-      window.eventBus.emit('AppManager_exportJSONClicked');
     },
     camClicked: function(value){
       window.eventBus.emit('AppManager_cameraClicked', value);

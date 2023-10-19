@@ -343,7 +343,7 @@ export class OceanParameters{
    exportOceanParameters = function(){
     return new Promise((resolve) => {
       const link = document.createElement('a');
-      link.download = 'oceanParameters.json';
+      link.download = 'wavesProperties.json';
       let data = this.getWavesPropertiesJSON();
       link.href = window.URL.createObjectURL(new Blob([JSON.stringify(data)], {type: 'text/json'}));
       link.click();

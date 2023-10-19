@@ -49,7 +49,7 @@
       </div>
       
       <!-- Export button -->
-      <button class="exportButton clickable" @click="exportData">Export data <span class="fa">&#xf56d;</span></button>
+      <button class="exportButton clickable" @click="exportData">Export wave's properties <span class="fa">&#xf56d;</span></button>
 
     </div>
   </div>
@@ -142,7 +142,7 @@ export default {
     },
     exportData: function(){
       const link = document.createElement('a');
-      link.download = 'oceanParameters.json';
+      link.download = 'wavesProperties.json';
       let data = this.wavesProperties;
       link.href = window.URL.createObjectURL(new Blob([JSON.stringify(data)], {type: 'text/json'}));
       link.click();
