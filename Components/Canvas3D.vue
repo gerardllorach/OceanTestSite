@@ -58,6 +58,10 @@ export default {
     window.eventBus.on('WavesPropertiesPanel_setWavesProperties', (wavesProperties) => {
       this.sceneManager.setWavesProperties(wavesProperties);
     });
+    // ***** RECORD STEREO PANEL *****
+    window.eventBus.on('RenderStereoPanel_renderFramesClicked', (el) => {
+      this.sceneManager.record(el.duration, el.fps, el.grayscale);
+    });
 
     // ***** TOP-RIGHT ICONS *****
     // Face northward

@@ -9,6 +9,9 @@
       <!-- Ocean parameters -->
       <waves-properties-panel v-show="panelName == 'wavesProperties'"></waves-properties-panel>
 
+      <!-- Render stereo menu -->
+      <render-stereo-panel v-show="panelName == 'renderStereo'"></render-stereo-panel>
+
     </div>
   </div>
   
@@ -24,6 +27,7 @@
 <script>
 
 import WavesPropertiesPanel from './Panels/WavesPropertiesPanel.vue';
+import RenderStereoPanel from './Panels/RenderStereoPanel.vue';
 
 export default {
   name: "CentralPanel",
@@ -64,6 +68,7 @@ export default {
   },
   components: {
     "waves-properties-panel": WavesPropertiesPanel,
+    "render-stereo-panel": RenderStereoPanel,
   }
 }
 </script>

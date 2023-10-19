@@ -63,6 +63,7 @@
     <!-- ****** TOP-LEFT ICONS ****** -->
     <div class="top-left-icons-container">
       <button class="clickable" @click="wavesPropsClicked"><span>Wave's properites </span><span class="fa">&#xf085;</span></button>
+      <button class="clickable" @click="renderStereoClicked"><span>Render stereo </span><span class="fa">&#xe131;</span></button>
     </div>
     
   </div>
@@ -133,7 +134,10 @@ export default {
 
     wavesPropsClicked: function(){
       window.eventBus.emit('OpenCentralPanel', 'wavesProperties');
-    }
+    },
+    renderStereoClicked: function(){
+      window.eventBus.emit('OpenCentralPanel', 'renderStereo');
+    },
   },
   components: {
     "canvas3D": Canvas3D,
@@ -198,8 +202,12 @@ export default {
   left: 20px;
 
   display: flex;
-  flex-direction: row;
+  flex-direction: column;
   flex-wrap: nowrap;
+}
+
+.top-left-icons-container > *{
+  margin: 5px;
 }
 
 
