@@ -29,7 +29,7 @@
     <div class="container-vertical">
       <button class="renderButton clickable" @click="renderFramesClicked">Render frames <span class="fa">&#xf56d;</span></button>
       <p>This process can take several minutes. Estimated time: <strong>{{ (duration * fps * 0.6 * 2)/60 }} minutes.</strong>
-      Estimated required space: <strong>{{ duration * fps * 2 * 4 }} MB.</strong></p>
+      Estimated required space: <strong>{{ grayscale ? duration * fps * 2 * 2 : duration * fps * 2 * 4 }} MB.</strong></p>
       
       <p>
         You should configure your browser to store the files in a certain folder automatically. This will avoid you having to click "Save" for each frame.

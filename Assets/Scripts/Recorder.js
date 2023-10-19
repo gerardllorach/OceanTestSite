@@ -142,24 +142,32 @@ class Recorder {
   }
 
 
-  renderLeft = () => {
+  renderLeft = (grayscale) => {
     // Update ocean grid
     this.ocean.gridEntity.update(this.ocean.oceanTile, this.cameraL);
     // Hide helpers
     this.displayHelpers(false);
+    // Update shader to paint in grayscale
+    this.ocean.oceanTile.material.uniforms.u_grayscale.value = grayscale;
     // Paint canvas
     this.renderer.render( this.scene, this.cameraL );
+    // Restore grayscale
+    this.ocean.oceanTile.material.uniforms.u_grayscale.value = false;
     // Show helpers
     this.displayHelpers(true);
     
   }
-  renderRight = ()=>{
+  renderRight = (grayscale)=>{
     // Update ocean grid
     this.ocean.gridEntity.update(this.ocean.oceanTile, this.cameraR);
     // Hide helpers
     this.displayHelpers(false);
+    // Update shader to paint in grayscale
+    this.ocean.oceanTile.material.uniforms.u_grayscale.value = grayscale;
     // Paint canvas
     this.renderer.render( this.scene, this.cameraR );
+    // Restore grayscale
+    this.ocean.oceanTile.material.uniforms.u_grayscale.value = false;
     // Show helpers
     this.displayHelpers(true);
   }

@@ -198,11 +198,11 @@ class SceneManager{
       for (let i = 0; i < fps * duration; i++){
         let time = i/fps;
         this.update(1000 * time);
-        this.recorder.renderLeft();
+        this.recorder.renderLeft(grayscale);
         let timeStr = String(time.toFixed(2)).padStart(6, '0');
-        await this.recorder.savePNG('L_' + timeStr, grayscale);
-        this.recorder.renderRight();
-        await this.recorder.savePNG('R_' + timeStr, grayscale);
+        await this.recorder.savePNG('L_' + timeStr);
+        this.recorder.renderRight(grayscale);
+        await this.recorder.savePNG('R_' + timeStr);
       }
 
       // Export json

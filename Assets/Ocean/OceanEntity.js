@@ -74,6 +74,7 @@ class OceanEntity {
         u_time: { value: this.time },
         u_fogUnderwaterColor: { value: new THREE.Vector3(scene.fog.color.r, scene.fog.color.g, scene.fog.color.b)},
         u_fogDensity: {value: scene.fog.density},
+        u_grayscale: {value: false},
         u_paramsTexture: {value: paramsTexture},
         u_imgSize: {value: new THREE.Vector2(numWaves, 1)},
         // u_steepnessFactor: { value: 0.2 },

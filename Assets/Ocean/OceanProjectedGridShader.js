@@ -229,6 +229,8 @@ export const OceanProjectedGridFragShader = /* glsl */`
   // Fog
   uniform vec3 u_fogUnderwaterColor;
   uniform float u_fogDensity;
+  // Grayscale
+  uniform bool u_grayscale;
 
   //varying vec4 v_OceanColor;
 
@@ -330,7 +332,12 @@ export const OceanProjectedGridFragShader = /* glsl */`
     // Add fog
     color = mix( color, fogColor, fogFactor );
 
-    gl_FragColor = vec4(color, 1.0);//0.9 + fogFactor*0.1);
+    if (u_grayscale == false) {
+      gl_FragColor = vec4(color, 1.0);//0.9 + fogFactor*0.1);
+    } else {
+      float luminance = color.r * 0.3 + color.g * 0.59 + color.b * 0.11;// https://en.wikipedia.org/wiki/Grayscale
+      gl_FragColor = vec4(luminance, luminance, luminance, 1.0);//0.9 + fogFactor*0.1);
+    }
     //gl_FragColor = vec4(skyFresnel + waterFresnel + diffuseColor + specularColor, 0.92);
     
 
