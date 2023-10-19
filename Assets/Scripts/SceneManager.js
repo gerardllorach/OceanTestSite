@@ -7,7 +7,7 @@ import { SkyboxEntity } from '/OceanTestSite/Assets/Skybox/SkyboxEntity.js';
 import * as FogShader from '/OceanTestSite/Assets/Terrain/FogShader.js'
 import { OceanEntity } from '/OceanTestSite/Assets/Ocean/OceanEntity.js';
 
-import { TextMeshEntity } from '/CasablancaBuoy/Assets/TextMesh/TextMeshEntity.js';
+import { TextMeshEntity } from '/OceanTestSite/Assets/TextMesh/TextMeshEntity.js';
 
 import { Recorder } from './Recorder.js';
 
