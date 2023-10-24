@@ -18,7 +18,7 @@
       </div>
       <div class="container-horizontal">
         <span>Grayscale</span>
-        <div><input type="checkbox" v-model="grayscale"><span>{{ grayscale ? 2 : 4 }} MB per frame</span></div>
+        <div><input type="checkbox" v-model="grayscale"><span>2 MB per frame</span></div>
       </div>
       
       
@@ -28,7 +28,7 @@
     <!-- Export button -->
     <div class="container-vertical">
       <button class="renderButton clickable" @click="renderFramesClicked">Render frames <span class="fa">&#xf56d;</span></button>
-      <p>This process can take several minutes. Estimated time: <strong>{{ (duration * fps * 0.6 * 2)/60 }} minutes.</strong>
+      <p>This process can take several minutes. Estimated time: <strong>{{ (duration * fps * 0.6 * 2)/60 }} minutes</strong> (if your app runs at 60 fps now). 
       Estimated required space: <strong>{{ grayscale ? duration * fps * 2 * 2 : duration * fps * 2 * 4 }} MB.</strong></p>
       
       <p>

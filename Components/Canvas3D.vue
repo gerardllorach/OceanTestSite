@@ -56,7 +56,10 @@ export default {
     window.eventBus.on('RenderStereoPanel_renderFramesClicked', (el) => {
       this.sceneManager.record(el.duration, el.fps, el.grayscale);
     });
-
+    // ***** RECORD HEIGHT PANEL *****
+    window.eventBus.on('RenderHeightPanel_coverageChange', (coverage) => {
+      this.sceneManager.recorder.changeCoverage(coverage);
+    });
     // ***** TOP-RIGHT ICONS *****
     // Face northward
     window.eventBus.on('TopRightMenu_compassButtonClicked', () => {

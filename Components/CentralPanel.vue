@@ -12,6 +12,9 @@
       <!-- Render stereo menu -->
       <render-stereo-panel v-show="panelName == 'renderStereo'"></render-stereo-panel>
 
+      <!-- Render height menu -->
+      <render-height-panel v-show="panelName == 'renderHeight'"></render-height-panel>
+
     </div>
   </div>
   
@@ -28,6 +31,7 @@
 
 import WavesPropertiesPanel from './Panels/WavesPropertiesPanel.vue';
 import RenderStereoPanel from './Panels/RenderStereoPanel.vue';
+import RenderHeightPanel from './Panels/RenderHeightPanel.vue';
 
 export default {
   name: "CentralPanel",
@@ -69,6 +73,7 @@ export default {
   components: {
     "waves-properties-panel": WavesPropertiesPanel,
     "render-stereo-panel": RenderStereoPanel,
+    "render-height-panel": RenderHeightPanel,
   }
 }
 </script>

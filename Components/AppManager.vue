@@ -61,6 +61,7 @@
     <div class="top-left-icons-container">
       <button class="clickable" @click="wavesPropsClicked"><span>Wave's properites </span><span class="fa">&#xf085;</span></button>
       <button class="clickable" @click="renderStereoClicked"><span>Render stereo </span><span class="fa">&#xe131;</span></button>
+      <button class="clickable" @click="renderHeightClicked"><span>Render heights </span><span class="fa">&#xf773;</span></button>
     </div>
     
   </div>
@@ -128,6 +129,9 @@ export default {
     },
     renderStereoClicked: function(){
       window.eventBus.emit('OpenCentralPanel', 'renderStereo');
+    },
+    renderHeightClicked: function(){
+      window.eventBus.emit('OpenCentralPanel', 'renderHeight');
     },
   },
   components: {

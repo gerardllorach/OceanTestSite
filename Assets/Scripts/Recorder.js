@@ -77,6 +77,18 @@ class Recorder {
   }
 
 
+  // Change coverage of top orthographic camera
+  changeCoverage = function(coverage){
+    //debugger;
+    this.cameraTop.left = -coverage/2;
+    this.cameraTop.right = coverage/2;
+    this.cameraTop.bottom = -coverage/2;
+    this.cameraTop.top = coverage/2;
+    this.cameraTop.updateProjectionMatrix();
+    this.helper3.update();
+  }
+
+
   // Create renders with checkerboard
   renderCalibration = function(){
     // Load checker board
