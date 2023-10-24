@@ -28,6 +28,10 @@
     <!-- Export button -->
     <div class="container-vertical">
       <button class="renderButton clickable" @click="renderFramesClicked">Render frames <span class="fa">&#xf56d;</span></button>
+      <!-- Progress bar -->
+      <div class="progress-container" v-show="progress!=100">
+        <div :style="'width:' + progress + '%' "></div>
+      </div>
       <p>This process can take several minutes. Estimated time: <strong>{{ (duration * fps * 0.6 * 2)/60 }} minutes</strong> (if your app runs at 60 fps now). 
       Estimated required space: <strong>{{ grayscale ? duration * fps * 2 * 2 : duration * fps * 2 * 4 }} MB.</strong></p>
       
@@ -54,13 +58,19 @@ export default {
 
   },
   mounted() {
-
+    window.eventBus.on('SceneManager_recordProgress', (progress) => {
+      this.progress = progress;
+    });
+    window.eventBus.on('SceneManager_recordFinished', () => {
+      this.progress = 100;
+    });
   },
   data() {
     return {
       duration: 1,
       fps: 10,
       grayscale: false,
+      progress: 100,
     }
   },
   methods: {
@@ -118,6 +128,24 @@ export default {
 
 .renderButton{
   margin: 20px 20px 0px 20px;
+}
+
+.progress-container {
+  width: 100%;
+  background: #77cfef;
+  margin-top: 10px;
+  margin-bottom: 10px;
+  border-radius: 25px;
+  border-color: #0f3062;
+  border-width: thin;
+  border-style: solid;
+}
+
+.progress-container > * {
+  background: linear-gradient(180deg, #52b5d9, #459dbd);
+  border-radius: 15px;
+  margin: 1px;
+  height: 24px;
 }
 
 

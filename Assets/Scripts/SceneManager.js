@@ -188,7 +188,10 @@ class SceneManager{
 
   // Record frames
   record = async function(inDuration, inFps, grayscale){
+    if (this.isRecording)
+      return;
     this.isRecording = !this.isRecording;
+    let currentPercent = 0;
     if (this.isRecording){
 
       // Iterate through time
@@ -205,7 +208,15 @@ class SceneManager{
         await this.recorder.savePNG('L_' + timeStr);
         this.recorder.renderRight(grayscale);
         await this.recorder.savePNG('R_' + timeStr);
+
+        // Show progress
+        if ((100 *(i+1) / (fps*duration)) > currentPercent){
+          currentPercent++;
+          window.eventBus.emit('SceneManager_recordProgress', 100 * (i+1) / (fps*duration));
+        }
       }
+      window.eventBus.emit('SceneManager_recordFinished');
+
 
       // Export json
       this.exportOceanParamsJSON();
@@ -217,6 +228,8 @@ class SceneManager{
 
   // Record heights
   recordHeights = async function(params){
+    if (this.isRecording)
+      return;
     let duration = params.duration;
     let fps = params.fps;
     let imgSize = params.imgSize;
@@ -226,13 +239,23 @@ class SceneManager{
 
     this.recorder.renderer.setSize(imgSize, imgSize);
 
+    let currentPercent = 0;
+
     for (let i = 0; i < fps * duration; i++){
       let time = i/fps;
       this.update(1000 * time);
       this.recorder.renderTop(maxWaveHeight);
       let timeStr = String(time.toFixed(2)).padStart(6, '0');
       await this.recorder.savePNG('WaveHeight_range_' + maxWaveHeight + '_' + time);
+
+      // Show progress
+      if ((100 *(i+1) / (fps*duration)) > currentPercent){
+        currentPercent++;
+        window.eventBus.emit('SceneManager_recordProgress', 100 * (i+1) / (fps*duration));
+      }
     }
+
+    window.eventBus.emit('SceneManager_recordFinished');
 
     // Export json
     this.exportOceanParamsJSON();

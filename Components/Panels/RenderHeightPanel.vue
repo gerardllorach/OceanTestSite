@@ -19,7 +19,7 @@
       <!-- Image size -->
       <div class="container-horizontal">
         <span>Image size <span class="fa" >&#xf03e;</span></span>
-        <div><input type="range" min="1" max="11" :value="imgSizePw"  @input="e => imgSizePw = e.target.value"><span>{{ Math.pow(2, imgSizePw)}} x {{ Math.pow(2, imgSizePw) }} pixels</span></div>
+        <div><input type="range" min="1" max="12" :value="imgSizePw"  @input="e => imgSizePw = e.target.value"><span>{{ Math.pow(2, imgSizePw)}} x {{ Math.pow(2, imgSizePw) }} pixels</span></div>
       </div>
       <!-- Coverage -->
       <div class="container-horizontal odd">
@@ -39,7 +39,11 @@
     <!-- Export button -->
     <div class="container-vertical">
       <button class="renderButton clickable" @click="renderFramesClicked">Render frames <span class="fa">&#xf56d;</span></button>
-      <p>This process can take several minutes. Estimated time: <strong>{{ ((duration * fps * 0.05)/60).toFixed(1) }} minutes</strong> (if your app runs at 60 fps now). 
+      <!-- Progress bar -->
+      <div class="progress-container" v-show="progress!=100">
+        <div :style="'width:' + progress + '%' "></div>
+      </div>
+      <p>This process can take several minutes. Estimated time: <strong>{{ ((duration * fps * 0.3)/60).toFixed(1) }} minutes</strong> (if your app runs at 60 fps now). 
       Estimated required space: <strong>{{ (duration * fps * 0.004 * Math.pow(3, imgSizePw) * 0.001).toFixed(1) }} MB.</strong></p>
       
       <p>
@@ -70,7 +74,12 @@ export default {
 
   },
   mounted() {
-
+    window.eventBus.on('SceneManager_recordProgress', (progress) => {
+      this.progress = progress;
+    });
+    window.eventBus.on('SceneManager_recordFinished', () => {
+      this.progress = 100;
+    });
   },
   data() {
     return {
@@ -79,6 +88,7 @@ export default {
       imgSizePw: 10,
       coverage: 30,
       maxWaveHeight: 3,
+      progress: 100,
     }
   },
   methods: {
@@ -150,6 +160,24 @@ export default {
 
 .renderButton{
   margin: 20px 20px 0px 20px;
+}
+
+.progress-container {
+  width: 100%;
+  background: #77cfef;
+  margin-top: 10px;
+  margin-bottom: 10px;
+  border-radius: 25px;
+  border-color: #0f3062;
+  border-width: thin;
+  border-style: solid;
+}
+
+.progress-container > * {
+  background: linear-gradient(180deg, #52b5d9, #459dbd);
+  border-radius: 15px;
+  margin: 1px;
+  height: 24px;
 }
 
 
