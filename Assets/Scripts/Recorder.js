@@ -196,7 +196,9 @@ class Recorder {
     this.ocean.oceanTile.material.uniforms.u_paintWaveHeight.value = true;
     this.ocean.oceanTile.material.uniforms.u_maxWaveHeight.value = maxWaveHeight;
     // Paint canvas
+    this.renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
     this.renderer.render( this.scene, this.cameraTop );
+    this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     // Restore grayscale
     this.ocean.oceanTile.material.uniforms.u_paintWaveHeight.value = false;
     // Show helpers

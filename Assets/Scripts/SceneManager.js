@@ -230,23 +230,27 @@ class SceneManager{
   recordHeights = async function(params){
     if (this.isRecording)
       return;
+    // Input variables
     let duration = params.duration;
     let fps = params.fps;
     let imgSize = params.imgSize;
     let maxWaveHeight = params.maxWaveHeight;
-
+    // Is recording
     this.isRecording = !this.isRecording;
-
+    // Set canvas size
     this.recorder.renderer.setSize(imgSize, imgSize);
-
+    // Hide N and S letters
+    this.Ntext.textObj.visible = false;
+    this.Stext.textObj.visible = false;
+    // Keep track of progress
     let currentPercent = 0;
-
+    // Iterate frames
     for (let i = 0; i < fps * duration; i++){
       let time = i/fps;
       this.update(1000 * time);
       this.recorder.renderTop(maxWaveHeight);
       let timeStr = String(time.toFixed(2)).padStart(6, '0');
-      await this.recorder.savePNG('WaveHeight_range_' + maxWaveHeight + '_' + time);
+      await this.recorder.savePNG('WaveHeight_range_' + maxWaveHeight + '_' + timeStr);
 
       // Show progress
       if ((100 *(i+1) / (fps*duration)) > currentPercent){
@@ -254,12 +258,16 @@ class SceneManager{
         window.eventBus.emit('SceneManager_recordProgress', 100 * (i+1) / (fps*duration));
       }
     }
-
+    // Loaded
     window.eventBus.emit('SceneManager_recordFinished');
 
     // Export json
     this.exportOceanParamsJSON();
 
+    // Restore N and S letters
+    this.Ntext.textObj.visible = true;
+    this.Stext.textObj.visible = true;
+    // Start rendering again
     this.isRecording = false;
     this.startRender();
   }
