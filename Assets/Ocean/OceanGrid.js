@@ -86,6 +86,10 @@ export class OceanGrid {
 
     // Move vertex in front of the cameraUser
     // Calculate distance that plane should be from camera according to FOV of camera
+    if (this.cameraUser.fov !== undefined)
+      this.distanceFrontCamera = this.size / Math.tan(this.cameraUser.fov*Math.PI/180); // HACK WARN TODO: CHECK THIS FORMULA
+    else // Orthographic camera
+      this.distanceFrontCamera = 2; // HACK: EMPIRICAL NUMBER
     this.cameraUser.translateZ(-this.distanceFrontCamera);
     this.cameraUser.updateMatrix();
     this.tempVec4 = this.tempVec4.applyMatrix4(this.cameraUser.matrix, this.tempVec4);
@@ -259,7 +263,7 @@ export class OceanGrid {
     let u = material.uniforms;
     u.u_cameraModelMatrix.value = this.cameraGrid.matrix;
     u.u_cameraGridPosition.value = this.cameraGrid.position;
-    u.u_cameraViewportScale.value.x = this.cameraUser.aspect;
+    u.u_cameraViewportScale.value.x = this.cameraUser.aspect || 1; // For ortographic cameras
     u.u_cameraViewportScale.value.y = this.yHeightScale;
   }
 

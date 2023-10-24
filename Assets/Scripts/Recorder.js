@@ -44,27 +44,34 @@ class Recorder {
     const aspect = this.imgWidth / this.imgHeight;  // the canvas default
     const near = 0.1;
     const far = 2000;
+    const size = 30;
 
     // Create cameras
     this.cameraR = new THREE.PerspectiveCamera(fov, aspect, near, far);
     this.cameraL = new THREE.PerspectiveCamera(fov, aspect, near, far);
+    this.cameraTop = new THREE.OrthographicCamera(-size/2, size/2, size/2, -size/2, near, far);
     
     // Camera positions
     this.cameraR.position.set( this.distBetweenCams / 2, this.camElevation, 0);
     this.cameraL.position.set(- this.distBetweenCams / 2, this.camElevation, 0);
+    this.cameraTop.position.set(0, 15, 0);
     // Camera rotation
     this.cameraR.rotation.set(- this.camInclination * Math.PI / 180, 0, 0);
     this.cameraL.rotation.set(- this.camInclination * Math.PI / 180, 0, 0);
+    this.cameraTop.rotation.set(- 90 * Math.PI / 180, 0, 0);
 
     // Create objects for left and right cameras
     // Update camera's matrices
     this.cameraR.updateWorldMatrix();
     this.cameraL.updateWorldMatrix();
+    this.cameraTop.updateWorldMatrix();
     // Create helpers
     this.helper = new THREE.CameraHelper( this.cameraR );
     scene.add( this.helper );
     this.helper2= new THREE.CameraHelper( this.cameraL );
     scene.add( this.helper2 );
+    this.helper3 = new THREE.CameraHelper( this.cameraTop );
+    scene.add( this.helper3 );
 
     //document.body.appendChild( this.canvas );
   }
@@ -189,6 +196,7 @@ class Recorder {
   displayHelpers = function(state){
     this.helper.visible = state;
     this.helper2.visible = state;
+    this.helper3.visible = state;
   }
 }
 

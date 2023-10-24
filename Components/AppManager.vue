@@ -27,9 +27,11 @@
     <!-- CAMERA ICONS -->
     <div class="camera-icons-container top-right-icons-container">
       <!-- Left cam button -->
-      <div class="clickable icon-str fa" @click="camClicked('L')" title="Left sided camera">&#xf03d;</div>
+      <div class="clickable icon-str fa left-cam" @click="camClicked('L')" title="Left sided camera">&#xf03d;</div>
       <!-- Right cam button -->
       <div class="clickable icon-str fa" @click="camClicked('R')" title="Right sided camera">&#xf03d;</div>
+      <!-- Right cam button -->
+      <div class="clickable icon-str fa top-cam" @click="camClicked('Top')" title="Top camera">&#xf03d;</div>
       <!-- Free cam button -->
       <div class="clickable icon-str fa-light fa" @click="camClicked('F')" title="Free view camera">&#xe0d8;</div>
     </div>
@@ -210,6 +212,14 @@ export default {
 
 .camera-icons-container{
   top: 60px;
+}
+
+.left-cam {
+  transform: scaleX(-1);
+}
+
+.top-cam {
+  transform: rotate(90deg);
 }
 
 .compass-icons-container{

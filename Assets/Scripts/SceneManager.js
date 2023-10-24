@@ -229,6 +229,8 @@ class SceneManager{
       this.selectedCamera = this.recorder.cameraR;
     else if (value == 'L')
       this.selectedCamera = this.recorder.cameraL;
+    else if (value == 'Top')
+      this.selectedCamera = this.recorder.cameraTop;
   }
 
   faceNorthward = function(){
