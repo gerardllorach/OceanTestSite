@@ -74,7 +74,6 @@ class OceanEntity {
         u_time: { value: this.time },
         u_fogUnderwaterColor: { value: new THREE.Vector3(scene.fog.color.r, scene.fog.color.g, scene.fog.color.b)},
         u_fogDensity: {value: scene.fog.density},
-        u_grayscale: {value: false},
         u_paramsTexture: {value: paramsTexture},
         u_imgSize: {value: new THREE.Vector2(numWaves, 1)},
         // u_steepnessFactor: { value: 0.2 },
@@ -86,6 +85,11 @@ class OceanEntity {
         u_cameraModelMatrix: {value: this.gridEntity.cameraGrid.matrix},
         u_cameraGridPosition: {value: this.gridEntity.cameraGrid.position},
         u_cameraViewportScale: {value: new THREE.Vector2(1, 1)},
+        // Special parameters for recording frames
+        u_grayscale: {value: false},
+        u_paintWaveHeight: {value: false},
+        u_maxWaveHeight: {value: 1.5},
+
       },
       vertexShader: OceanProjectedGridVertShader,
       fragmentShader: OceanProjectedGridFragShader,

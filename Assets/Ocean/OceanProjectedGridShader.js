@@ -59,6 +59,8 @@ export const OceanProjectedGridVertShader = /* glsl */ `
   varying mat3 v_TBN;
   varying vec4 v_OceanColor;
 
+  varying vec3 v_wavePosition;
+
 
 
   // Gerstner Wave
@@ -194,6 +196,7 @@ export const OceanProjectedGridVertShader = /* glsl */ `
     //vec4 worldPosition = modelMatrix * vec4(modPos, 1.0);
     //v_WorldPosition = worldPosition.xyz;
     v_WorldPosition = intersectionPoint;
+    v_wavePosition = modPos;
 
     // Model
     v_TBN = mat3(tangent, binormal, normal);
@@ -224,13 +227,20 @@ export const OceanProjectedGridFragShader = /* glsl */`
   varying vec3 v_Normal;
   varying mat3 v_TBN;
 
+  varying vec3 v_wavePosition;
+
   uniform sampler2D u_normalTexture;
   uniform float u_time;
   // Fog
   uniform vec3 u_fogUnderwaterColor;
   uniform float u_fogDensity;
+  
+  // Special uniforms for rendering frames
   // Grayscale
   uniform bool u_grayscale;
+  // Render wave heights
+  uniform bool u_paintWaveHeight;
+  uniform float u_maxWaveHeight;
 
   //varying vec4 v_OceanColor;
 
@@ -243,6 +253,13 @@ export const OceanProjectedGridFragShader = /* glsl */`
 
 
   void main(){
+
+    // Render wave heights
+    if (u_paintWaveHeight){
+      float value = (v_wavePosition.y + u_maxWaveHeight) / (u_maxWaveHeight * 2.0);
+      gl_FragColor = vec4(value, value, value, 1.0);
+      return;
+    }
 
     // Bump texture for specular reflections
     vec2 scale = vec2(2.0,2.0);

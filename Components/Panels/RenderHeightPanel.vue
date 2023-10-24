@@ -29,7 +29,7 @@
       <!-- Max height -->
       <div class="container-horizontal">
         <span>Maximum encoded wave height</span>
-        <div><input type="range" min="1" max="11" :value="maxWaveHeight"  @input="e => maxWaveHeight = e.target.value"><span>{{ maxWaveHeight }} meters limit</span></div>
+        <div><input type="range" min="1" max="11" step="0.5" :value="maxWaveHeight"  @input="e => maxWaveHeight = e.target.value"><span>{{ maxWaveHeight }} meters limit</span></div>
       </div>
       
       
@@ -39,8 +39,8 @@
     <!-- Export button -->
     <div class="container-vertical">
       <button class="renderButton clickable" @click="renderFramesClicked">Render frames <span class="fa">&#xf56d;</span></button>
-      <p>This process can take several minutes. Estimated time: <strong>{{ ((duration * fps * 0.6 * 2)/60).toFixed(1) }} minutes</strong> (if your app runs at 60 fps now). 
-      Estimated required space: <strong>{{ duration * fps * 2 * 2 }} MB.</strong></p>
+      <p>This process can take several minutes. Estimated time: <strong>{{ ((duration * fps * 0.05)/60).toFixed(1) }} minutes</strong> (if your app runs at 60 fps now). 
+      Estimated required space: <strong>{{ (duration * fps * 0.004 * Math.pow(3, imgSizePw) * 0.001).toFixed(1) }} MB.</strong></p>
       
       <p>
         You should configure your browser to store the files in a certain folder automatically. This will avoid you having to click "Save" for each frame.
@@ -84,10 +84,10 @@ export default {
   methods: {
     // USER INPUT
     renderFramesClicked: function(){
-      window.eventBus.emit('RenderHeightPanel_renderHeightClicked', {
+      window.eventBus.emit('RenderHeightPanel_renderFramesClicked', {
         duration: this.duration,
         fps: this.fps,
-        imgSize: Math.pow(2, imgSizePw),
+        imgSize: Math.pow(2, this.imgSizePw),
         maxWaveHeight: this.maxWaveHeight,
       });
     },

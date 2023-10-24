@@ -36,8 +36,6 @@ class Recorder {
     renderer.setSize( this.imgWidth, this.imgHeight);
     this.renderer = renderer;
 
-    // Get canvas
-    this.canvas = this.renderer.domElement;
 
     // Camera presets
     const fov = 45;
@@ -73,7 +71,6 @@ class Recorder {
     this.helper3 = new THREE.CameraHelper( this.cameraTop );
     scene.add( this.helper3 );
 
-    //document.body.appendChild( this.canvas );
   }
 
 
@@ -190,16 +187,32 @@ class Recorder {
     // Show helpers
     this.displayHelpers(true);
   }
+  renderTop = (maxWaveHeight) => {
+    // Update ocean grid
+    this.ocean.gridEntity.update(this.ocean.oceanTile, this.cameraTop);
+    // Hide helpers
+    this.displayHelpers(false);
+    // Update shader to paint in grayscale
+    this.ocean.oceanTile.material.uniforms.u_paintWaveHeight.value = true;
+    this.ocean.oceanTile.material.uniforms.u_maxWaveHeight.value = maxWaveHeight;
+    // Paint canvas
+    this.renderer.render( this.scene, this.cameraTop );
+    // Restore grayscale
+    this.ocean.oceanTile.material.uniforms.u_paintWaveHeight.value = false;
+    // Show helpers
+    this.displayHelpers(true);
+  }
 
 
   savePNG = async function(filename){
     return new Promise((resolve) => {
+      let canvas = this.renderer.domElement;
       const link = document.createElement('a');
       link.download = filename + '.png';
-      link.href = this.canvas.toDataURL();
+      link.href = canvas.toDataURL();
       link.click();
       link.delete;
-      setTimeout(resolve, 10);
+      setTimeout(resolve, 200);
     })
     
     

@@ -194,6 +194,8 @@ class SceneManager{
       // Iterate through time
       const fps = inFps || 10;
       const duration = inDuration || 1;
+      // Set default width and height
+      this.recorder.renderer.setSize(this.recorder.imgWidth, this.recorder.imgHeight);
 
       for (let i = 0; i < fps * duration; i++){
         let time = i/fps;
@@ -211,6 +213,32 @@ class SceneManager{
       this.isRecording = false;
       this.startRender();
     }
+  }
+
+  // Record heights
+  recordHeights = async function(params){
+    let duration = params.duration;
+    let fps = params.fps;
+    let imgSize = params.imgSize;
+    let maxWaveHeight = params.maxWaveHeight;
+
+    this.isRecording = !this.isRecording;
+
+    this.recorder.renderer.setSize(imgSize, imgSize);
+
+    for (let i = 0; i < fps * duration; i++){
+      let time = i/fps;
+      this.update(1000 * time);
+      this.recorder.renderTop(maxWaveHeight);
+      let timeStr = String(time.toFixed(2)).padStart(6, '0');
+      await this.recorder.savePNG('WaveHeight_range_' + maxWaveHeight + '_' + time);
+    }
+
+    // Export json
+    this.exportOceanParamsJSON();
+
+    this.isRecording = false;
+    this.startRender();
   }
 
   setWavesProperties = function(wavesProperties){
@@ -241,12 +269,6 @@ class SceneManager{
     this.controls.target.x = 0;
     this.camera.position.set(this.controls.target.x, this.camera.position.y, newZ*0.5);
     this.controls.update();
-
-    // new TWEEN.Tween(this.camera.position)
-    //   .to({ x: this.controls.target.x, z: newZ }, 4000)
-    //   .easing(TWEEN.Easing.Cubic.InOut)
-    //   .onUpdate(()=>this.controls.update())
-    //   .start();
   }
 
 

@@ -60,6 +60,9 @@ export default {
     window.eventBus.on('RenderHeightPanel_coverageChange', (coverage) => {
       this.sceneManager.recorder.changeCoverage(coverage);
     });
+    window.eventBus.on('RenderHeightPanel_renderFramesClicked', (el) => {
+      this.sceneManager.recordHeights(el);
+    });
     // ***** TOP-RIGHT ICONS *****
     // Face northward
     window.eventBus.on('TopRightMenu_compassButtonClicked', () => {
