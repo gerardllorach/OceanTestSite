@@ -17,7 +17,7 @@
         <span>Direction</span>
       </div>
 
-      <div class="container-horizontal" v-for="(ww, index) in wavesProperties">
+      <div class="container-horizontal" :class="index%2 == 0 ? 'odd' : ''" v-for="(ww, index) in wavesProperties">
         <button class="close-button clickable" @click="removeWave(index)"><span>x</span></button>
         <span>{{ index +1}}</span>
         <!-- Display numbers -->
@@ -40,7 +40,7 @@
 
       </div>
       <!-- Add new wave -->
-      <div class="container-horizontal">
+      <div class="container-horizontal" :class="wavesProperties.length%2 == 0 ? 'odd' : ''">
         <button class="add-button clickable" @click="addWave"><span>+</span></button>
         <span></span>
         <span></span>
@@ -227,6 +227,10 @@ export default {
   width: 100%;
   display: flex;
   justify-content: center;
+}
+
+.odd {
+  background: linear-gradient(90deg, transparent 0%, #77cfef 10%, #77cfef 90%, transparent 100%);;
 }
 
 .close-button {
