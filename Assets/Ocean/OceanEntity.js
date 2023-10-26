@@ -195,6 +195,7 @@ class OceanEntity {
     paramsTexture.needsUpdate = true;
     // Update uniforms
     this.oceanTile.material.uniforms.u_paramsTexture.value = paramsTexture;
+    this.oceanTile.material.uniforms.u_imgSize.value = new THREE.Vector2(this.numWaves || 1, 1);
   }
 
 

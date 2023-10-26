@@ -30,7 +30,7 @@
           <span> m</span>
         </div>
         <div v-show="isEditing">
-          <input  type="number" min="1" max="20" step="0.1" :value="ww.T" name="T" @change="onChange($event, index, 'T')"/>
+          <input  type="number" min="0.1" max="20" step="0.1" :value="ww.T" name="T" @change="onChange($event, index, 'T')"/>
           <span> s</span>
         </div>
         <div v-show="isEditing">
