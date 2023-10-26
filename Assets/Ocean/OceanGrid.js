@@ -89,7 +89,14 @@ export class OceanGrid {
     if (this.cameraUser.fov !== undefined)
       this.distanceFrontCamera = this.size / Math.tan(this.cameraUser.fov*Math.PI/180); // HACK WARN TODO: CHECK THIS FORMULA
     else // Orthographic camera
-      this.distanceFrontCamera = 2; // HACK: EMPIRICAL NUMBER
+    {// HACK: EMPIRICAL NUMBER
+      if (this.cameraUser.right * 2 < 30)
+        this.distanceFrontCamera = 2;
+      else if (this.cameraUser.right *2 < 70 )
+        this.distanceFrontCamera = 1;
+      else
+        this.distanceFrontCamera = 0.3;
+    } 
     this.cameraUser.translateZ(-this.distanceFrontCamera);
     this.cameraUser.updateMatrix();
     this.tempVec4 = this.tempVec4.applyMatrix4(this.cameraUser.matrix, this.tempVec4);
