@@ -247,6 +247,8 @@ class SceneManager{
     // Hide N and S letters
     this.Ntext.textObj.visible = false;
     this.Stext.textObj.visible = false;
+    // Hide ruler
+    this.ruler.obj.visible = false;
     // Keep track of progress
     let currentPercent = 0;
     // Iterate frames
@@ -272,6 +274,8 @@ class SceneManager{
     // Restore N and S letters
     this.Ntext.textObj.visible = true;
     this.Stext.textObj.visible = true;
+    // Restore ruler
+    this.ruler.obj.visible = true;
     // Start rendering again
     this.isRecording = false;
     this.startRender();

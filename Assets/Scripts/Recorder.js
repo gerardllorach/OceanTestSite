@@ -224,8 +224,6 @@ class Recorder {
     this.helper.visible = state;
     this.helper2.visible = state;
     this.helper3.visible = state;
-    // Hide ruler
-    this.scene.ruler.visible = state;
   }
 }
 

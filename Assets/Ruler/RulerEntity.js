@@ -12,8 +12,8 @@ class RulerEntity {
     let gltfLoader = new GLTFLoader();
 
     gltfLoader.load('/OceanTestSite/Assets/Ruler/ruler.glb', (gltf) => {
-      debugger;
       let ruler = gltf.scene.children[0];
+      this.obj = ruler;
       scene.add(ruler);
 
       this.isLoaded = true;
