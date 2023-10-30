@@ -9,6 +9,8 @@ import { OceanEntity } from '/OceanTestSite/Assets/Ocean/OceanEntity.js';
 
 import { TextMeshEntity } from '/OceanTestSite/Assets/TextMesh/TextMeshEntity.js';
 
+import { RulerEntity } from '/OceanTestSite/Assets/Ruler/RulerEntity.js';
+
 import { Recorder } from './Recorder.js';
 
 
@@ -126,6 +128,9 @@ class SceneManager{
       this.Stext.textObj.position.y = 1;
       this.Stext.textObj.position.z = 4;
     });
+
+
+    this.ruler = new RulerEntity(scene);
 
 
 
