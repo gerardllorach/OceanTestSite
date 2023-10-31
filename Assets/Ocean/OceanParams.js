@@ -45,6 +45,7 @@ export class OceanParameters{
   waveSteepness = [];
 
   WAVE_MAX = 10;
+  PERIOD_MAX = 20;
 
   constructor(oceanParameters, numWaves){
     // Assign given ocean parameters (if any)
@@ -288,11 +289,12 @@ export class OceanParameters{
 
 
 
-  getWaveParamsImageData = function(){
+  getWaveParamsImageData = function(dataTextureSize){
     // Create a texture
+    //let canvas = document.getElementById('imagedata') ||document.createElement("canvas");
     let canvas = document.createElement("canvas");
-    canvas.width = this.numWaves || 1;
-    canvas.height = 1;
+    canvas.width = dataTextureSize;
+    canvas.height = dataTextureSize;
 
     let context = canvas.getContext('2d');
     // Get pixels
@@ -300,23 +302,30 @@ export class OceanParameters{
 
     // Fill pixels and scale values from 0 to 255
     for (let i = 0; i < this.numWaves; i++) {
-      // Steepness range
-      let waveSteep = this.waveSteepness[i];
-      imageData.data[i * 4] = 255 * waveSteep;
       // Wave range
       let waveHeight = Math.abs(this.waveHeights[i]);
       imageData.data[i * 4 + 1] = 255 * waveHeight / this.WAVE_MAX;
+      // Steepness range
+      // steepness = 4 * Math.PI * Math.PI * hm0 * 0.5 / (T * T * 9.8);
+      // T = Math.sqrt(2*Math.PI*Math.PI*hm0/(9.8 * steepness))
+      let T = Math.sqrt(2 * Math.PI * Math.PI * waveHeight / (9.8 * this.waveSteepness[i]));
+      imageData.data[i * 4] = 255 * T / this.PERIOD_MAX;
       // Direction range (negative for clockwise rotation)
       let dirX = Math.sin((-this.waveDirections[i]) * Math.PI / 180)
-      imageData.data[i * 4 + 2] = 255 * (dirX + 1) / 2;
+      imageData.data[i * 4 + 2] = 255 * (dirX + 1) / 2; // Normalize
       let dirZ = Math.cos((-this.waveDirections[i]) * Math.PI / 180);
-      imageData.data[i * 4 + 3] = 255 * (dirZ + 1) / 2;
+      imageData.data[i * 4 + 3] = 255 * (dirZ + 1) / 2; // normalize
 
     }
 
 
     // Put data into the texture
-    //context.putImageData(imageData, 0, 0);
+    // context.putImageData(imageData, 0, 0);
+    // canvas.style = `position: absolute; top: 0px; left: 0px; transform: scale(100)`;
+    // canvas.id = 'imagedata';
+    // document.body.appendChild(canvas);
+    // console.log(this.numWaves + ", " + imageData.data.length/4 );
+
     // Return image pixels
     return imageData.data;
   }

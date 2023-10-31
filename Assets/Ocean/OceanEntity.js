@@ -36,9 +36,10 @@ class OceanEntity {
     // Creates a texture that has parameters for generating waves. It includes wave steepness, height, direction X, and direction Z (RGBA).
     let numWaves = 10;
     this.numWaves = numWaves;
+    this.dataTextureSize = 32;
     this.oceanParams = new OceanParameters({}, numWaves);
-    let paramsData = this.oceanParams.getWaveParamsImageData();
-    let paramsTexture = new THREE.DataTexture(paramsData, numWaves, 1, THREE.RGBAFormat, THREE.UnsignedByteType);
+    let paramsData = this.oceanParams.getWaveParamsImageData(this.dataTextureSize);
+    let paramsTexture = new THREE.DataTexture(paramsData, this.dataTextureSize, this.dataTextureSize, THREE.RGBAFormat, THREE.UnsignedByteType);
     paramsTexture.magFilter = THREE.NearestFilter;
     paramsTexture.needsUpdate = true;
 
@@ -75,7 +76,10 @@ class OceanEntity {
         u_fogUnderwaterColor: { value: new THREE.Vector3(scene.fog.color.r, scene.fog.color.g, scene.fog.color.b)},
         u_fogDensity: {value: scene.fog.density},
         u_paramsTexture: {value: paramsTexture},
-        u_imgSize: {value: new THREE.Vector2(numWaves, 1)},
+        u_maxEncodedWaveHeight: {value: this.oceanParams.WAVE_MAX},
+        u_maxEncodedPeriod: {value : this.oceanParams.PERIOD_MAX},
+        u_imgSize: {value: new THREE.Vector2(this.dataTextureSize, this.dataTextureSize)},
+        u_numWaves: {value: numWaves},
         // u_steepnessFactor: { value: 0.2 },
         // u_wavelength: { value: 7.0 },
         // u_direction: { value: new THREE.Vector2(1, 0) },
@@ -189,15 +193,15 @@ class OceanEntity {
   updateParamsTexture() {
     if (!this.oceanTile)
       return;
-    let paramsData = this.oceanParams.getWaveParamsImageData();
-    let paramsTexture = new THREE.DataTexture(paramsData, this.numWaves || 1, 1, THREE.RGBAFormat, THREE.UnsignedByteType);
+    let paramsData = this.oceanParams.getWaveParamsImageData(this.dataTextureSize);
+    let paramsTexture = new THREE.DataTexture(paramsData, this.dataTextureSize, this.dataTextureSize, THREE.RGBAFormat, THREE.UnsignedByteType);
     paramsTexture.magFilter = THREE.NearestFilter;
     paramsTexture.minFilter = THREE.NearestFilter;
     paramsTexture.generateMipmaps = false;
     paramsTexture.needsUpdate = true;
     // Update uniforms
     this.oceanTile.material.uniforms.u_paramsTexture.value = paramsTexture;
-    this.oceanTile.material.uniforms.u_imgSize.value = new THREE.Vector2(this.numWaves || 1, 1);
+    this.oceanTile.material.uniforms.u_numWaves.value = this.numWaves;
   }
 
 

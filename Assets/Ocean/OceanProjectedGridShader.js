@@ -43,8 +43,11 @@ export const OceanProjectedGridVertShader = /* glsl */ `
   precision lowp float;
 
   uniform float u_time;
-  uniform vec3 u_imgSize;
+  uniform vec2 u_imgSize;
+  uniform int u_numWaves;
   uniform sampler2D u_paramsTexture;
+  uniform float u_maxEncodedWaveHeight;
+  uniform float u_maxEncodedPeriod;
   // uniform float u_steepnessFactor;
 
   // Grid reprojection
@@ -69,8 +72,11 @@ export const OceanProjectedGridVertShader = /* glsl */ `
       vec4 waveParams, vec3 position, 
       inout vec3 tangent, inout vec3 binormal){
 
-    float steepness = max(waveParams.x, 0.01);
     float amplitude = max(waveParams.y, 0.01) / 2.0;
+    float T = waveParams.x;
+    float steepness = 4.0 * PI * PI * amplitude / (T * T * 9.8);
+    steepness = max(steepness, 0.01);
+
     float wavelength = amplitude * 2.0 * PI / steepness;
     vec2 direction = waveParams.zw;
 
@@ -160,30 +166,40 @@ export const OceanProjectedGridVertShader = /* glsl */ `
 
     // Gerstner Waves
     // Iterate over all the waves
-    for (int i = 0; i < int(u_imgSize.x); i++){
-      for (int j = 0; j < int(u_imgSize.y); j++){
+    int counter = 0;
+    for (int j = 0; j < int(u_imgSize.y); j++){
+      for (int i = 0; i < int(u_imgSize.x); i++){
+        // u_paramsTexture(period, wave height, cos(dir), sin(dir))
         vec4 params = texture2D(u_paramsTexture, vec2(float(i)/u_imgSize.x, float(j)/u_imgSize.y));
         // Skip if height or steepness are zero
-        if (params.x == 0.0 || params.y == 0.0){
+        //if (params.r == 0.0 || params.g == 0.0){
 
-        } else {
+        //} else {
           // Steepness factor
           // params.r = params.r * u_steepnessFactor;
           // Wave height factor
-          //params.g = params.g/(u_imgSize.x*u_imgSize.y);
+          //params.g = params.g/(u_imgSize.x*u_imgSize.y); // normalization probably to avoid summation and big waves
+          // Wave height encoded
+          params.g = params.g * u_maxEncodedWaveHeight;
+          // Period encoded
+          params.r = params.r * u_maxEncodedPeriod;
           // Direction
           params.b = params.b - 0.5;
           params.a = params.a - 0.5;
           modPos += GerstnerWave(params, modPos, tangent, binormal);
           // Attenuation
-          modPos.y *= distanceFactor;
-          tangent.x /= distanceFactor;
-          binormal.z /= distanceFactor;
+          //modPos.y *= distanceFactor;
+          //tangent.x /= distanceFactor;
+          //binormal.z /= distanceFactor;
           tangent = normalize(tangent);
           binormal = normalize(binormal);
-        }
+        //}
 
-        
+        counter++;
+        if (counter == u_numWaves){
+          i = int(u_imgSize.x);
+          j = int(u_imgSize.y);
+        }
       }
     }
 
