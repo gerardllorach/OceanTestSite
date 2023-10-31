@@ -192,6 +192,8 @@ class OceanEntity {
     let paramsData = this.oceanParams.getWaveParamsImageData();
     let paramsTexture = new THREE.DataTexture(paramsData, this.numWaves || 1, 1, THREE.RGBAFormat, THREE.UnsignedByteType);
     paramsTexture.magFilter = THREE.NearestFilter;
+    paramsTexture.minFilter = THREE.NearestFilter;
+    paramsTexture.generateMipmaps = false;
     paramsTexture.needsUpdate = true;
     // Update uniforms
     this.oceanTile.material.uniforms.u_paramsTexture.value = paramsTexture;
