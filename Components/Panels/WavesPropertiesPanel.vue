@@ -6,6 +6,8 @@
 
     <p>You can also drag and drop a .json file with the wave's properties. Download the properties ("Export data" button) to see the format of the .json file.</p>
 
+    <p>Waves are limited to 10 meter height and periods of 20 seconds.</p>
+
     <!-- TABLE -->
     <div class="container-vertical">
       <!-- ROW -->
