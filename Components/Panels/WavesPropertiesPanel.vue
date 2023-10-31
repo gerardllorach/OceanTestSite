@@ -131,7 +131,7 @@ export default {
       this.wavesProperties.push({
         hm0: (Math.random()*1+0.5),
         T: (Math.random()*12 + 2),
-        dir: (Math.random()*20),
+        dir: (Math.random()*90),
       });
       this.startEditing();
       window.eventBus.emit('WavesPropertiesPanel_setWavesProperties', this.wavesProperties);
