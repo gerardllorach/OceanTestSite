@@ -122,11 +122,13 @@ class OceanEntity {
     params.waveHeights = [];
     params.waveSteepness = [];
     params.waveDirections = [];
+    params.wavePhases = [];
     for (let i = 0; i < this.numWaves; i++){
       params.waveHeights[i] = wavesProperties[i].hm0;
       let T = wavesProperties[i].T;
       params.waveSteepness[i] = 4 * Math.PI * Math.PI * wavesProperties[i].hm0 * 0.5 / (T * T * 9.8);
       params.waveDirections[i] = wavesProperties[i].dir;
+      params.wavePhases[i] = wavesProperties[i].phase;
     }
 
     this.updateParamsTexture();

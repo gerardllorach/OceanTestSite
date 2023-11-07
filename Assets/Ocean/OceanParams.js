@@ -43,6 +43,7 @@ export class OceanParameters{
   waveHeights = [];
   waveDirections = [];
   waveSteepness = [];
+  wavePhases = [];
 
   WAVE_MAX = 10;
   PERIOD_MAX = 20;
@@ -310,12 +311,11 @@ export class OceanParameters{
       // T = Math.sqrt(2*Math.PI*Math.PI*hm0/(9.8 * steepness))
       let T = Math.sqrt(2 * Math.PI * Math.PI * waveHeight / (9.8 * this.waveSteepness[i]));
       imageData.data[i * 4] = 255 * T / this.PERIOD_MAX;
-      // Direction range (negative for clockwise rotation)
-      let dirX = Math.sin((-this.waveDirections[i]) * Math.PI / 180)
-      imageData.data[i * 4 + 2] = 255 * (dirX + 1) / 2; // Normalize
-      let dirZ = Math.cos((-this.waveDirections[i]) * Math.PI / 180);
-      imageData.data[i * 4 + 3] = 255 * (dirZ + 1) / 2; // normalize
 
+      // Direction
+      imageData.data[i * 4 + 2] = 255 * this.waveDirections[i] / 360; // Normalize
+      // Phase
+      imageData.data[i * 4 + 3] = 255 * this.wavePhases[i] / 360; // Normalize
     }
 
 
@@ -341,6 +341,7 @@ export class OceanParameters{
         // steepness = 4 * Math.PI * Math.PI * hm0 * 0.5 / (T * T * 9.8);
         // T = Math.sqrt(2*Math.PI*Math.PI*hm0/(9.8 * steepness))
         T: Math.sqrt(2*Math.PI * Math.PI * this.waveHeights[i] / (9.8 * this.waveSteepness[i])),
+        phase: this.wavePhases[i],
       };
       out.push(wave);
     }

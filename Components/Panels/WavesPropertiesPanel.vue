@@ -17,6 +17,7 @@
         <span>Height</span>
         <span>Period</span>
         <span>Direction</span>
+        <span>Phase</span>
       </div>
 
       <div class="container-horizontal" :class="index%2 == 0 ? 'odd' : ''" v-for="(ww, index) in wavesProperties">
@@ -26,6 +27,7 @@
         <span class="editableSpan clickable" v-show="!isEditing" @click="startEditing">{{ ww.hm0.toFixed(2) }} m</span>
         <span class="editableSpan clickable" v-show="!isEditing" @click="startEditing">{{ ww.T.toFixed(1) }} s</span>
         <span class="editableSpan clickable" v-show="!isEditing" @click="startEditing">{{ ww.dir.toFixed(0) }}º</span>
+        <span class="editableSpan clickable" v-show="!isEditing" @click="startEditing">{{ ww.phase.toFixed(0) }}º</span>
         <!-- Input forms -->
         <div v-show="isEditing">
           <input  type="number" min="0.01" max="10" step="0.01" :value="ww.hm0" name="hm0" @change="onChange($event, index, 'hm0')"/>
@@ -39,11 +41,16 @@
           <input  type="number" min="0" max="360" step="1" :value="ww.dir" name="dir" @change="onChange($event, index, 'dir')"/>
           <span> º</span>
         </div>
+        <div v-show="isEditing">
+          <input  type="number" min="0" max="360" step="1" :value="ww.phase" name="phase" @change="onChange($event, index, 'phase')"/>
+          <span> º</span>
+        </div>
 
       </div>
       <!-- Add new wave -->
       <div class="container-horizontal" :class="wavesProperties.length%2 == 0 ? 'odd' : ''">
         <button class="add-button clickable" @click="addWave"><span>+</span></button>
+        <span></span>
         <span></span>
         <span></span>
         <span></span>
@@ -81,10 +88,10 @@ export default {
   data() {
     return {
       wavesProperties: [
-        {hm0: 0.92, T: 10, dir: 50},
-        {hm0: 0.15, T: 3.7, dir: 84},
-        {hm0: 0.53, T: 5.1, dir: 345},
-        {hm0: 0.18, T: 5.2, dir: 239},
+        {hm0: 0.92, T: 10, dir: 50, phase: 0},
+        {hm0: 0.15, T: 3.7, dir: 84, phase: 0},
+        {hm0: 0.53, T: 5.1, dir: 345, phase: 0},
+        {hm0: 0.18, T: 5.2, dir: 239, phase: 0},
       ],
       isEditing: false,
     }
@@ -134,6 +141,7 @@ export default {
         hm0: (Math.random()*1+0.5),
         T: (Math.random()*12 + 2),
         dir: (Math.random()*90),
+        phase: Math.random()*360,
       });
       this.startEditing();
       window.eventBus.emit('WavesPropertiesPanel_setWavesProperties', this.wavesProperties);

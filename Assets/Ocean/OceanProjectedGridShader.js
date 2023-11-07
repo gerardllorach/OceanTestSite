@@ -78,7 +78,9 @@ export const OceanProjectedGridVertShader = /* glsl */ `
     steepness = max(steepness, 0.01);
 
     float wavelength = amplitude * 2.0 * PI / steepness;
-    vec2 direction = waveParams.zw;
+    // Direction from angle
+    vec2 direction = vec2(sin(-waveParams.z), cos(-waveParams.z)); // Direction (negative for clockwise rotation)
+    float phase = waveParams.w;
 
     // Wave coefficient
     float k = 2.0 * PI / wavelength;
@@ -88,8 +90,9 @@ export const OceanProjectedGridVertShader = /* glsl */ `
     // Normalize direction
     direction = normalize(direction);
     // Trochoidal wave movement
-    float f = k * (dot(direction, position.xz) - velocity * u_time); // + randomPhase
-
+    //float f = k * (dot(direction, position.xz) - velocity * u_time); // + randomPhase
+    float f = k * (dot(direction, position.xz) - velocity * u_time ) + phase;
+    
     // Tangent
     tangent += vec3(
       -direction.x * direction.x * (steepness * sin(f)),
@@ -175,18 +178,19 @@ export const OceanProjectedGridVertShader = /* glsl */ `
         //if (params.r == 0.0 || params.g == 0.0){
 
         //} else {
-          // Steepness factor
-          // params.r = params.r * u_steepnessFactor;
-          // Wave height factor
-          //params.g = params.g/(u_imgSize.x*u_imgSize.y); // normalization probably to avoid summation and big waves
+
           // Wave height encoded
-          params.g = params.g * u_maxEncodedWaveHeight;
+          params.y = params.y * u_maxEncodedWaveHeight;
           // Period encoded
-          params.r = params.r * u_maxEncodedPeriod;
+          params.x = params.x * u_maxEncodedPeriod;
           // Direction
-          params.b = params.b - 0.5;
-          params.a = params.a - 0.5;
+          params.z = params.z * 360.0 * PI / 180.0;
+          // Phase
+          params.w = params.w * 360.0 * PI / 180.0;
+          
+          // Interate position
           modPos += GerstnerWave(params, modPos, tangent, binormal);
+          
           // Attenuation
           //modPos.y *= distanceFactor;
           //tangent.x /= distanceFactor;
