@@ -92,7 +92,7 @@ class Recorder {
     // Load mesh
     let gltfLoader = new GLTFLoader();
 
-    gltfLoader.load('/OceanTestSite/Assets/Calibration/checkerboard.glb', (gltf) => {
+    gltfLoader.load('/OceanTestSite/Assets/Calibration/CheckerBoard.glb', (gltf) => {
 
       let checkerboard = gltf.scene.children[0];
       this.scene.add(checkerboard);
