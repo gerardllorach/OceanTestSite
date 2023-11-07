@@ -16,11 +16,36 @@
         <span>Frames per second</span>
         <div><input type="range" min="1" max="60" :value="fps"  @input="e => fps = e.target.value"><span>{{ fps }} fps</span></div>
       </div>
+      <!-- Grayscale -->
       <div class="container-horizontal">
         <span>Grayscale</span>
         <div><input type="checkbox" v-model="grayscale"><span>2 MB per frame</span></div>
       </div>
-      
+      <!-- TODO -->
+      <div class="container-horizontal">
+        <span>Camera's position and orientation not working yet!</span>
+      </div>
+      <!-- Left Camera position -->
+      <div class="container-horizontal">
+        <span>Left camera position (Y=height)</span>
+        <div class="container-horizontal">
+          <input  type="number" min="-500" max="500" step="0.1" :value="camLPos[0]" v-model="camLPos[0]" name="camLPos" @change="onChange($event)"/>
+          <input  type="number" min="0" max="500" step="0.1" :value="camLPos[1]" v-model="camLPos[1]" name="camLPos" @change="onChange($event)"/>
+          <input  type="number" min="-500" max="500" step="0.1" :value="camLPos[2]" v-model="camLPos[2]" name="camLPos" @change="onChange($event)"/>
+          <span> m</span>   
+        </div>
+      </div>
+      <!-- Left Camera rotation -->
+      <div class="container-horizontal">
+        <span>Left camera rotation (Pitch and Yaw)</span>
+        <div class="container-horizontal">
+          <input  type="number" min="-90" max="90" step="0.1" :value="camLPitchYaw[0]" v-model="camLPitchYaw[0]" name="camLPos" @change="onChange($event)"/>
+          <input  type="number" min="-180" max="180" step="0.1" :value="camLPitchYaw[1]" v-model="camLPitchYaw[1]" name="camLPos" @change="onChange($event)"/>
+          <span> º</span>     
+        </div>
+      </div>
+
+      <!-- TODO: DUPLICATE FOR RIGHT SIDED CAMERA -->
       
 
     </div>
@@ -71,10 +96,28 @@ export default {
       fps: 10,
       grayscale: false,
       progress: 100,
+      camLPos: [0, 0, 0],
+      camLPitchYaw: [0, 0], 
+      camRPos: [0, 0, 0],
+      camRPitchYaw: [0, 0],
     }
   },
   methods: {
     // USER INPUT
+    onChange: function(e, camLorR, variable){
+      console.log( {
+        camLPos: this.camLPos,
+        camLPitchYaw: this.camLPitchYaw, 
+        camRPos: this.camRPos,
+        camRPitchYaw: this.camRPitchYaw
+      });
+      window.eventBus.emit('RenderStereoPanel_camConfigChanged', {
+        camLPos: this.camLPos,
+        camLPitchYaw: this.camLPitchYaw, 
+        camRPos: this.camRPos,
+        camRPitchYaw: this.camRPitchYaw
+      });
+    },
     renderFramesClicked: function(){
       window.eventBus.emit('RenderStereoPanel_renderFramesClicked', {
         duration: this.duration,
@@ -124,6 +167,13 @@ export default {
   width: 100%;
   display: flex;
   justify-content: center;
+  align-items: center;
+  max-height: 25px;
+}
+
+input {
+  border-radius: 5px;
+  text-align: center;
 }
 
 .renderButton{
