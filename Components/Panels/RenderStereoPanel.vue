@@ -120,9 +120,9 @@ export default {
       progress: 100,
       // Data hardcoded from Rcorder.js constructor
       camLPos: [- 5.04 / 2, 33, 0],
-      camLPitchYaw: [25, 0], 
+      camLPitchYaw: [-25, 0], 
       camRPos: [5.04 / 2, 33, 0],
-      camRPitchYaw: [25, 0],
+      camRPitchYaw: [-25, 0],
     }
   },
   methods: {

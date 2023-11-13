@@ -86,6 +86,22 @@ class Recorder {
   }
 
 
+  // Change the position and orientation of the stereo cameras
+  setStereoCamerasPosRot = function(config){
+    // Camera positions
+    this.cameraR.position.set( config.camRPos[0], config.camRPos[1], config.camRPos[2]);
+    this.cameraL.position.set( config.camLPos[0], config.camLPos[1], config.camLPos[2]);
+    // Camera rotation
+    this.cameraR.rotation.set( config.camRPitchYaw[0] * Math.PI / 180, config.camRPitchYaw[1] * Math.PI / 180, 0, 'YXZ');
+    this.cameraL.rotation.set( config.camLPitchYaw[0] * Math.PI / 180, config.camLPitchYaw[1] * Math.PI / 180, 0, 'YXZ');
+    // Update cameras and helpers
+    this.cameraR.updateWorldMatrix();
+    this.cameraL.updateWorldMatrix();
+    this.helper.update();
+    this.helper2.update();
+  }
+
+
   // Create renders with checkerboard
   renderCalibration = function(){
     // Load checker board
