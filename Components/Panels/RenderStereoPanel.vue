@@ -21,17 +21,17 @@
         <span>Grayscale</span>
         <div><input type="checkbox" v-model="grayscale"><span>2 MB per frame</span></div>
       </div>
-      <!-- TODO -->
-      <div class="container-horizontal">
-        <span>Camera's position and orientation not working yet!</span>
+      <!-- LEFT CAMERA -->
+      <div class="container-horizontal section">
+        <span>Left camera</span>
       </div>
       <!-- Left Camera position -->
       <div class="container-horizontal">
         <span>Left camera position (Y=height)</span>
         <div class="container-horizontal">
-          <input  type="number" min="-500" max="500" step="0.1" :value="camLPos[0]" v-model="camLPos[0]" name="camLPos" @change="onChange($event)"/>
-          <input  type="number" min="0" max="500" step="0.1" :value="camLPos[1]" v-model="camLPos[1]" name="camLPos" @change="onChange($event)"/>
-          <input  type="number" min="-500" max="500" step="0.1" :value="camLPos[2]" v-model="camLPos[2]" name="camLPos" @change="onChange($event)"/>
+          <input  type="number" min="-500" max="500" step="0.01" :value="camLPos[0]" v-model="camLPos[0]" name="camLPos" @change="onChange($event)"/>
+          <input  type="number" min="0" max="500" step="0.01" :value="camLPos[1]" v-model="camLPos[1]" name="camLPos" @change="onChange($event)"/>
+          <input  type="number" min="-500" max="500" step="0.01" :value="camLPos[2]" v-model="camLPos[2]" name="camLPos" @change="onChange($event)"/>
           <span> m</span>   
         </div>
       </div>
@@ -39,13 +39,35 @@
       <div class="container-horizontal">
         <span>Left camera rotation (Pitch and Yaw)</span>
         <div class="container-horizontal">
-          <input  type="number" min="-90" max="90" step="0.1" :value="camLPitchYaw[0]" v-model="camLPitchYaw[0]" name="camLPos" @change="onChange($event)"/>
-          <input  type="number" min="-180" max="180" step="0.1" :value="camLPitchYaw[1]" v-model="camLPitchYaw[1]" name="camLPos" @change="onChange($event)"/>
+          <input  type="number" min="-90" max="90" step="0.01" :value="camLPitchYaw[0]" v-model="camLPitchYaw[0]" name="camLPos" @change="onChange($event)"/>
+          <input  type="number" min="-180" max="180" step="0.01" :value="camLPitchYaw[1]" v-model="camLPitchYaw[1]" name="camLPos" @change="onChange($event)"/>
           <span> º</span>     
         </div>
       </div>
 
-      <!-- TODO: DUPLICATE FOR RIGHT SIDED CAMERA -->
+      <!-- RIGHT CAMERA -->
+      <div class="container-horizontal section">
+        <span>Right camera</span>
+      </div>
+      <!-- Right Camera position -->
+      <div class="container-horizontal">
+        <span>Right camera position (Y=height)</span>
+        <div class="container-horizontal">
+          <input  type="number" min="-500" max="500" step="0.01" :value="camRPos[0]" v-model="camRPos[0]" name="camRPos" @change="onChange($event)"/>
+          <input  type="number" min="0" max="500" step="0.01" :value="camRPos[1]" v-model="camRPos[1]" name="camRPos" @change="onChange($event)"/>
+          <input  type="number" min="-500" max="500" step="0.01" :value="camRPos[2]" v-model="camRPos[2]" name="camRPos" @change="onChange($event)"/>
+          <span> m</span>   
+        </div>
+      </div>
+      <!-- Right Camera rotation -->
+      <div class="container-horizontal">
+        <span>Right camera rotation (Pitch and Yaw)</span>
+        <div class="container-horizontal">
+          <input  type="number" min="-90" max="90" step="0.01" :value="camRPitchYaw[0]" v-model="camRPitchYaw[0]" name="camRPos" @change="onChange($event)"/>
+          <input  type="number" min="-180" max="180" step="0.01" :value="camRPitchYaw[1]" v-model="camRPitchYaw[1]" name="camRPos" @change="onChange($event)"/>
+          <span> º</span>     
+        </div>
+      </div>
       
 
     </div>
@@ -96,10 +118,11 @@ export default {
       fps: 10,
       grayscale: false,
       progress: 100,
-      camLPos: [0, 0, 0],
-      camLPitchYaw: [0, 0], 
-      camRPos: [0, 0, 0],
-      camRPitchYaw: [0, 0],
+      // Data hardcoded from Rcorder.js constructor
+      camLPos: [- 5.04 / 2, 33, 0],
+      camLPitchYaw: [25, 0], 
+      camRPos: [5.04 / 2, 33, 0],
+      camRPitchYaw: [25, 0],
     }
   },
   methods: {
@@ -171,9 +194,14 @@ export default {
   max-height: 25px;
 }
 
+.section {
+  background: linear-gradient(90deg, transparent 0%, #77cfef 10%, #77cfef 90%, transparent 100%);
+}
+
 input {
   border-radius: 5px;
   text-align: center;
+  font-size: small;
 }
 
 .renderButton{
