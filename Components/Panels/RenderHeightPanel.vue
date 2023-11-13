@@ -24,7 +24,7 @@
       <!-- Coverage -->
       <div class="container-horizontal odd">
         <span>Coverage area <span class="fa"> &#xf065;</span></span>
-        <div><input type="range" min="1" max="100" :value="coverage"  @input="coverageChanged"><span>{{coverage}} x {{ coverage }} meters</span></div>
+        <div><input type="range" min="1" max="200" :value="coverage"  @input="coverageChanged"><span>{{coverage}} x {{ coverage }} meters</span></div>
       </div>
       <!-- Max height -->
       <div class="container-horizontal">
