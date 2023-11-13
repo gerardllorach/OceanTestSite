@@ -68,7 +68,7 @@
           <span> º</span>     
         </div>
       </div>
-      
+
 
     </div>
 
@@ -85,6 +85,15 @@
       <p>
         You should configure your browser to store the files in a certain folder automatically. This will avoid you having to click "Save" for each frame.
       </p>
+
+      <p>If you need the camera parameters (intrinsics), you can render several frames containing a checkerboard (black/white squares of 0.1 x 0.1 meters).
+        The checkerboard is placed in front of the cameras according to their default position and orientation.
+      </p>
+
+      <!-- Calibration button -->
+      <div class="container-horizontal">
+        <button class="calibButton clickable" @click="renderCalibrationClicked">Render calibration frames <span class="fa">&#xf43c;</span></button>
+      </div>
     </div>
   </div>
 </template>
@@ -128,18 +137,15 @@ export default {
   methods: {
     // USER INPUT
     onChange: function(e, camLorR, variable){
-      console.log( {
-        camLPos: this.camLPos,
-        camLPitchYaw: this.camLPitchYaw, 
-        camRPos: this.camRPos,
-        camRPitchYaw: this.camRPitchYaw
-      });
       window.eventBus.emit('RenderStereoPanel_camConfigChanged', {
         camLPos: this.camLPos,
         camLPitchYaw: this.camLPitchYaw, 
         camRPos: this.camRPos,
         camRPitchYaw: this.camRPitchYaw
       });
+    },
+    renderCalibrationClicked: function(){
+      window.eventBus.emit('RenderStereoPanel_calibrateClicked');
     },
     renderFramesClicked: function(){
       window.eventBus.emit('RenderStereoPanel_renderFramesClicked', {
@@ -206,6 +212,10 @@ input {
 
 .renderButton{
   margin: 20px 20px 0px 20px;
+}
+
+.calibButton{
+  width: auto;
 }
 
 .progress-container {

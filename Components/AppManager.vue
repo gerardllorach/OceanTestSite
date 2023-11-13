@@ -36,12 +36,6 @@
       <div class="clickable icon-str fa-light fa" @click="camClicked('F')" title="Free view camera">&#xe0d8;</div>
     </div>
 
-    <!-- RECORDING ICONS -->
-    <div class="recording-icons-container top-right-icons-container">
-      <!-- Calibrate button -->
-      <div class="clickable icon-str fa" @click="calibrateClicked" title="Create calibration images">&#xf43c;</div>
-    </div>
-
     <!-- Compass button -->
     <div class="compass-icons-container top-right-icons-container">
       <button class="roundButton icon-big icon-str clickable" @click="compassButtonClicked" title='Camera orientation'>
@@ -113,9 +107,6 @@ export default {
     },    
     fpsClicked: function() {
       window.eventBus.emit('AppManager_fpsButtonClicked');
-    },
-    calibrateClicked: function(){
-      window.eventBus.emit('AppManager_calibrateClicked');
     },
     camClicked: function(value){
       window.eventBus.emit('AppManager_cameraClicked', value);
@@ -207,13 +198,6 @@ export default {
 
 
 
-.recording-icons-container{
-  top: 120px;
-}
-.recording-icons-container > *{
-  color: rgb(255, 168, 168);
-}
-
 .camera-icons-container{
   top: 60px;
 }
@@ -227,7 +211,7 @@ export default {
 }
 
 .compass-icons-container{
-  top: 180px;
+  top: 120px;
 }
 
 .north {

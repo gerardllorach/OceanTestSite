@@ -42,7 +42,7 @@ export default {
     window.eventBus.on('AppManager_fpsButtonClicked', () => {
       this.sceneManager.showHideFPS();
     });
-    window.eventBus.on('AppManager_calibrateClicked', () => {
+    window.eventBus.on('RenderStereoPanel_calibrateClicked', () => {
       this.sceneManager.calibrate();
     });
     window.eventBus.on('AppManager_cameraClicked', (value) => {
