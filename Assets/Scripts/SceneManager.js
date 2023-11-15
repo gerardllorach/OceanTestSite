@@ -251,6 +251,8 @@ class SceneManager{
     this.ruler.obj.visible = false;
     // Keep track of progress
     let currentPercent = 0;
+    // Reset timer in ocean entity
+    this.ocean.prevTime = 0;
     // Iterate frames
     for (let i = 0; i < fps * duration; i++){
       let time = i/fps;
