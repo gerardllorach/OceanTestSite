@@ -44,7 +44,9 @@
         <div :style="'width:' + progress + '%' "></div>
       </div>
       <p>This process can take several minutes. Estimated time: <strong>{{ ((duration * fps * 0.3)/60).toFixed(1) }} minutes</strong> (if your app runs at 60 fps now). 
-      Estimated required space: <strong>{{ (duration * fps * 0.004 * Math.pow(3, imgSizePw) * 0.001).toFixed(1) }} MB.</strong></p>
+      Estimated required space: <strong>{{ (duration * fps * 0.004 * Math.pow(3, imgSizePw) * 0.001).toFixed(1) }} MB.</strong> Number of files: 
+      <strong>{{ duration * fps }} images </strong> and <strong>1 config file</strong>.
+      </p>
       
       <p>
         You should configure your browser to store the files in a certain folder automatically. This will avoid you having to click "Save" for each frame.
