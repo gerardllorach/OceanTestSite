@@ -103,7 +103,7 @@ export default {
   background-color: #d7effab3;
   max-width: 700px;
   max-height: 90vh!important;
-  position: relative;
+  position: absolute;
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
