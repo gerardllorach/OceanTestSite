@@ -10,6 +10,35 @@
       </button>
     </div>
 
+    
+    <div v-show="isSectionOpen">
+      <!-- Level 0 -->
+      <div class="level-container">
+        <button><span>Waves</span></button> 
+        <button><span>Export</span></button>
+        <button><span>Scene</span></button>
+        <button><span>About</span></button>
+      </div>
+      <!-- Level 1 - Waves -->
+      <div class="level-container">
+        <button><span>Individual waves</span></button>
+        <button><span>Analyze sea state</span></button>
+      </div>
+      <!-- Level 1 - Export -->
+      <div class="level-container">
+        <button><span>Individual waves (.json)</span></button>
+        <button><span>Render heights (.png)</span></button>
+        <button><span>Render stereo cameras (.png)</span></button>
+      </div>
+      <!-- Level 1 - Scene -->
+      
+
+    </div>
+    
+
+    
+    
+
   </div>
 </template>
 
@@ -24,7 +53,7 @@ export default {
   },
   data () {
     return {
-      isSectionOpen: false
+      isSectionOpen: true
     }
   },
   methods: {
@@ -45,7 +74,7 @@ export default {
 #bottom-section {
   position: relative;
   width: 100%;
-  background: blue;
+  background: rgb(200 240 255);;
 }
 
 .bottom-section-open {
@@ -61,11 +90,12 @@ export default {
 .section-opener-container {
   display: flex;
   justify-content: center;
-  margin: -60px;
+  translate: 0px -60px;
+  height: 0px;
 }
-
-
-
+.section-opener-container > button {
+  height: 40px;
+}
 .rotate0 {
   rotate: 0deg;
   transition: all 0.7s ease-in-out;
@@ -73,5 +103,13 @@ export default {
 .rotate180 {
   rotate: 180deg;
   transition: all 0.7s ease-in-out;
+}
+
+
+.level-container{
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100%;
 }
 </style>
