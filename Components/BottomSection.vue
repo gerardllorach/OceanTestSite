@@ -3,20 +3,17 @@
   <div id="bottom-section" :class="[isSectionOpen ? 'bottom-section-open' : 'bottom-section-closed']">
     <!-- Button to open and close section -->
     <div class="section-opener-container">
-      <button class="section-opener-button clickable" @click="bottomSectionClicked"><span>Menu</span>
-        <span class="fa"
-          :class="[isSectionOpen ? 'rotate180' : 'rotate0']"  
-        >&#xf106;</span>
+      <button class="section-opener-button clickable" @click="bottomSectionClicked">
+        <span>Menu</span>
+        <span class="fa" :class="[isSectionOpen ? 'rotate180' : 'rotate0']">&#xf106;</span>
       </button>
     </div>
 
-    
     <div class="menu-section-container" v-show="isSectionOpen">
       <!-- Menu left -->
       <div class="menu-list-left">
-        <button v-for="el in menu" :key="el.title" 
-          class="menu-left-button clickable" @click="menuLeftItemClicked(el)">
-          <span v-if="el.icon != ''" class="fa" v-html="el.icon"></span>
+        <button v-for="el in menu" :key="el.title" class="menu-left-button clickable" @click="menuLeftItemClicked(el)">
+          <span v-if="el.icon" class="fa" v-html="el.icon"></span>
           <span>{{ el.title }}</span>
         </button>
       </div>
@@ -26,26 +23,24 @@
           <div v-if="selectedMenu == el.title">
             <!-- Submenu title -->
             <div class="submenu-title">
-              <div class="fa" v-html="el.icon">
-              </div>
+              <div class="fa" v-html="el.icon"></div>
               {{ el.title }}
             </div>
-            <!-- Submenu items-->
+            <!-- Submenu items -->
             <div class="submenu-items-container">
               <div v-for="subEl in el.children">
-                <span>{{subEl.title }}</span>
+                <div>
+                  <span v-if="subEl.icon" class="fa" v-html="subEl.icon"></span>
+                  <span v-else-if="el.icon" class="fa" v-html="el.icon"></span>
+                  <span>{{subEl.title }}</span>
+                </div>
                 <span class="fa">&#xf0da;</span>
               </div>
             </div>
-            
           </div>
-          
         </div>
       </div>
-      
-
     </div>
-    
   </div>
 </template>
 
@@ -75,6 +70,7 @@ export default {
             },
             {
               title: 'Analyse sea state',
+              icon: '&#xf201',
               component: 'AnalysisWaveComponent'
             }
           ]
@@ -221,6 +217,7 @@ export default {
   padding: 10px;
   display: flex;
   justify-content: space-between;
+  align-items: center;
 }
 
 .submenu-items-container > div:hover {
