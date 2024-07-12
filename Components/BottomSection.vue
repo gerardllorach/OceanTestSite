@@ -11,34 +11,41 @@
     </div>
 
     
-    <div v-show="isSectionOpen">
-      <!-- Level 0 -->
-      <div class="level-container">
-        <button><span>Waves</span></button> 
-        <button><span>Export</span></button>
-        <button><span>Scene</span></button>
-        <button><span>About</span></button>
+    <div class="menu-section-container" v-show="isSectionOpen">
+      <!-- Menu left -->
+      <div class="menu-list-left">
+        <button v-for="el in menu" :key="el.title" 
+          class="menu-left-button clickable" @click="menuLeftItemClicked(el)">
+          <span v-if="el.icon != ''" class="fa" v-html="el.icon"></span>
+          <span>{{ el.title }}</span>
+        </button>
       </div>
-      <!-- Level 1 - Waves -->
-      <div class="level-container">
-        <button><span>Individual waves</span></button>
-        <button><span>Analyze sea state</span></button>
+      <!-- Submenu center -->
+      <div class="submenu-container">
+        <div v-for="el in menu" :key="el.title">
+          <div v-if="selectedMenu == el.title">
+            <!-- Submenu title -->
+            <div class="submenu-title">
+              <div class="fa" v-html="el.icon">
+              </div>
+              {{ el.title }}
+            </div>
+            <!-- Submenu items-->
+            <div class="submenu-items-container">
+              <div v-for="subEl in el.children">
+                <span>{{subEl.title }}</span>
+                <span class="fa">&#xf0da;</span>
+              </div>
+            </div>
+            
+          </div>
+          
+        </div>
       </div>
-      <!-- Level 1 - Export -->
-      <div class="level-container">
-        <button><span>Individual waves (.json)</span></button>
-        <button><span>Render heights (.png)</span></button>
-        <button><span>Render stereo cameras (.png)</span></button>
-      </div>
-      <!-- Level 1 - Scene -->
       
 
     </div>
     
-
-    
-    
-
   </div>
 </template>
 
@@ -53,7 +60,67 @@ export default {
   },
   data () {
     return {
-      isSectionOpen: true
+      isSectionOpen: true,
+      // Selected menu items
+      selectedMenu: 'Waves',
+      // Menu structure
+      menu: [
+        {
+          title: 'Waves',
+          icon: '&#xf773',
+          children: [
+            {
+              title: 'Individual waves',
+              component: 'IndividualWavesComponent'
+            },
+            {
+              title: 'Analyse sea state',
+              component: 'AnalysisWaveComponent'
+            }
+          ]
+        }, // End of waves
+        {
+          title: 'Export',
+          icon: '&#xf56e',
+          children: [
+            {
+              title: 'Export individual waves (.json)',
+              // Button
+            },
+            {
+              title: 'Render heights (.png)',
+              component: 'RenderHeights',
+            },
+            {
+              title: 'Render stereo cameras (.png)',
+              component: 'RenderStereo',
+            }
+          ]
+        }, // End of export
+        {
+          title: 'Scene',
+          icon: '&#xf61f',
+          children: [
+            {
+              title: 'Add/Remove objects',
+              component: 'SceneObjects'
+            },
+            {
+              title: 'Colors',
+              component: 'SceneColors',
+            },
+            {
+              title: 'Environment',
+              component: 'SceneEnvironment'
+            }
+          ]
+        }, // End of scene
+        {
+          title: 'About',
+          icon: '&#xf05a',
+          component: 'About'
+        } // End of about
+      ] // End of menu
     }
   },
   methods: {
@@ -63,6 +130,10 @@ export default {
       setTimeout(() => {
         window.dispatchEvent(new Event('resize'));
       }, 750);
+    },
+    // Menu option on the left clicked
+    menuLeftItemClicked: function(el){
+      this.selectedMenu = el.title;
     },
   }
 }
@@ -95,6 +166,8 @@ export default {
 }
 .section-opener-container > button {
   height: 40px;
+  padding-left: 20px;
+  padding-right: 20px;
 }
 .rotate0 {
   rotate: 0deg;
@@ -106,10 +179,52 @@ export default {
 }
 
 
-.level-container{
+.menu-section-container {
   display: flex;
-  justify-content: center;
-  align-items: center;
-  height: 100%;
+  padding: 20px;
+}
+
+.menu-list-left {
+  padding: 10px;
+}
+.menu-list-left > button {
+  margin-bottom: 10px;
+  width: 100%;
+}
+.menu-left-button {
+  padding-left: 10px;
+  padding-right: 10px;
+}
+
+.submenu-container {
+  width: 100%;
+  padding-left: 10px;
+}
+.submenu-container > div >div {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.submenu-title {
+  padding-top: 10px;
+  padding-bottom: 10px;
+  text-align: center;
+}
+
+.submenu-items-container {
+  box-shadow: 0px 0px 4px rgba(0, 0, 0, 0.304);
+  border-radius: 15px;
+  background: var(--lightBlue);
+}
+.submenu-items-container > div {
+  padding: 10px;
+  display: flex;
+  justify-content: space-between;
+}
+
+.submenu-items-container > div:hover {
+  background: var(--blue);
+  border-radius: 15px;
 }
 </style>
