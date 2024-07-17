@@ -73,6 +73,11 @@ export default {
     });
 
 
+    // ***** BOTTOM SECTION - EXPORT WAVES *****
+    window.eventBus.on('BottomSection_ExportWavesClicked', ()=>{
+      this.sceneManager.exportOceanParamsJSON();
+    })
+
 
 
     // ********** CMEMS DATA **********

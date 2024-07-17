@@ -9,6 +9,7 @@
       </button>
     </div>
 
+
     <div class="menu-section-container" v-show="isSectionOpen">
       
       <!-- Menu left -->
@@ -40,7 +41,10 @@
                   <span v-else-if="el.icon" class="fa" v-html="el.icon"></span>
                   <span>{{subEl.title }}</span>
                 </div>
-                <span class="fa">&#xf0da;</span>
+                
+                <span class="fa" v-if="subEl.component">&#xf0da;</span>
+                <span class="fa" v-else-if="subEl.isClickEvent">&#xf019;</span>
+
               </div>
             </div>
           </div>
@@ -118,8 +122,10 @@ export default {
           children: [
             {
               title: 'Export individual waves (.json)',
-              isLink: true,
-              // Button
+              isClickEvent: true,
+              event: () => {
+                window.eventBus.emit('BottomSection_ExportWavesClicked');
+              }
             },
             {
               title: 'Render heights (.png)',
@@ -173,7 +179,11 @@ export default {
     },
     // Submenu item clicked
     submenuItemClicked: function(subEl){
-      this.selectedSubEl = subEl;
+      if (subEl.isClickEvent){
+        subEl.event();
+      } else {
+        this.selectedSubEl = subEl;
+      }
     },
     // Submenu title clicked
     backToSubmenu: function(){
