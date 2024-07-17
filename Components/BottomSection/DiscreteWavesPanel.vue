@@ -2,9 +2,9 @@
   
   <div id="discrete-waves-panel" class="content">
 
-    <h3>Properties of present waves</h3>
+    <p>In this section you can visualize and modify manually the discrete waves that form the sea state.</p>
 
-    <p>You can also drag and drop a .json file with the wave's properties. Download the properties ("Export data" button) to see the format of the .json file.</p>
+    <p>You can also drag and drop a .json file with the discrete waves. Download the properties ("Export data" button) to see the format of the .json file.</p>
 
     <p>Waves are limited to 10 meter height and periods of 20 seconds.</p>
 
@@ -216,6 +216,7 @@ export default {
 .content {
   padding: 20px;
   overflow: auto;
+  font-size: small;
 }
 
 .container-vertical{

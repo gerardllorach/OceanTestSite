@@ -2,7 +2,19 @@
   
   <div id="render-height-panel" class="content">
 
-    <h3>Render height frames</h3>
+    <p>
+      In this section you can export a series of images of the sea state. The exported images are in grayscale and
+      they encode the height of the wave.
+    </p>
+    
+    <p>
+      In the following menu you can configure the export settings,
+      such as the image size, the coverage area, the frames per second, the total duration and the maximum encoded height.
+    </p>
+
+    <p>
+      Scene objects and reflections are not rendered, only the sea surface height in grayscale.
+    </p>
 
     <!-- TABLE -->
     <div class="container-vertical options">
@@ -38,7 +50,7 @@
 
     <!-- Export button -->
     <div class="container-vertical">
-      <button class="renderButton clickable" @click="renderFramesClicked">Render frames <span class="fa">&#xf56d;</span></button>
+      <button class="renderButton clickable" @click="renderFramesClicked">Render frames <span class="fa">&#xf019;</span></button>
       <!-- Progress bar -->
       <div class="progress-container" v-show="progress!=100">
         <div :style="'width:' + progress + '%' "></div>
@@ -121,6 +133,7 @@ export default {
 .content {
   padding: 20px;
   overflow: auto;
+  font-size: small;
 }
 
 .container-vertical{
@@ -161,7 +174,7 @@ export default {
 }
 
 .renderButton{
-  margin: 20px 20px 0px 20px;
+  margin: 20px 20px 20px 20px;
 }
 
 .progress-container {
