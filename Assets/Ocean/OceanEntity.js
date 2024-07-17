@@ -115,8 +115,8 @@ class OceanEntity {
   
 
 
-  setWavesProperties = function(wavesProperties){
-    this.numWaves = wavesProperties.length;
+  setDiscreteWaves = function(discreteWaves){
+    this.numWaves = discreteWaves.length;
     let params = this.oceanParams;
     params.numWaves = this.numWaves;
     params.waveHeights = [];
@@ -124,14 +124,18 @@ class OceanEntity {
     params.waveDirections = [];
     params.wavePhases = [];
     for (let i = 0; i < this.numWaves; i++){
-      params.waveHeights[i] = wavesProperties[i].hm0;
-      let T = wavesProperties[i].T;
-      params.waveSteepness[i] = 4 * Math.PI * Math.PI * wavesProperties[i].hm0 * 0.5 / (T * T * 9.8);
-      params.waveDirections[i] = wavesProperties[i].dir;
-      params.wavePhases[i] = wavesProperties[i].phase;
+      params.waveHeights[i] = discreteWaves[i].hm0;
+      let T = discreteWaves[i].T;
+      params.waveSteepness[i] = 4 * Math.PI * Math.PI * discreteWaves[i].hm0 * 0.5 / (T * T * 9.8);
+      params.waveDirections[i] = discreteWaves[i].dir;
+      params.wavePhases[i] = discreteWaves[i].phase;
     }
 
     this.updateParamsTexture();
+  }
+
+  getDiscreteWaves = function(){
+    return this.oceanParams.getDiscreteWavesJSON();
   }
 
 

@@ -332,7 +332,7 @@ export class OceanParameters{
 
 
   // Generate a JSON with wave parameters
-  getWavesPropertiesJSON = function(){
+  getDiscreteWavesJSON = function(){
     let out = [];
     for (let i = 0; i < this.numWaves; i++){
       let wave = {
@@ -341,7 +341,7 @@ export class OceanParameters{
         // steepness = 4 * Math.PI * Math.PI * hm0 * 0.5 / (T * T * 9.8);
         // T = Math.sqrt(2*Math.PI*Math.PI*hm0/(9.8 * steepness))
         T: Math.sqrt(2*Math.PI * Math.PI * this.waveHeights[i] / (9.8 * this.waveSteepness[i])),
-        phase: this.wavePhases[i],
+        phase: this.wavePhases[i] || 0,
       };
       out.push(wave);
     }
@@ -353,8 +353,8 @@ export class OceanParameters{
    exportOceanParameters = function(){
     return new Promise((resolve) => {
       const link = document.createElement('a');
-      link.download = 'wavesProperties.json';
-      let data = this.getWavesPropertiesJSON();
+      link.download = 'discreteWaves.json';
+      let data = this.getDiscreteWavesJSON();
       link.href = window.URL.createObjectURL(new Blob([JSON.stringify(data)], {type: 'text/json'}));
       link.click();
       link.delete;

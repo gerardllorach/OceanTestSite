@@ -21,7 +21,7 @@ export default {
     
   },
   mounted() {
-    this.sceneManager = new window.SceneManager(this.$refs.canvas3D);
+    window.sceneManager = this.sceneManager = new window.SceneManager(this.$refs.canvas3D);
     this.sceneManager.startRender();
     this.sceneManager.windowWasResized();
 
@@ -50,7 +50,11 @@ export default {
     });
     // ***** WAVE PROPERTIES PANEL *****
     window.eventBus.on('WavesPropertiesPanel_setWavesProperties', (wavesProperties) => {
-      this.sceneManager.setWavesProperties(wavesProperties);
+      this.sceneManager.setDiscreteWaves(wavesProperties);
+    });
+    // ***** DISCRETE WAVES PANEL *****
+    window.eventBus.on('DiscreteWavesPanel_setDiscreteWaves', (discreteWaves) => {
+      this.sceneManager.setDiscreteWaves(discreteWaves);
     });
     // ***** RECORD STEREO PANEL *****
     window.eventBus.on('RenderStereoPanel_renderFramesClicked', (el) => {

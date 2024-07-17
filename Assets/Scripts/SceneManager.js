@@ -283,8 +283,12 @@ class SceneManager{
     this.startRender();
   }
 
-  setWavesProperties = function(wavesProperties){
-    this.ocean.setWavesProperties(wavesProperties);
+  setDiscreteWaves = function(discreteWaves){
+    this.ocean.setDiscreteWaves(discreteWaves);
+  }
+
+  getDiscreteWaves = function(){
+    return this.ocean.getDiscreteWaves();
   }
 
   // Export JSON

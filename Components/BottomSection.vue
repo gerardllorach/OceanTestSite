@@ -84,7 +84,9 @@
 
 <script>
 
-import IndividualWaves from './Panels/WavesPropertiesPanel.vue';
+import DiscreteWaves from './BottomSection/DiscreteWavesPanel.vue';
+import RenderStereoPanel from './BottomSection/RenderStereoPanel.vue';
+import RenderHeightPanel from './BottomSection/RenderHeightPanel.vue';
 
 export default {
   name: "BottomSection",
@@ -106,13 +108,17 @@ export default {
           icon: '&#xf773',
           children: [
             {
-              title: 'Individual waves',
-              component: 'individual-waves'
+              title: 'Discrete waves',
+              component: 'discrete-waves'
             },
             {
               title: 'Sea state analysis',
               icon: '&#xf201',
-              component: 'AnalysisWaveComponent'
+              component: 'analysis-waves'
+            },
+            {
+              title: 'Generate sea state',
+              component: 'generate-sea-state'
             }
           ]
         }, // End of waves
@@ -121,7 +127,7 @@ export default {
           icon: '&#xf56e',
           children: [
             {
-              title: 'Export individual waves (.json)',
+              title: 'Export discrete waves (.json)',
               isClickEvent: true,
               event: () => {
                 window.eventBus.emit('BottomSection_ExportWavesClicked');
@@ -129,11 +135,13 @@ export default {
             },
             {
               title: 'Render heights (.png)',
-              component: 'RenderHeights',
+              icon: '&#xf302',
+              component: 'render-heights',
             },
             {
               title: 'Render stereo cameras (.png)',
-              component: 'RenderStereo',
+              icon: '&#xf302',
+              component: 'render-stereo',
             }
           ]
         }, // End of export
@@ -202,12 +210,19 @@ export default {
     },
   },
   components: {
-    "individual-waves": IndividualWaves,
+    "discrete-waves": DiscreteWaves,
+    "render-heights": RenderHeightPanel,
+    "render-stereo": RenderStereoPanel,
   }
 }
 
 
 </script>
+
+
+
+
+
 
 <style scoped>
 #bottom-section {
@@ -307,6 +322,8 @@ export default {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  border-radius: 15px;
+  box-shadow: 0 0 4px #0000003b;
 }
 
 .submenu-items-container > div:hover {
