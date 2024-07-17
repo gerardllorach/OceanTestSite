@@ -23,7 +23,7 @@
       
       <!-- Submenu center -->
       <div class="submenu-container">
-        <div v-for="el in menu" :key="el.title">
+        <div v-for="el in menu" :key="el.title" :class="[selectedMenu == el.title ? 'h100':'']">
           
           <!-- In submenu -->
           <div v-if="selectedMenu == el.title && selectedSubEl.title == ''">
@@ -46,7 +46,7 @@
           </div>
 
           <!-- In item of submenu -->
-          <div v-else-if="selectedMenu == el.title &&selectedSubEl.title != ''">
+          <div v-else-if="selectedMenu == el.title && selectedSubEl.title != ''">
             <!-- Submenu Item title -->
             <div class="submenu-item-title clickable" @click="backToSubmenu()">
               <!-- Return arrow -->
@@ -54,13 +54,14 @@
               <!-- Title -->
               <div>
                 {{ selectedSubEl.title }}
-                <!-- <div v-if="selectedSubEl.icon" class="fa" v-html="selectedSubEl.icon"></div>
-                <div v-else-if="el.icon" class="fa" v-html="el.icon"></div> -->
               </div>
               
             </div>
             
             <!-- Component? -->
+            <div class="submenu-item-content">
+              <component v-if="selectedSubEl.component" :is="selectedSubEl.component" />
+            </div>
           </div>
 
 
@@ -78,6 +79,8 @@
 
 
 <script>
+
+import IndividualWaves from './Panels/WavesPropertiesPanel.vue';
 
 export default {
   name: "BottomSection",
@@ -100,7 +103,7 @@ export default {
           children: [
             {
               title: 'Individual waves',
-              component: 'IndividualWavesComponent'
+              component: 'individual-waves'
             },
             {
               title: 'Sea state analysis',
@@ -115,6 +118,7 @@ export default {
           children: [
             {
               title: 'Export individual waves (.json)',
+              isLink: true,
               // Button
             },
             {
@@ -186,6 +190,9 @@ export default {
         window.dispatchEvent(new Event('resize'));
       }, 750);
     },
+  },
+  components: {
+    "individual-waves": IndividualWaves,
   }
 }
 
@@ -238,6 +245,9 @@ export default {
 .menu-section-container {
   display: flex;
   padding: 20px;
+  height: 100%;
+  width: 100%;
+  position: absolute;
 }
 
 .menu-list-left {
@@ -260,8 +270,10 @@ export default {
   padding-left: 10px;
   padding-right: 20px;
 }
+
 .submenu-container > div >div {
   width: 100%;
+  height: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -304,11 +316,17 @@ export default {
   padding-left: 10px;
   padding-right: 10px;
 }
-
+.submenu-item-content{
+  overflow: auto;
+}
 
 .top-right-icons {
   position: absolute;
   right: 10px;
   display: flex;
+}
+
+.h100{
+  height: 100%;
 }
 </style>
