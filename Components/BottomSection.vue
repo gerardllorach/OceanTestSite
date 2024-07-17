@@ -1,6 +1,6 @@
 <template>
   <!-- Container -->
-  <div id="bottom-section" :class="[isSectionOpen ? 'bottom-section-open' : 'bottom-section-closed']">
+  <div id="bottom-section" :class="[isSectionOpen ? isMenuFullscreen ? 'bottom-section-fullscreen' : 'bottom-section-open' : 'bottom-section-closed']">
     <!-- Button to open and close section -->
     <div class="section-opener-container">
       <button class="section-opener-button clickable" @click="bottomSectionClicked">
@@ -10,17 +10,23 @@
     </div>
 
     <div class="menu-section-container" v-show="isSectionOpen">
+      
       <!-- Menu left -->
       <div class="menu-list-left">
-        <button v-for="el in menu" :key="el.title" class="menu-left-button clickable" :class="[selectedMenu == el.title ? 'menu-left-button-sel' : '']" @click="menuLeftItemClicked(el)">
+        <button v-for="el in menu" :key="el.title" 
+          class="menu-left-button clickable" :class="[selectedMenu == el.title ? 'menu-left-button-sel' : '']" 
+          @click="menuLeftItemClicked(el)">
           <span v-if="el.icon" class="fa" v-html="el.icon"></span>
           <span>{{ el.title }}</span>
         </button>
       </div>
+      
       <!-- Submenu center -->
       <div class="submenu-container">
         <div v-for="el in menu" :key="el.title">
-          <div v-if="selectedMenu == el.title">
+          
+          <!-- In submenu -->
+          <div v-if="selectedMenu == el.title && selectedSubEl.title == ''">
             <!-- Submenu title -->
             <div class="submenu-title">
               <div class="fa" v-html="el.icon"></div>
@@ -28,7 +34,7 @@
             </div>
             <!-- Submenu items -->
             <div class="submenu-items-container">
-              <div v-for="subEl in el.children">
+              <div v-for="subEl in el.children" class="clickable" @click="submenuItemClicked(subEl)">
                 <div>
                   <span v-if="subEl.icon" class="fa" v-html="subEl.icon"></span>
                   <span v-else-if="el.icon" class="fa" v-html="el.icon"></span>
@@ -38,7 +44,33 @@
               </div>
             </div>
           </div>
+
+          <!-- In item of submenu -->
+          <div v-else-if="selectedMenu == el.title &&selectedSubEl.title != ''">
+            <!-- Submenu Item title -->
+            <div class="submenu-item-title clickable" @click="backToSubmenu()">
+              <!-- Return arrow -->
+              <div class="fa">&#xf060;</div>
+              <!-- Title -->
+              <div>
+                {{ selectedSubEl.title }}
+                <!-- <div v-if="selectedSubEl.icon" class="fa" v-html="selectedSubEl.icon"></div>
+                <div v-else-if="el.icon" class="fa" v-html="el.icon"></div> -->
+              </div>
+              
+            </div>
+            
+            <!-- Component? -->
+          </div>
+
+
         </div>
+      </div>
+
+      <!-- Top-right icons -->
+      <div class="top-right-icons">
+        <div class="icon-str fa clickable" @click="fullscreenClicked">&#xf065;</div>
+        <div class="icon-str fa clickable" @click="closeClicked">&#xf00d;</div>
       </div>
     </div>
   </div>
@@ -56,8 +88,10 @@ export default {
   data () {
     return {
       isSectionOpen: true,
+      isMenuFullscreen: false,
       // Selected menu items
       selectedMenu: 'Waves',
+      selectedSubEl: {title: ''},
       // Menu structure
       menu: [
         {
@@ -69,7 +103,7 @@ export default {
               component: 'IndividualWavesComponent'
             },
             {
-              title: 'Analyse sea state',
+              title: 'Sea state analysis',
               icon: '&#xf201',
               component: 'AnalysisWaveComponent'
             }
@@ -120,6 +154,7 @@ export default {
     }
   },
   methods: {
+    // USER ACTIONS
     // Shows / Hides bottom section
     bottomSectionClicked: function (e){
       this.isSectionOpen = !this.isSectionOpen;
@@ -130,6 +165,26 @@ export default {
     // Menu option on the left clicked
     menuLeftItemClicked: function(el){
       this.selectedMenu = el.title;
+      this.selectedSubEl = {title: ''};
+    },
+    // Submenu item clicked
+    submenuItemClicked: function(subEl){
+      this.selectedSubEl = subEl;
+    },
+    // Submenu title clicked
+    backToSubmenu: function(){
+      this.selectedSubEl = {title: ''};
+    },
+
+    // Top-right-icons
+    closeClicked: function(){
+      this.bottomSectionClicked();
+    },
+    fullscreenClicked: function(){
+      this.isMenuFullscreen = !this.isMenuFullscreen;
+      setTimeout(() => {
+        window.dispatchEvent(new Event('resize'));
+      }, 750);
     },
   }
 }
@@ -146,6 +201,10 @@ export default {
 
 .bottom-section-open {
   height: 100%;
+  transition: all 0.7s ease-in-out;
+}
+.bottom-section-fullscreen{
+  height: 900%;
   transition: all 0.7s ease-in-out;
 }
 
@@ -231,5 +290,25 @@ export default {
 .submenu-items-container > div:hover {
   background: var(--blue);
   border-radius: 15px;
+}
+
+.submenu-item-title {
+  display: flex;
+  align-items: center;
+  box-shadow: 0px 0px 4px black;
+  border-radius: 20px;
+  padding: 10px;
+  font-size: small;
+}
+.submenu-item-title > *{
+  padding-left: 10px;
+  padding-right: 10px;
+}
+
+
+.top-right-icons {
+  position: absolute;
+  right: 10px;
+  display: flex;
 }
 </style>
