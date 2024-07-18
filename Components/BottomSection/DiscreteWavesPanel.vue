@@ -217,6 +217,7 @@ export default {
   padding: 20px;
   overflow: auto;
   font-size: small;
+  max-width: 700px;
 }
 
 .container-vertical{
