@@ -2,7 +2,16 @@
   
   <div id="render-stereo-panel" class="content">
 
-    <h3>Render stereo frames</h3>
+    <p>
+      In this section you can export a series of images of the sea state. The exported images are renders of two cameras
+      with a stereo setup. This setup is designed to produce data for the method WASS 
+      <a href="https://doi.org/10.1016/j.cageo.2017.07.001" target="_blank">(Bergamasco, F. et al. 2017)</a>.
+    </p>
+    
+    <p>
+      In the following menu you can configure the export settings and the positions of the cameras. Scene objects are not rendered.
+    </p>
+
 
     <!-- TABLE -->
     <div class="container-vertical options">
@@ -19,7 +28,7 @@
       <!-- Grayscale -->
       <div class="container-horizontal">
         <span>Grayscale</span>
-        <div><input type="checkbox" v-model="grayscale"><span>2 MB per frame</span></div>
+        <div><input type="checkbox" v-model="grayscale"><span>(50% reduction)</span></div>
       </div>
       <!-- LEFT CAMERA -->
       <div class="container-horizontal section">
@@ -74,17 +83,13 @@
 
     <!-- Export button -->
     <div class="container-vertical">
-      <button class="renderButton clickable" @click="renderFramesClicked">Render frames <span class="fa">&#xf56d;</span></button>
+      <button class="renderButton clickable" @click="renderFramesClicked">Render frames <span class="fa">&#xf019;</span></button>
       <!-- Progress bar -->
       <div class="progress-container" v-show="progress!=100">
         <div :style="'width:' + progress + '%' "></div>
       </div>
       <p>This process can take several minutes. Estimated time: <strong>{{ (duration * fps * 0.6 * 2)/60 }} minutes</strong> (if your app runs at 60 fps now). 
       Estimated required space: <strong>{{ grayscale ? duration * fps * 2 * 2 : duration * fps * 2 * 4 }} MB.</strong></p>
-      
-      <p>
-        You should configure your browser to store the files in a certain folder automatically. This will avoid you having to click "Save" for each frame.
-      </p>
 
       <p>If you need the camera parameters (intrinsics), you can render several frames containing a checkerboard (black/white squares of 0.1 x 0.1 meters).
         The checkerboard is placed in front of the cameras according to their default position and orientation.
@@ -168,6 +173,8 @@ export default {
 .content {
   padding: 20px;
   overflow: auto;
+  font-size: small;
+  max-width: 700px;
 }
 
 .container-vertical{
@@ -211,7 +218,7 @@ input {
 }
 
 .renderButton{
-  margin: 20px 20px 0px 20px;
+  margin: 20px 20px 20px 20px;
 }
 
 .calibButton{
