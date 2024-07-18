@@ -205,14 +205,17 @@ class SceneManager{
       // Set default width and height
       this.recorder.renderer.setSize(this.recorder.imgWidth, this.recorder.imgHeight);
 
+      // Create JSZip
+      let zip = new JSZip();
+
       for (let i = 0; i < fps * duration; i++){
         let time = i/fps;
         this.update(1000 * time);
         this.recorder.renderLeft(grayscale);
         let timeStr = String(time.toFixed(2)).padStart(6, '0');
-        await this.recorder.savePNG('L_' + timeStr);
+        zip.file('L_' + timeStr + '.png', this.recorder.getImgData(), {binary: true});
         this.recorder.renderRight(grayscale);
-        await this.recorder.savePNG('R_' + timeStr);
+        zip.file('R_' + timeStr + '.png', this.recorder.getImgData(), {binary: true});
 
         // Show progress
         if ((100 *(i+1) / (fps*duration)) > currentPercent){
@@ -220,6 +223,18 @@ class SceneManager{
           window.eventBus.emit('SceneManager_recordProgress', 100 * (i+1) / (fps*duration));
         }
       }
+
+      // Generate zip and download
+      let nowDateISO = new Date().toISOString();
+      zip.generateAsync({type:"blob"})
+      .then(function(content) {
+        let blobUrl = URL.createObjectURL(content);
+        let link = document.createElement('a');
+        link.download = 'OceanTestSite_StereoCameras_' + nowDateISO.substring(0,10) + '.zip';
+        link.href = blobUrl;
+        link.click();
+        link.delete;
+      });
       window.eventBus.emit('SceneManager_recordFinished');
 
 
@@ -253,13 +268,15 @@ class SceneManager{
     let currentPercent = 0;
     // Reset timer in ocean entity
     this.ocean.prevTime = 0;
+    // Create JSZip
+    let zip = new JSZip();
     // Iterate frames
     for (let i = 0; i < fps * duration; i++){
       let time = i/fps;
       this.update(1000 * time);
       this.recorder.renderTop(maxWaveHeight);
       let timeStr = String(time.toFixed(2)).padStart(6, '0');
-      await this.recorder.savePNG('WaveHeight_range_' + maxWaveHeight + '_' + timeStr);
+      zip.file('WaveHeight_range_' + maxWaveHeight + '_' + timeStr + '.png', this.recorder.getImgData(), {binary: true});
 
       // Show progress
       if ((100 *(i+1) / (fps*duration)) > currentPercent){
@@ -267,6 +284,17 @@ class SceneManager{
         window.eventBus.emit('SceneManager_recordProgress', 100 * (i+1) / (fps*duration));
       }
     }
+    // Generate zip and download
+    let nowDateISO = new Date().toISOString();
+    zip.generateAsync({type:"blob"})
+    .then(function(content) {
+      let blobUrl = URL.createObjectURL(content);
+      let link = document.createElement('a');
+      link.download = 'OceanTestSite_WaveHeights_' + nowDateISO.substring(0,10) + '.zip';
+      link.href = blobUrl;
+      link.click();
+      link.delete;
+    });
     // Loaded
     window.eventBus.emit('SceneManager_recordFinished');
 

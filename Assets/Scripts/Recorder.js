@@ -154,6 +154,9 @@ class Recorder {
         [45, 0, 0],
       ];
       const DEG2RAD = Math.PI/180;
+
+      // Create JSZip
+      let zip = new JSZip();
       // Move checker board and store images
       for (let i = 0; i < pp.length; i++){
         //{let i = 0;
@@ -163,11 +166,24 @@ class Recorder {
         checkerboard.updateWorldMatrix();
 
         this.renderLeft();
-        this.savePNG('Calib_Left' + i);
+        zip.file('L_Calibration_' + i + '.png', this.getImgData(), {binary: true});
 
         this.renderRight();
-        this.savePNG('Calib_Right' + i);
+        zip.file('R_Calibration_' + i + '.png', this.getImgData(), {binary: true});
       }
+      // Generate zip and download
+      zip.generateAsync({type:"blob"})
+      .then(function(content) {
+        let blobUrl = URL.createObjectURL(content);
+        let link = document.createElement('a');
+        link.download = 'OceanTestSite_CalibrationStereoCameras.zip';
+        link.href = blobUrl;
+        link.click();
+        link.delete;
+      });
+
+      // Remove checkerboard
+      this.scene.remove(checkerboard);
       
     });
 
@@ -232,8 +248,13 @@ class Recorder {
       link.delete;
       setTimeout(resolve, 200);
     })
-    
-    
+  }
+
+  getImgData = function(){
+    let canvas = this.renderer.domElement;
+    let dataURL = canvas.toDataURL();
+    let binaryImgData = atob(dataURL.split(",")[1]);
+    return binaryImgData;
   }
 
   displayHelpers = function(state){
