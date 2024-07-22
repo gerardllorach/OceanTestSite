@@ -16,12 +16,15 @@ export class OceanAnalysis {
   }
 
 
-  createSignal(wavesParameters, samplingRate, seconds)
+  createSignal(wavesParameters, samplingRate, seconds, fftSize)
   {
     this.samplingRate = samplingRate || this.samplingRate;
     this.seconds = seconds || this.seconds;
     // Signal size must be power of two in order to do the FFT.
-    this.signalSize = Math.pow(2, Math.ceil(Math.log(this.samplingRate * this.seconds)/Math.log(2)));
+    if (fftSize)
+      this.signalSize = Math.pow(2, Math.ceil(Math.log(this.samplingRate * this.seconds)/Math.log(2)));
+    else
+      this.signalSize = this.samplingRate * this.seconds;
     this.signal = new Float32Array(this.signalSize);
     for (let i = 0; i < this.signalSize; i++){
       let time = i / this.samplingRate;
@@ -69,8 +72,7 @@ export class OceanAnalysis {
   // Calculate spectrum
   getSpectrumMagnitude(wavesParameters){
     // Check if signal exists
-    if (this.signal == undefined)
-      this.createSignal(wavesParameters);
+    this.createSignal(wavesParameters, undefined, undefined, true);
 
     // Calculate spectrum
     const fftSize = this.signalSize;

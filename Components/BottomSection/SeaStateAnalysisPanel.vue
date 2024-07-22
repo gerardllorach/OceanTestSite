@@ -26,11 +26,12 @@
     <p>
       <strong>Sea surface height at point 0,0</strong>
     </p>
-    <div id="wave-height-chart" class="wave-height-chart" ref="wave-height-chart"></div>
+    <div id="wave-height-chart" class="chart" ref="wave-height-chart"></div>
 
     <p>
-      <strong>Sea state variables</strong>
+      <strong>Spectrum</strong>
     </p>
+    <div id="wave-spectrum-chart" class="chart" ref="wave-spectrum-chart"></div>
 
   </div>
   
@@ -93,13 +94,15 @@ export default {
       this.discreteWaves = window.sceneManager.getDiscreteWaves();
       // Generate signal
       let signal = this.oceanAnalysis.createSignal(this.discreteWaves, this.samplingRate, this.duration * 60);
-      // Update chart
-      this.updateChart(signal);
-
+      // Update heights chart
+      this.updateHeightsChart(signal);
+      // Calculate spectrum
+      let spectrumMag = this.oceanAnalysis.getSpectrumMagnitude(this.discreteWaves);
+      // TODO
     },
 
     // Update chart
-    updateChart: function(signal){
+    updateHeightsChart: function(signal){
       // Prepare data struct for chart
       let timeSeriesData = [];
       for (let i = 0; i < signal.length; i++){
@@ -217,8 +220,8 @@ input {
   height: 24px;
 }
 
-.wave-height-chart {
-  padding-bottom: 10px;
+.chart {
+  padding-bottom: 20px;
 }
 
 
