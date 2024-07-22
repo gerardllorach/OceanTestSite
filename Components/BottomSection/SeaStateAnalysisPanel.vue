@@ -50,24 +50,9 @@ export default {
     this.oceanAnalysis = new window.OceanAnalysis(this.samplingRate, this.duration * 60);
   },
   mounted() {
+    // If scene exists, analyize waves
     if (window.sceneManager != undefined){
-      this.discreteWaves = window.sceneManager.getDiscreteWaves();
-      let signal = this.oceanAnalysis.createSignal(this.discreteWaves);
-      let timeSeriesData = [];
-      for (let i = 0; i < signal.length; i++){
-        timeSeriesData.push({
-          date: (i / this.samplingRate) * 1000,
-          height: signal[i],
-        });
-      }
-      this.chart = d3_timeseries()
-              .addSerie(timeSeriesData,{x:'date',y:'height'},{interpolate:'monotone',color:"#333"})
-              .width(650)
-              .height(300)
-      this.chart('#wave-height-chart')
-      let el = this.$refs["wave-height-chart"];
-      el.children[0].style.position = "absolute";
-
+      this.update();
     }
     // Events
     window.eventBus.on('DiscreteWavesPanel_setDiscreteWaves', (discreteWaves) => {
@@ -92,20 +77,60 @@ export default {
     // USER INPUT
     durationChanged: function(e){
       this.duration = e.target.value;
+      this.update();
     },
     samplingRateChanged: function(e){
       this.samplingRate = e.target.value;
+      this.update();
+    },
+
+    // Update data
+    update: function(){
+      // Get discrete waves
+      this.discreteWaves = window.sceneManager.getDiscreteWaves();
+      // Generate signal
+      let signal = this.oceanAnalysis.createSignal(this.discreteWaves, this.samplingRate, this.duration * 60);
+      // Update chart
+      this.updateChart(signal);
+
+    },
+
+    // Update chart
+    updateChart: function(signal){
+      // Prepare data struct for chart
+      let timeSeriesData = [];
+      for (let i = 0; i < signal.length; i++){
+        timeSeriesData.push({
+          date: (i / this.samplingRate) * 1000,
+          height: signal[i],
+        });
+      }
+      let el = this.$refs["wave-height-chart"];
+      // Remove current SVG
+      if (el.children[0] != undefined){
+        el.replaceChildren();
+      }
+      // Create chart
+      this.chart = d3_timeseries()
+              .addSerie(timeSeriesData,{x:'date',y:'height'},{interpolate:'monotone',color:"#333"})
+              .width(600)
+              .height(250)
+      this.chart('#wave-height-chart')
+      // Assign style
+      el = this.$refs["wave-height-chart"];
+      el.children[0].style.overflow = "auto";
     },
 
     // WINDOW RESIZE
     windowResize: function(){
       if (this.chart){
         let el = this.$refs["sea-state-analysis-panel"];
-        let ww = el.clientWidth;
-        let hh = ww / 2;
-        this.chart.width(ww);
-        this.chart.height(hh);
-        debugger;
+
+        // let ww = el.clientWidth;
+        // let hh = ww / 2;
+        // this.chart.width(ww);
+        // this.chart.height(hh);
+        // debugger;
       }
     },
 
@@ -194,8 +219,5 @@ input {
   height: 24px;
 }
 
-.wave-height-chart > svg {
-  position:absolute;
-}
 
 </style>

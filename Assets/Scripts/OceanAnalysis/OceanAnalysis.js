@@ -16,7 +16,10 @@ export class OceanAnalysis {
   }
 
 
-  createSignal(wavesParameters){
+  createSignal(wavesParameters, samplingRate, seconds)
+  {
+    this.samplingRate = samplingRate || this.samplingRate;
+    this.seconds = seconds || this.seconds;
     // Signal size must be power of two in order to do the FFT.
     this.signalSize = Math.pow(2, Math.ceil(Math.log(this.samplingRate * this.seconds)/Math.log(2)));
     this.signal = new Float32Array(this.signalSize);
