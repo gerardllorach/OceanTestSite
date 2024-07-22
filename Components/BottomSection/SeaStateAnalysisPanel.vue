@@ -13,12 +13,12 @@
       <!-- DURATION -->
       <div class="container-horizontal">
         <span>Duration</span>
-        <div><input type="range" min="10" max="50" :value="duration" @input="e => duration = e.target.value"><span>{{ duration }} minutes</span></div>
+        <div><input type="range" min="10" max="50" :value="duration" @input="durationChanged"><span>{{ duration }} minutes</span></div>
       </div>
       <!-- SAMPLING RATE -->
       <div class="container-horizontal">
         <span>Sampling rate</span>
-        <div><input type="range" step="0.1" min="0.5" max="5" :value="samplingRate"  @input="e => samplingRate = e.target.value"><span>{{ samplingRate }} /s</span></div>
+        <div><input type="range" step="0.1" min="0.5" max="5" :value="samplingRate"  @input="samplingRateChanged"><span>{{ samplingRate }} /s</span></div>
       </div>
     </div>
 
@@ -66,71 +66,13 @@ export default {
   methods: {
 
     // USER INPUT
-    addWave: function(e){
-      if (e){ e.preventDefault(); e.stopPropagation();}
-      // Create wave
-      this.discreteWaves.push({
-        hm0: (Math.random()*1+0.5),
-        T: (Math.random()*12 + 2),
-        dir: (Math.random()*90),
-        phase: Math.random()*360,
-      });
-      this.startEditing();
-      window.eventBus.emit('DiscreteWavesPanel_setDiscreteWaves', this.discreteWaves);
+    durationChanged: function(e){
+      this.duration = e.target.value;
     },
-    removeWave: function(index){
-      this.discreteWaves.splice(index, 1);
-      window.eventBus.emit('DiscreteWavesPanel_setDiscreteWaves', this.discreteWaves);
-    },
-    exportData: function(){
-      const link = document.createElement('a');
-      link.download = 'discreteWaves.json';
-      let data = this.discreteWaves;
-      link.href = window.URL.createObjectURL(new Blob([JSON.stringify(data)], {type: 'text/json'}));
-      link.click();
-      link.delete;
-    },
-    // START / STOP EDITING VALUES
-    startEditing: function(e){
-      if (e !== undefined){
-        e.stopPropagation();
-        e.preventDefault();
-      }
-      this.isEditing = true;
-      // EVENTS
-      // Stops editing when clicking outside the input forms or pressing Enter / Escape
-      const stopEditing = (e)=>{
-        // Do not apply if clicking input EL
-        if (e.type == 'click'){
-          if (e.target.nodeName == 'INPUT')
-            return
-        }
-        // Apply only for escape
-        if (e.type == 'keyup'){
-          if (e.key != 'Escape' && e.key != 'NumpadEnter' && e.key != 'Enter')
-            return;
-        }
-        this.isEditing = false;
-        document.removeEventListener("click", stopEditing);        
-        window.removeEventListener("keyup", stopEditing);
-      };
-      document.addEventListener("click", stopEditing);
-      window.addEventListener("keyup", stopEditing);
-    },
-    onChange: function(e, index, key){
-      let value = parseFloat(e.target.valueAsNumber);
-      // Limit value
-      if (value > parseFloat(e.target.max) || isNaN(value)){
-        e.target.valueAsNumber = parseFloat(e.target.max);
-        e.target.value = value = parseFloat(e.target.max);
-      } else if (value < parseFloat(e.target.min) || isNaN(value)){
-        e.target.valueAsNumber = parseFloat(e.target.min);
-        e.target.value = value = parseFloat(e.target.min);
-      }
-       // TODO: TAKE INTO ACCOUNT RELATIONSHIP BETWEEN HM0 AND T (steepness below 0.5)
-      this.discreteWaves[index][key] = value;
-      window.eventBus.emit('DiscreteWavesPanel_setDiscreteWaves', this.discreteWaves);
+    samplingRateChanged: function(e){
+      this.samplingRate = e.target.value;
     }
+
   },
   components: {
 

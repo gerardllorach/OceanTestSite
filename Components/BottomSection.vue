@@ -119,6 +119,7 @@ export default {
             },
             {
               title: 'Generate sea state',
+              icon: '&#xf1fe',
               component: 'generate-sea-state'
             }
           ]
