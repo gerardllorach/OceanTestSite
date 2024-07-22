@@ -22,6 +22,10 @@ window.OceanAnalysis = OceanAnalysis;
 // https://github.com/developit/mitt
 window.eventBus = window.mitt();
 
+// D3
+import d3_timeseries from "./lib/d3-timeseries/d3_timeseries.js";
+window.d3_timeseries = d3_timeseries;
+
 const options = {
   moduleCache: { vue: Vue },
   async getFile(url) {

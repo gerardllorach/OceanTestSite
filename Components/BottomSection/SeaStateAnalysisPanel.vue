@@ -1,6 +1,6 @@
 <template>
   
-  <div id="sea-state-analysis-panel" class="content">
+  <div id="sea-state-analysis-panel" ref="sea-state-analysis-panel" class="content">
 
     <p>In this section the sea state is analized and standard measures are provided, such as the Hm0, Hmax, Ts, Tp... These measures are provided
       by measuring the height at the position 0,0 for a given period of time.
@@ -21,6 +21,9 @@
         <div><input type="range" step="0.1" min="0.5" max="5" :value="samplingRate"  @input="samplingRateChanged"><span>{{ samplingRate }} /s</span></div>
       </div>
     </div>
+
+    <!-- Wave signal -->
+    <div id="wave-height-chart" class="wave-height-chart" ref="wave-height-chart"></div>
 
     <p>
       <strong>Sea state variables</strong>
@@ -49,14 +52,34 @@ export default {
   mounted() {
     if (window.sceneManager != undefined){
       this.discreteWaves = window.sceneManager.getDiscreteWaves();
-      this.oceanAnalysis.createSignal(this.discreteWaves);
+      let signal = this.oceanAnalysis.createSignal(this.discreteWaves);
+      let timeSeriesData = [];
+      for (let i = 0; i < signal.length; i++){
+        timeSeriesData.push({
+          date: (i / this.samplingRate) * 1000,
+          height: signal[i],
+        });
+      }
+      this.chart = d3_timeseries()
+              .addSerie(timeSeriesData,{x:'date',y:'height'},{interpolate:'monotone',color:"#333"})
+              .width(650)
+              .height(300)
+      this.chart('#wave-height-chart')
+      let el = this.$refs["wave-height-chart"];
+      el.children[0].style.position = "absolute";
+
     }
     // Events
     window.eventBus.on('DiscreteWavesPanel_setDiscreteWaves', (discreteWaves) => {
       this.discreteWaves = discreteWaves;
       // Analize parameters
-
     });
+
+    // Window resize
+    window.addEventListener('resize', this.windowResize);
+  },
+  unmounted() {
+    window.removeEventListener('resize', this.windowResize);
   },
   data() {
     return {
@@ -72,7 +95,19 @@ export default {
     },
     samplingRateChanged: function(e){
       this.samplingRate = e.target.value;
-    }
+    },
+
+    // WINDOW RESIZE
+    windowResize: function(){
+      if (this.chart){
+        let el = this.$refs["sea-state-analysis-panel"];
+        let ww = el.clientWidth;
+        let hh = ww / 2;
+        this.chart.width(ww);
+        this.chart.height(hh);
+        debugger;
+      }
+    },
 
   },
   components: {
@@ -157,6 +192,10 @@ input {
   border-radius: 15px;
   margin: 1px;
   height: 24px;
+}
+
+.wave-height-chart > svg {
+  position:absolute;
 }
 
 </style>
