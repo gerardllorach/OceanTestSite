@@ -23,6 +23,9 @@
     </div>
 
     <!-- Wave signal -->
+    <p>
+      <strong>Sea surface height at point 0,0</strong>
+    </p>
     <div id="wave-height-chart" class="wave-height-chart" ref="wave-height-chart"></div>
 
     <p>
@@ -112,26 +115,21 @@ export default {
       }
       // Create chart
       this.chart = d3_timeseries()
-              .addSerie(timeSeriesData,{x:'date',y:'height'},{interpolate:'monotone',color:"#333"})
+              //.addSerie(timeSeriesData,{x:'date',y:'height'},{interpolate:'monotone',color:"#333"})
+              .addSerie(timeSeriesData,{x:'date',y:'height'},{color:"#333"})
               .width(600)
               .height(250)
+              .yscale.label("Wave height")
+              .yscale.units("m")
+              .xscale.label("Time")
       this.chart('#wave-height-chart')
       // Assign style
-      el = this.$refs["wave-height-chart"];
-      el.children[0].style.overflow = "auto";
+      //el = this.$refs["wave-height-chart"];
+      //el.children[0].style.overflow = "auto";
     },
 
     // WINDOW RESIZE
     windowResize: function(){
-      if (this.chart){
-        let el = this.$refs["sea-state-analysis-panel"];
-
-        // let ww = el.clientWidth;
-        // let hh = ww / 2;
-        // this.chart.width(ww);
-        // this.chart.height(hh);
-        // debugger;
-      }
     },
 
   },
@@ -217,6 +215,10 @@ input {
   border-radius: 15px;
   margin: 1px;
   height: 24px;
+}
+
+.wave-height-chart {
+  padding-bottom: 10px;
 }
 
 
