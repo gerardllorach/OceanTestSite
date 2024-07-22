@@ -17,7 +17,7 @@ export class OceanAnalysis {
 
 
   createSignal(wavesParameters){
-
+    // Signal size must be power of two in order to do the FFT.
     this.signalSize = Math.pow(2, Math.ceil(Math.log(this.samplingRate * this.seconds)/Math.log(2)));
     this.signal = new Float32Array(this.signalSize);
     for (let i = 0; i < this.signalSize; i++){
@@ -25,6 +25,7 @@ export class OceanAnalysis {
       let height = Gerstner.findHeightAt00(wavesParameters, time);
       this.signal[i] = height;
     }
+    return this.signal;
   }
 
 

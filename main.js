@@ -13,6 +13,10 @@ window.SceneManager = SceneManager;
 import WMSDataRetriever from '/OceanTestSite/Assets/Scripts/WMSDataRetriever.js';
 window.WMSDataRetriever = WMSDataRetriever;
 
+// Ocean Analsys
+import { OceanAnalysis } from "./Assets/Scripts/OceanAnalysis/OceanAnalysis.js";
+window.OceanAnalysis = OceanAnalysis;
+
 
 // Declare event emitter
 // https://github.com/developit/mitt

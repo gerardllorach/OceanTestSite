@@ -44,11 +44,12 @@
 export default {
   name: "SeaStateAnalysisPanel",
   created() {
-
+    this.oceanAnalysis = new window.OceanAnalysis(this.samplingRate, this.duration * 60);
   },
   mounted() {
     if (window.sceneManager != undefined){
       this.discreteWaves = window.sceneManager.getDiscreteWaves();
+      this.oceanAnalysis.createSignal(this.discreteWaves);
     }
     // Events
     window.eventBus.on('DiscreteWavesPanel_setDiscreteWaves', (discreteWaves) => {
