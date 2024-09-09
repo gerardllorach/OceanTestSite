@@ -13,7 +13,7 @@ https://doi.org/10.1016/j.ocemod.2018.06.007
 
 import * as THREE from 'three';
 import { OceanEntity } from '/OceanTestSite/Assets/Ocean/OceanEntity.js';
-import { GLTFLoader } from 'https://threejs.org/examples/jsm/loaders/GLTFLoader.js';
+import { GLTFLoader } from '/OceanTestSite/lib/three.js/examples/jsm/loaders/GLTFLoader.js';
 
 class Recorder {
 

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import Stats from 'https://threejs.org/examples/jsm/libs/stats.module.js';
-import { OrbitControls } from 'https://threejs.org/examples/jsm/controls/OrbitControls.js';
+import Stats from '/OceanTestSite/lib/three.js/examples/jsm/libs/stats.module.js';
+import { OrbitControls } from '/OceanTestSite/lib/three.js/examples/jsm/controls/OrbitControls.js';
 
 import { SkyboxEntity } from '/OceanTestSite/Assets/Skybox/SkyboxEntity.js';
 
