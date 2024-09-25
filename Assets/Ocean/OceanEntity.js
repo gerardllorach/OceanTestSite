@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { Vector3 } from 'three';
-import { GLTFLoader } from 'https://threejs.org/examples/jsm/loaders/GLTFLoader.js';
+import { GLTFLoader } from '/OceanTestSite/lib/three.js/examples/jsm/loaders/GLTFLoader.js';
 
 import { OceanGrid } from '/OceanTestSite/Assets/Ocean/OceanGrid.js';
 import {OceanProjectedGridVertShader, OceanProjectedGridFragShader} from '/OceanTestSite/Assets/Ocean/OceanProjectedGridShader.js';

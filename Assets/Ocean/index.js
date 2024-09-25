@@ -1,8 +1,8 @@
 import * as THREE from 'three';
-import { OrbitControls } from 'https://threejs.org/examples/jsm/controls/OrbitControls.js';
-//import { OBJLoader } from 'https://threejs.org/examples/jsm/loaders/OBJLoader.js';
-import { GLTFLoader } from 'https://threejs.org/examples/jsm/loaders/GLTFLoader.js';
-import { FBXLoader } from 'https://threejs.org/examples/jsm/loaders/FBXLoader.js'
+import { OrbitControls } from '/OceanTestSite/lib/three.js/examples/jsm/controls/OrbitControls.js';
+//import { OBJLoader } from '/OceanTestSite/lib/three.js/examples/jsm/loaders/OBJLoader.js';
+import { GLTFLoader } from '/OceanTestSite/lib/three.js/examples/jsm/loaders/GLTFLoader.js';
+import { FBXLoader } from '/OceanTestSite/lib/three.js/examples/jsm/loaders/FBXLoader.js'
 import { OceanEntity } from './OceanEntity.js';
 import { SandEntity } from '../Assets/Terrain/SandEntity.js';
 import * as FogShader from '../Assets/Terrain/FogShader.js'
@@ -10,7 +10,7 @@ import { OBSEAStationEntity } from '../Assets/OBSEAStation/ObseaStationEntity.js
 import { OBSEABuoyEntity } from '../Assets/OBSEABuoy/OBSEABuoyEntity.js';
 import { SkyboxEntity } from '../Assets/Skybox/SkyboxEntity.js';
 import { RosaVentsEntity } from '../Assets/Orientation/RosaVentsEntity.js';
-// import { GUI } from 'https://threejs.org/examples/jsm/libs/lil-gui.module.min.js';
+// import { GUI } from '/OceanTestSite/lib/three.js/examples/jsm/libs/lil-gui.module.min.js';
 
 
 /* OCEAN

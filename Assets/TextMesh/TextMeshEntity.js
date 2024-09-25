@@ -3,8 +3,8 @@
 
 // Use this to generate a new font: https://gero3.github.io/facetype.js/
 import * as THREE from 'three';
-import { FontLoader } from 'https://threejs.org/examples/jsm/loaders/FontLoader.js';
-import { TextGeometry } from 'https://threejs.org/examples/jsm/geometries/TextGeometry.js';
+import { FontLoader } from '/OceanTestSite/lib/three.js/examples/jsm/loaders/FontLoader.js';
+import { TextGeometry } from '/OceanTestSite/lib/three.js/examples/jsm/geometries/TextGeometry.js';
 
 class TextMeshEntity {
 
