@@ -35,6 +35,7 @@
             </div>
             <!-- Submenu items -->
             <div class="submenu-items-container">
+              <!-- Children elements -->
               <div v-for="subEl in el.children" class="clickable" @click="submenuItemClicked(subEl)">
                 <div>
                   <span v-if="subEl.icon" class="fa" v-html="subEl.icon"></span>
@@ -46,6 +47,10 @@
                 <span class="fa" v-else-if="subEl.isClickEvent">&#xf019;</span>
 
               </div>
+            </div>
+            <!-- Component -->
+            <div class="submenu-item-content">
+              <component v-if="el.component" :is="el.component" />
             </div>
           </div>
 
@@ -88,6 +93,7 @@ import DiscreteWaves from './BottomSection/DiscreteWavesPanel.vue';
 import SeaStateAnalysisPanel from './BottomSection/SeaStateAnalysisPanel.vue';
 import RenderStereoPanel from './BottomSection/RenderStereoPanel.vue';
 import RenderHeightPanel from './BottomSection/RenderHeightPanel.vue';
+import AboutPanel from './BottomSection/AboutPanel.vue';
 
 export default {
   name: "BottomSection",
@@ -168,7 +174,7 @@ export default {
         {
           title: 'About',
           icon: '&#xf05a',
-          component: 'About'
+          component: 'about'
         } // End of about
       ] // End of menu
     }
@@ -216,6 +222,7 @@ export default {
     "sea-state-analysis": SeaStateAnalysisPanel,
     "render-heights": RenderHeightPanel,
     "render-stereo": RenderStereoPanel,
+    "about": AboutPanel,
   }
 }
 
