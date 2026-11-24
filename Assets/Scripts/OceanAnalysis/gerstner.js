@@ -10,11 +10,14 @@ const DEG2RAD = Math.PI / 180;
 
 // Displacement produced by one wave for the particle at `position` (x, y, z). Written into `out`.
 const getGerstnerDisplacement = function (out, position, wave, time) {
-  const amplitude = Math.max(wave.hm0, 0.01) / 2;
-  const T = wave.T;
-  const steepness = Math.max(4 * Math.PI * Math.PI * amplitude / (T * T * G), 0.01);
-  const wavelength = amplitude * 2 * Math.PI / steepness;
-  const k = 2 * Math.PI / wavelength;
+  const amplitude = wave.hm0 / 2;
+  const T = Math.max(wave.T, 0.1);
+  // Deep-water dispersion relation: the wavenumber depends on the period only (k = w^2 / g).
+  // Removed clamp (as in the shader, see OceanProjectedGridShader.js): the wavelength used to come from
+  // steepness = max(k * amplitude, 0.01) and amplitude = max(height, 0.01) / 2, most likely to avoid render
+  // artifacts / degenerate waves (zero height -> infinite wavelength). As a lower bound it rendered low waves
+  // (k * amplitude < 0.01) with a shorter period than requested, and it never prevented loops of too steep waves.
+  const k = 4 * Math.PI * Math.PI / (T * T * G);
   const velocity = Math.sqrt(G / k);
 
   const dirRad = (wave.dir || 0) * DEG2RAD;

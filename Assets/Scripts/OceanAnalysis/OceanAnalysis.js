@@ -110,22 +110,14 @@ export function crossSpectra(z, n, e, samplingRate, segmentSeconds = 256) {
 }
 
 
-// Average the cross-spectra over groups of `factor` adjacent bins (excluding DC), e.g. into the
-// 0.01 Hz bands CDIP uses for its polar spectra. Densities stay in m^2/Hz.
-export function mergeBands(spec, factor) {
-  if (factor <= 1) return spec;
-  const keys = ['Czz', 'Cnn', 'Cee', 'Cne', 'Qzn', 'Qze'];
-  const nb = Math.floor((spec.freq.length - 1) / factor);
-  const out = { freq: new Float64Array(nb), df: spec.df * factor, segmentLength: spec.segmentLength,
-    numSegments: spec.numSegments, degreesOfFreedom: spec.degreesOfFreedom * factor };
-  keys.forEach(key => out[key] = new Float64Array(nb));
-  for (let b = 0; b < nb; b++) {
-    for (let j = 0; j < factor; j++) {
-      const k = 1 + b * factor + j;
-      out.freq[b] += spec.freq[k] / factor;
-      keys.forEach(key => out[key][b] += spec[key][k] / factor);
-    }
-  }
+// The bins of the spectrum with centre frequency in [fmin, fmax] (the mean, f = 0, is left out)
+export function selectBins(spec, fmin, fmax) {
+  const keys = ['freq', 'Czz', 'Cnn', 'Cee', 'Cne', 'Qzn', 'Qze'];
+  const ks = [];
+  for (let k = 1; k < spec.freq.length; k++) if (spec.freq[k] >= fmin && spec.freq[k] <= fmax) ks.push(k);
+  const out = { df: spec.df, segmentLength: spec.segmentLength, numSegments: spec.numSegments,
+    degreesOfFreedom: spec.degreesOfFreedom };
+  keys.forEach(key => out[key] = Float64Array.from(ks, k => spec[key][k]));
   return out;
 }
 
@@ -169,11 +161,19 @@ function wrap360(deg) { return ((deg % 360) + 360) % 360; }
 export function memDistribution(a1, b1, a2, b2, binCentersDeg) {
   const binWidth = 360 / binCentersDeg.length;
   const out = new Float64Array(binCentersDeg.length);
-  // Keep the problem well posed: a perfectly unidirectional sea (r1 = 1) makes MEM singular
-  let r1 = Math.hypot(a1, b1);
-  if (r1 > 0.995) { a1 *= 0.995 / r1; b1 *= 0.995 / r1; }
+  // MEM needs moments of a valid (non-negative) distribution: the Toeplitz matrix of [1, d1, d2] must be
+  // positive definite, i.e. |d2 - d1^2| < 1 - |d1|^2. A band with a single wave direction sits on that
+  // boundary (|d1| = 1) and estimation noise can push it outside. Shrinking d_n by rho^n is the same as
+  // convolving D with a narrow wrapped Cauchy kernel: it keeps the shape and makes the moments valid.
+  const isValid = (d1r, d1i, d2r, d2i) => {
+    const r2 = d1r * d1r + d1i * d1i;
+    const er = d2r - (d1r * d1r - d1i * d1i), ei = d2i - 2 * d1r * d1i;
+    return 1 - r2 - Math.hypot(er, ei) > 1e-4;
+  };
+  let rho = 1;
+  while (!isValid(a1 * rho, b1 * rho, a2 * rho * rho, b2 * rho * rho) && rho > 0.5) rho *= 0.995;
   // c1 = (d1 - d2 conj(d1)) / (1 - |d1|^2), c2 = d2 - c1 d1
-  const d1r = a1, d1i = b1, d2r = a2, d2i = b2;
+  const d1r = a1 * rho, d1i = b1 * rho, d2r = a2 * rho * rho, d2i = b2 * rho * rho;
   const den = 1 - (d1r * d1r + d1i * d1i);
   const c1r = (d1r - (d2r * d1r + d2i * d1i)) / den;
   const c1i = (d1i - (d2i * d1r - d2r * d1i)) / den;
@@ -182,8 +182,8 @@ export function memDistribution(a1, b1, a2, b2, binCentersDeg) {
   // Numerator 1 - c1 conj(d1) - c2 conj(d2) (real)
   const num = 1 - (c1r * d1r + c1i * d1i) - (c2r * d2r + c2i * d2i);
 
-  // Integrate on a 1-degree sub-grid so narrow peaks are not missed between bin centres
-  const sub = Math.max(1, Math.round(binWidth));
+  // Integrate each bin on a 0.1-degree sub-grid so narrow peaks (a few tenths of a degree) are measured
+  const sub = Math.max(1, Math.round(binWidth / 0.1));
   let total = 0;
   for (let b = 0; b < binCentersDeg.length; b++) {
     let acc = 0;
@@ -393,8 +393,11 @@ export class OceanAnalysis {
   samplingRate = 2;     // Hz
   seconds = 60 * 60;    // Record length
   segmentSeconds = 256; // Welch segment length
-  numDirections = 72;   // 5 degree bins, as CDIP polar spectra
-  polarBandWidth = 0.01; // Hz, as CDIP polar spectra
+  // Polar spectrum: 72 direction bins of 5 degrees (360 / 5, as CDIP). The frequency bins are the bins of the
+  // spectrum (its resolution), between 33 s and 3 s by default
+  numDirections = 72;
+  polarFmin = 1 / 33; // Hz
+  polarFmax = 1 / 3;
 
   constructor(samplingRate, seconds) {
     this.samplingRate = samplingRate || this.samplingRate;
@@ -414,8 +417,7 @@ export class OceanAnalysis {
     const dir = directionalMoments(spec);
     const bulk = bulkParameters(spec, dir);
     const zc = zeroCrossing(buoy.heave, samplingRate);
-    const bands = mergeBands(spec, Math.max(1, Math.round(this.polarBandWidth / spec.df)));
-    const polar = this.polarSpectrum(bands, directionalMoments(bands));
+    const polar = this.directionalSpectrum(spec);
 
     const nyquist = samplingRate / 2;
     const aliased = analysedWaves.filter(w => 1 / w.T > nyquist);
@@ -431,17 +433,24 @@ export class OceanAnalysis {
     };
   }
 
-  // Directional spectrum E(f, theta) = S(f) D(f, theta) in m^2/Hz/deg (MEM), on numDirections bins
-  polarSpectrum(spec, dir, minRelativeEnergy = 0.005) {
-    const nd = this.numDirections;
+  // Directional spectrum E(f, theta) = S(f) D(f, theta) in m^2/Hz/deg (MEM), for the polar plot: one ring per
+  // frequency bin of the spectrum between fmin and fmax, and `numDirections` bins (centred on 0 = N)
+  directionalSpectrum(spec, { numDirections = this.numDirections, fmin = this.polarFmin, fmax = this.polarFmax } = {}) {
+    const bins = selectBins(spec, fmin, fmax);
+    return this.polarSpectrum(bins, directionalMoments(bins), numDirections);
+  }
+
+  polarSpectrum(spec, dir, numDirections = this.numDirections, fmin = 0, fmax = Infinity, minRelativeEnergy = 0.005) {
+    const nd = numDirections;
     const dirs = new Float64Array(nd);
     for (let d = 0; d < nd; d++) dirs[d] = d * 360 / nd; // Bin centres: 0 = N, as CDIP
+    const inRange = k => spec.freq[k] > 0 && spec.freq[k] + spec.df / 2 >= fmin && spec.freq[k] - spec.df / 2 <= fmax;
     let maxS = 0;
-    for (let k = 0; k < spec.freq.length; k++) if (spec.freq[k] > 0) maxS = Math.max(maxS, spec.Czz[k]);
+    for (let k = 0; k < spec.freq.length; k++) if (inRange(k)) maxS = Math.max(maxS, spec.Czz[k]);
     const energy = [];
     let maxE = 0, peak = { f: NaN, dir: NaN, value: 0 };
     for (let k = 0; k < spec.freq.length; k++) {
-      if (!(spec.freq[k] > 0) || !(spec.Czz[k] > minRelativeEnergy * maxS) || !isFinite(dir.a1[k])) { energy.push(null); continue; }
+      if (!inRange(k) || !(spec.Czz[k] > minRelativeEnergy * maxS) || !isFinite(dir.a1[k])) { energy.push(null); continue; }
       const D = memDistribution(dir.a1[k], dir.b1[k], dir.a2[k], dir.b2[k], dirs);
       const row = new Float64Array(nd);
       for (let d = 0; d < nd; d++) {

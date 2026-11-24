@@ -72,18 +72,26 @@ export const OceanProjectedGridVertShader = /* glsl */ `
       vec4 waveParams, vec3 position, 
       inout vec3 tangent, inout vec3 binormal){
 
-    float amplitude = max(waveParams.y, 0.01) / 2.0;
-    float T = waveParams.x;
-    float steepness = 4.0 * PI * PI * amplitude / (T * T * 9.8);
-    steepness = max(steepness, 0.01);
-
-    float wavelength = amplitude * 2.0 * PI / steepness;
+    float amplitude = waveParams.y / 2.0;
+    float T = max(waveParams.x, 0.1);
+    // Deep-water dispersion relation: the wavenumber depends on the period only (k = w^2 / g).
+    //
+    // Removed clamp: this used to be
+    //   amplitude = max(height, 0.01) / 2;  steepness = max(k * amplitude, 0.01);  wavelength = amplitude * 2PI / steepness;
+    // Most likely there to avoid render artifacts / degenerate waves (zero height -> infinite wavelength).
+    // But it was a lower bound and the wavelength came from the clamped steepness, so every wave with
+    // k * amplitude < 0.01 (e.g. 10 s waves under 0.5 m, 5 s waves under 0.12 m) was rendered with a shorter
+    // period than requested (0.2 m / 10 s was rendered at 6.4 s). Now k comes from T and a zero height is fine.
+    // Note: a lower bound never prevented loops. Gerstner crests loop when the waves are too steep
+    // (sum of k * amplitude over the waves > 1). If that shows up, limit the steepness without changing k
+    // (e.g. scale down the horizontal displacement), so that the periods stay correct.
+    // Keep in sync with Assets/Scripts/OceanAnalysis/gerstner.js.
+    float k = 4.0 * PI * PI / (T * T * 9.8);
+    float steepness = k * amplitude;
     // Direction from angle
     vec2 direction = vec2(sin(-waveParams.z), cos(-waveParams.z)); // Direction (negative for clockwise rotation)
     float phase = waveParams.w;
 
-    // Wave coefficient
-    float k = 2.0 * PI / wavelength;
     // Velocity (related to gravity and wavelength)
     float velocity = sqrt(9.8 / k);
     

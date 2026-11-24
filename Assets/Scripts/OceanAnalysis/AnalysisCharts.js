@@ -225,18 +225,27 @@ export function polarChart(el, polar, opt = {}) {
   ctx.scale(dpr, dpr);
 
   const cx = size / 2, cy = size / 2, R = size / 2 - 34;
+  // Period range: longest period (fmin) on the inner circle, shortest (fmax) on the rim, linear in frequency.
+  // The inner circle has a fixed size (as the CDIP polar plots) and shows the range.
   const fmax = opt.fmax, fmin = opt.fmin || 1 / 33;
-  const rOf = f => R * Math.min(f, fmax) / fmax;
+  const hole = 0.22; // Inner circle radius, fraction of R
+  const rOf = f => R * (hole + (1 - hole) * (Math.min(Math.max(f, fmin), fmax) - fmin) / (fmax - fmin));
+  const fOf = r => fmin + (r / R - hole) / (1 - hole) * (fmax - fmin);
   const canvasAngle = deg => (deg - 90) * Math.PI / 180;
   const df = polar.df;
-  const threshold = 0.01 * polar.max;
+  const inView = f => f >= fmin && f <= fmax;
+
+  // Colours are scaled to the strongest cell of the visible period range
+  let viewMax = 0;
+  polar.energy.forEach((row, k) => { if (row && inView(polar.freq[k])) viewMax = Math.max(viewMax, ...row); });
+  const threshold = 0.01 * viewMax; // Cells under 1% of the maximum are not painted
 
   // Energy cells
-  for (let k = 0; k < polar.freq.length; k++) {
+  for (let k = 0; k < polar.freq.length && viewMax > 0; k++) {
     const row = polar.energy[k];
     const f = polar.freq[k];
-    if (!row || f < fmin || f > fmax) continue;
-    const r0 = rOf(Math.max(fmin, f - df / 2)), r1 = rOf(f + df / 2);
+    if (!row || !inView(f)) continue;
+    const r0 = rOf(f - df / 2), r1 = rOf(f + df / 2); // rOf clips to the range
     for (let d = 0; d < row.length; d++) {
       if (row[d] < threshold) continue;
       const a0 = canvasAngle(polar.dirs[d] - polar.binWidth / 2), a1 = canvasAngle(polar.dirs[d] + polar.binWidth / 2);
@@ -244,7 +253,7 @@ export function polarChart(el, polar, opt = {}) {
       ctx.arc(cx, cy, r1, a0, a1);
       ctx.arc(cx, cy, r0, a1, a0, true);
       ctx.closePath();
-      ctx.fillStyle = turbo(row[d] / polar.max);
+      ctx.fillStyle = turbo(row[d] / viewMax);
       ctx.fill();
     }
   }
@@ -261,7 +270,7 @@ export function polarChart(el, polar, opt = {}) {
   ctx.font = '12px Poppins, sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  const rings = (opt.periods || [2, 3, 4, 6, 8, 12, 20]).filter(T => 1 / T < fmax * 0.97 && 1 / T > fmin);
+  const rings = (opt.periods || [2, 3, 4, 6, 8, 12, 20]).filter(T => 1 / T <= fmax * 1.001 && 1 / T >= fmin * 0.999);
   rings.forEach(T => {
     ctx.beginPath(); ctx.arc(cx, cy, rOf(1 / T), 0, 2 * Math.PI); ctx.stroke();
   });
@@ -277,6 +286,14 @@ export function polarChart(el, polar, opt = {}) {
     ctx.fillStyle = COLORS.ink2;
     ctx.fillText(T + ' s', cx, ty);
   });
+  // Period range in the inner circle
+  if (opt.centerLabel) {
+    ctx.fillStyle = COLORS.ink2;
+    ctx.font = '11px Poppins, sans-serif';
+    ctx.fillText('Period range', cx, cy - 8);
+    ctx.font = '600 13px Poppins, sans-serif';
+    ctx.fillText(opt.centerLabel, cx, cy + 9);
+  }
   // Compass
   ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'].forEach((label, i) => {
     const a = canvasAngle(i * 45);
@@ -285,23 +302,30 @@ export function polarChart(el, polar, opt = {}) {
     ctx.fillText(label, cx + (R + 18) * Math.cos(a), cy + (R + 18) * Math.sin(a));
   });
 
-  // Peak marker
-  if (isFinite(polar.peak.f)) {
-    const a = canvasAngle(polar.peak.dir), r = rOf(polar.peak.f);
-    const px = cx + r * Math.cos(a), py = cy + r * Math.sin(a);
-    ctx.lineWidth = 2;
-    ctx.strokeStyle = COLORS.surface; ctx.beginPath(); ctx.arc(px, py, 8, 0, 2 * Math.PI); ctx.stroke();
-    ctx.strokeStyle = COLORS.ink; ctx.beginPath(); ctx.arc(px, py, 10, 0, 2 * Math.PI); ctx.stroke();
-  }
-
   // Colour bar
   const bar = document.createElement('div');
   bar.className = 'oa-colorbar';
   const stops = d3.range(0, 1.0001, 0.1).map(t => `${turbo(t)} ${t * 100}%`).join(',');
   bar.innerHTML = `<div class="oa-colorbar-ramp" style="background:linear-gradient(90deg,${stops})"></div>
-    <div class="oa-colorbar-labels"><span>0</span><span>${polar.max.toPrecision(3)}</span></div>
+    <div class="oa-colorbar-labels"><span>0</span><span>${viewMax > 0 ? viewMax.toPrecision(3) : '0'}</span></div>
     <div class="oa-colorbar-unit">m²/Hz/deg</div>`;
   el.appendChild(bar);
+
+  // Zoom: the inner half of the circle zooms in (longer periods), the outer half zooms out.
+  // opt.onZoom(+1 | -1); opt.canZoomIn / opt.canZoomOut say whether there is a level to go to.
+  const zoomAt = r => {
+    if (!opt.onZoom || r > R) return 0;
+    if (r < R / 2) return opt.canZoomIn ? 1 : 0;
+    return opt.canZoomOut ? -1 : 0;
+  };
+  const pointerRadius = ev => {
+    const rect = canvas.getBoundingClientRect();
+    return Math.hypot(ev.clientX - rect.left - cx, ev.clientY - rect.top - cy);
+  };
+  canvas.addEventListener('click', ev => {
+    const zoom = zoomAt(pointerRadius(ev));
+    if (zoom) opt.onZoom(zoom);
+  });
 
   // Hover
   const tooltip = document.createElement('div');
@@ -311,8 +335,10 @@ export function polarChart(el, polar, opt = {}) {
     const rect = canvas.getBoundingClientRect();
     const dx = ev.clientX - rect.left - cx, dy = ev.clientY - rect.top - cy;
     const r = Math.hypot(dx, dy);
-    const f = r / R * fmax;
-    if (r > R || f < fmin) { tooltip.style.display = 'none'; return; }
+    const zoom = zoomAt(r);
+    canvas.style.cursor = zoom > 0 ? 'zoom-in' : zoom < 0 ? 'zoom-out' : '';
+    const f = fOf(r);
+    if (r > R || r < hole * R) { tooltip.style.display = 'none'; return; }
     const theta = ((Math.atan2(dx, -dy) * 180 / Math.PI) + 360) % 360;
     const k = Math.round((f - polar.freq[0]) / df);
     if (k < 0 || k >= polar.freq.length) { tooltip.style.display = 'none'; return; }

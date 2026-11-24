@@ -171,16 +171,24 @@
     <!-- POLAR SPECTRUM -->
     <div v-if="hasResult" v-show="tab == 'polar'">
       <div class="stats">
-        <span>2D energy density peak <b>{{ fmt(1 / polarPeak.f, 1) }} s @ {{ fmt(polarPeak.dir, 0) }}° {{ compass(polarPeak.dir) }}</b></span>
+        <span>Peak in this range <b>{{ fmt(1 / polarPeak.f, 1) }} s @ {{ fmt(polarPeak.dir, 0) }}° {{ compass(polarPeak.dir) }}</b></span>
         <span>Spectrum Hs <b>{{ fmt(bulk.Hm0, 2) }} m</b></span>
-        <span>Frequency bands <b>{{ polarInfo.bands }}</b> ({{ fmt(polarInfo.df, 4) }} Hz)</span>
+        <span>Frequency bands <b>{{ polarInfo.bands }}</b> of {{ fmt(polarInfo.df, 4) }} Hz</span>
         <span>Direction bins <b>{{ polarInfo.dirs }}</b> at {{ polarInfo.binWidth }}°</span>
       </div>
       <div class="chart polar" ref="chart-polar"></div>
-      <p class="footnote">Radius runs from {{ fmt(1 / polarInfo.fmin, 0) }} s swell at the centre to {{ fmt(1 / polarInfo.fmax, 1) }} s
-        waves at the rim (linear in frequency). Angles show where wave energy comes from. Colour: Maximum Entropy Method
-        (Lygre &amp; Krogstad 1986) estimate of energy density in m²/Hz/deg, scaled to the strongest cell. Cells under 1% of the
-        peak are not painted.</p>
+      <!-- Period range (zoom). Also: click the inner half of the plot to zoom in, the outer half to zoom out -->
+      <div class="polar-levels" role="group" aria-label="Period range">
+        <button v-for="(level, i) in polarLevels" :key="level.id" class="clickable"
+          :class="{ 'button-active': polarLevel == i }" @click="setPolarLevel(i)">
+          <span>{{ level.title }} ({{ level.minPeriod }}–{{ level.maxPeriod }} s)</span>
+        </button>
+      </div>
+      <p class="footnote">Radius runs from {{ polarLevels[polarLevel].maxPeriod }} s on the inner circle to
+        {{ polarLevels[polarLevel].minPeriod }} s at the rim (linear in frequency). Click the inner half of the plot to zoom in to longer periods, the outer half to zoom out.
+        Angles show where wave energy comes from. Colour: Maximum Entropy Method (Lygre &amp; Krogstad 1986) estimate of
+        energy density in m²/Hz/deg, scaled to the strongest cell of the period range shown. Cells under 1% of it are not
+        painted.</p>
     </div>
 
     <!-- FOURIER COEFFICIENTS -->
@@ -219,6 +227,7 @@ export default {
   created() {
     this.oceanAnalysis = new window.OceanAnalysis(this.samplingRate, this.duration * 60);
     this.result = null; // Not reactive: large typed arrays
+    this.polarCache = [];
   },
   mounted() {
     // Events
@@ -262,6 +271,14 @@ export default {
       theoryInterfering: 0,
       polarPeak: {},
       polarInfo: {},
+      // Period ranges of the polar spectrum (zoom levels): maxPeriod on the inner circle, minPeriod on the rim
+      // One ring per frequency bin of the spectrum (its resolution), 72 direction bins of 5 degrees (as CDIP)
+      polarLevels: [
+        { id: 'high', title: 'High freq', minPeriod: 2, maxPeriod: 20, periods: [2, 3, 4, 6, 8, 12, 20], numDirections: 72 },
+        { id: 'normal', title: 'Normal', minPeriod: 4, maxPeriod: 20, periods: [4, 6, 8, 12, 20], numDirections: 72 },
+        { id: 'swell', title: 'Swell only', minPeriod: 8, maxPeriod: 20, periods: [8, 10, 12, 15, 20], numDirections: 72 },
+      ],
+      polarLevel: 1,
       dispWindow: 120,
       dispStart: 0,
       dispStats: {},
@@ -307,7 +324,7 @@ export default {
       this.bulk = { ...r.bulk };
       const { waves: _ignored, ...zcStats } = r.zeroCrossing;
       this.zc = zcStats;
-      this.polarPeak = { ...r.polar.peak };
+      this.polarCache = []; // Polar spectrum per zoom level, computed when shown
       this.warnings = r.expected.aliased.length ?
         [`${r.expected.aliased.length} wave(s) have periods shorter than ${(1 / s.nyquist).toFixed(2)} s (2 / sampling rate) and are aliased. Increase the sampling rate.`] : [];
 
@@ -319,9 +336,7 @@ export default {
         if (cumulative >= 0.995 * r.bulk.m0) { f995 = spec.freq[k]; break; }
       }
       this.plotFmax = Math.min(s.nyquist, Math.max(0.6, 1.15 * f995));
-      const polarFmax = Math.min(s.nyquist, Math.max(1 / 3, 1.1 * f995));
-      this.polarInfo = { fmin: 1 / 33, fmax: polarFmax, dirs: r.polar.dirs.length, binWidth: r.polar.binWidth, df: r.polar.df,
-        bands: Array.from(r.polar.freq).filter(f => f >= 1 / 33 && f <= polarFmax).length };
+      this.updatePolarInfo();
 
       this.paramGroups = this.buildParamGroups(r);
       this.theoryInterfering = r.theoretical ? r.theoretical.interferingLines : 0;
@@ -524,7 +539,38 @@ export default {
     drawPolar: function () {
       const r = this.result;
       if (!r || this.tab != 'polar') return;
-      window.AnalysisCharts.polarChart(this.$refs['chart-polar'], r.polar, { fmin: this.polarInfo.fmin, fmax: this.polarInfo.fmax });
+      const level = this.polarLevels[this.polarLevel];
+      window.AnalysisCharts.polarChart(this.$refs['chart-polar'], this.polarForLevel(this.polarLevel), {
+        fmin: 1 / level.maxPeriod, fmax: 1 / level.minPeriod, periods: level.periods,
+        centerLabel: level.minPeriod + '–' + level.maxPeriod + ' s',
+        canZoomIn: this.polarLevel < this.polarLevels.length - 1,
+        canZoomOut: this.polarLevel > 0,
+        onZoom: step => this.setPolarLevel(this.polarLevel + step),
+      });
+    },
+    // Zoom level of the polar spectrum: 0 = high frequencies ... last = swell only
+    setPolarLevel: function (i) {
+      this.polarLevel = Math.max(0, Math.min(this.polarLevels.length - 1, i));
+      this.updatePolarInfo();
+      this.drawPolar();
+    },
+    // Directional spectrum with the bands of a zoom level (cached until the next analysis)
+    polarForLevel: function (i) {
+      if (!this.polarCache[i]) {
+        const level = this.polarLevels[i];
+        this.polarCache[i] = this.oceanAnalysis.directionalSpectrum(this.result.spectrum, {
+          numDirections: level.numDirections, fmin: 1 / level.maxPeriod, fmax: 1 / level.minPeriod });
+      }
+      return this.polarCache[i];
+    },
+    // Readouts above the polar plot, for the zoom level shown
+    updatePolarInfo: function () {
+      if (!this.result) return;
+      const p = this.polarForLevel(this.polarLevel);
+      const level = this.polarLevels[this.polarLevel];
+      this.polarPeak = { ...p.peak };
+      this.polarInfo = { dirs: p.dirs.length, binWidth: p.binWidth, df: p.df,
+        bands: Array.from(p.freq).filter(f => f >= 1 / level.maxPeriod && f <= 1 / level.minPeriod).length };
     },
 
     drawFourier: function () {
@@ -846,6 +892,18 @@ input {
   padding: 0 10px;
   border-radius: 12px;
   font-size: small;
+}
+
+.polar-levels {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.polar-levels button {
+  padding: 4px 14px;
 }
 
 .footnote {
