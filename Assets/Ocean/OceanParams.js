@@ -27,7 +27,11 @@ MeanDir_ADCPWaves : Direction (from) mean of waves {mean wave direction} on the 
 Unidir_Ind_ADCP_Waves : Unidirectivity index of waves on the water body by acoustic doppler wave array and computation using protocol of Barstow et al. (1991)
 */
 
+import { generateSea, DEFAULT_SEA_SETTINGS } from '/OceanTestSite/Assets/Ocean/SeaSpectrum.js';
 
+// The discrete waves of the ocean. They are generated as a random realisation of a wave spectrum (JONSWAP /
+// Pierson-Moskowitz, Assets/Ocean/SeaSpectrum.js) from the sea state parameters, or set one by one (discrete waves
+// panel, dropped .json). They are sent to the GPU in a float texture (getWaveParamsImageData).
 export class OceanParameters{
 
   oceanParameters = {
@@ -38,13 +42,23 @@ export class OceanParameters{
     Mdir: 195.58,
     Spr1: 36.7,
     timestamp: '2019-11-14 02:05h',
+    // Spectrum (see SeaSpectrum.js)
+    Tp: null,      // Peak period (s). null: fully developed sea for Hm0 (Pierson-Moskowitz)
+    gamma: DEFAULT_SEA_SETTINGS.gamma,
+    numComponents: DEFAULT_SEA_SETTINGS.count,
+    seed: DEFAULT_SEA_SETTINGS.seed,
   }
 
   waveHeights = [];
+  wavePeriods = [];
   waveDirections = [];
   waveSteepness = [];
   wavePhases = [];
 
+  // Spectrum the waves come from (output of generateSea), or null when the waves were set by hand
+  sea = null;
+
+  // Values are divided by these before going to the GPU (the shader multiplies them back)
   WAVE_MAX = 10;
   PERIOD_MAX = 20;
 
@@ -52,8 +66,7 @@ export class OceanParameters{
     // Assign given ocean parameters (if any)
     let keys = Object.keys(oceanParameters);
     keys.forEach(kk => this.oceanParameters[kk] = oceanParameters[kk]);
-
-    this.numWaves = numWaves;
+    if (numWaves) this.oceanParameters.numComponents = numWaves;
 
     this.generateDistributions();
     this.createHTMLGidget();
@@ -62,40 +75,41 @@ export class OceanParameters{
 
 
 
+  // Sea state settings for the spectrum generator
+  getSeaSettings = function(){
+    const p = this.oceanParameters;
+    return { Hm0: p.Hm0, Tp: p.Tp, gamma: p.gamma, Mdir: p.Mdir, spread: p.Spr1, count: p.numComponents, seed: p.seed };
+  }
+
+  // Generate the discrete waves from the spectrum of the sea state
   generateDistributions = function(){
-    // Calculate target std according to Z Score
-    // https://en.wikipedia.org/wiki/Normal_distribution#/media/File:Standard_deviation_diagram_micro.svg
-    // https://www.ztable.net/
-    let z_score_OneThird = 0.43; // 66%
-    let z_score_OneTenth = 1.29; // 90% 
+    const sea = generateSea(this.getSeaSettings());
+    this.sea = sea;
+    this.setWaves(sea.waves);
+  }
 
-    // HACK - Use H3 to reduce the mean. We assume that H0 is representing the 66% of the distribution
-    let meanHeight = this.oceanParameters.Hm0 * 0.5/0.66; // H3 is always smaller than Hm0 in the data?
+  // Waves: [{hm0, T, dir, phase}]
+  setWaves = function(waves){
+    this.numWaves = waves.length;
+    this.waveHeights = waves.map(w => Math.abs(w.hm0));
+    this.wavePeriods = waves.map(w => w.T);
+    this.waveDirections = waves.map(w => w.dir || 0);
+    this.wavePhases = waves.map(w => w.phase || 0);
+    // Steepness k a (kept for compatibility)
+    this.waveSteepness = waves.map(w => 4 * Math.PI * Math.PI * Math.abs(w.hm0) * 0.5 / (w.T * w.T * 9.8));
+  }
 
-    let stdOneThird = (this.oceanParameters.H3 - meanHeight) / z_score_OneThird;
-    let stdOneTenth = (this.oceanParameters.H10 - meanHeight) / z_score_OneTenth;
-    let stdHeight = stdOneThird * 0.5 + stdOneTenth * 0.5;
-    this.oceanParameters.stdHeight = stdHeight;
+  // Waves set one by one: they no longer come from a spectrum
+  setDiscreteWaves = function(waves){
+    this.sea = null;
+    this.setWaves(waves);
+  }
 
-    // console.log("Std 1/3: " + stdOneThird + ", Std 1/10: " + stdOneTenth);
-
-
-    // Generate gaussian distribution for wave height
-    this.waveHeights = this.generateGaussianDistribution(meanHeight, stdHeight, this.numWaves);
-    // Limit wave heights
-    this.waveHeights.forEach((el, index) => this.waveHeights[index] = el > this.oceanParameters.hMax ? el / 5 : el);
-    this.waveHeights.forEach((el, index) => this.waveHeights[index] = el < 0 ? Math.abs(meanHeight + stdHeight*(Math.random()- 0.5)) : el); // If negative, resample as Hm0 + sigma*0.5*rand(-1,1);
-    //console.log("Maximum wave height: " + Math.max(...this.waveHeights));
-    //console.log("Minimum wave height: " + Math.min(...this.waveHeights));
-
-    // Generate direction distribution
-    this.waveDirections = this.generateGaussianDistribution(this.oceanParameters.Mdir, this.oceanParameters.Spr1, this.numWaves);
-
-    // Generate steepness distribution
-    this.waveSteepness = this.generateGaussianDistribution(0.25, 0.1, this.numWaves);
-    this.waveSteepness.forEach((el, index) => this.waveSteepness[index] = 0.1 * Math.abs(el));
-    //console.log("Maximum wave steepness: " + Math.max(...this.waveSteepness));
-    //console.log("Minimum wave steepness: " + Math.min(...this.waveSteepness));
+  // Sea state settings, e.g. {Hm0, Tp, gamma, Mdir, Spr1, numComponents, seed}. Regenerates the waves
+  setSeaSettings = function(settings){
+    Object.keys(settings).forEach(key => this.oceanParameters[key] = settings[key]);
+    this.generateDistributions();
+    this.updateHTMLGidget();
   }
 
 
@@ -109,6 +123,7 @@ export class OceanParameters{
 
     this.oceanParameters.Mdir = params.Mdir;
     this.oceanParameters.Spr1 = params.Spr1 < 0 ? 90 : params.Spr1; // Could have invalid number (-999.99);
+    if (params.Tp > 0) this.oceanParameters.Tp = params.Tp;
 
     this.oceanParameters.timestamp = params.timestamp;
 
@@ -290,44 +305,20 @@ export class OceanParameters{
 
 
 
-  getWaveParamsImageData = function(dataTextureSize){
-    // Create a texture
-    //let canvas = document.getElementById('imagedata') ||document.createElement("canvas");
-    let canvas = document.createElement("canvas");
-    canvas.width = dataTextureSize;
-    canvas.height = dataTextureSize;
-
-    let context = canvas.getContext('2d');
-    // Get pixels
-    let imageData = context.getImageData(0, 0, canvas.width, canvas.height);
-
-    // Fill pixels and scale values from 0 to 255
-    for (let i = 0; i < this.numWaves; i++) {
-      // Wave range
-      let waveHeight = Math.abs(this.waveHeights[i]);
-      imageData.data[i * 4 + 1] = 255 * waveHeight / this.WAVE_MAX;
-      // Steepness range
-      // steepness = 4 * Math.PI * Math.PI * hm0 * 0.5 / (T * T * 9.8);
-      // T = Math.sqrt(2*Math.PI*Math.PI*hm0/(9.8 * steepness))
-      let T = Math.sqrt(2 * Math.PI * Math.PI * waveHeight / (9.8 * this.waveSteepness[i]));
-      imageData.data[i * 4] = 255 * T / this.PERIOD_MAX;
-
-      // Direction
-      imageData.data[i * 4 + 2] = 255 * this.waveDirections[i] / 360; // Normalize
-      // Phase
-      imageData.data[i * 4 + 3] = 255 * this.wavePhases[i] / 360; // Normalize
+  // Wave parameters for the GPU: a float RGBA texture of dataTextureSize x dataTextureSize, one texel per wave:
+  // (period / PERIOD_MAX, height / WAVE_MAX, direction / 360, phase / 360). The shader multiplies them back.
+  // Float, not 8 bits: the small components of a spectrum (a few cm) would round to zero in steps of WAVE_MAX / 255.
+  getWaveParamsImageData = function(dataTextureSize, out){
+    const data = out || new Float32Array(dataTextureSize * dataTextureSize * 4);
+    data.fill(0);
+    const wrap360 = deg => ((deg % 360) + 360) % 360;
+    for (let i = 0; i < Math.min(this.numWaves, dataTextureSize * dataTextureSize); i++) {
+      data[i * 4] = this.wavePeriods[i] / this.PERIOD_MAX;
+      data[i * 4 + 1] = Math.abs(this.waveHeights[i]) / this.WAVE_MAX;
+      data[i * 4 + 2] = wrap360(this.waveDirections[i]) / 360;
+      data[i * 4 + 3] = wrap360(this.wavePhases[i] || 0) / 360;
     }
-
-
-    // Put data into the texture
-    // context.putImageData(imageData, 0, 0);
-    // canvas.style = `position: absolute; top: 0px; left: 0px; transform: scale(100)`;
-    // canvas.id = 'imagedata';
-    // document.body.appendChild(canvas);
-    // console.log(this.numWaves + ", " + imageData.data.length/4 );
-
-    // Return image pixels
-    return imageData.data;
+    return data;
   }
 
 
@@ -338,9 +329,7 @@ export class OceanParameters{
       let wave = {
         hm0: this.waveHeights[i],
         dir: this.waveDirections[i],
-        // steepness = 4 * Math.PI * Math.PI * hm0 * 0.5 / (T * T * 9.8);
-        // T = Math.sqrt(2*Math.PI*Math.PI*hm0/(9.8 * steepness))
-        T: Math.sqrt(2*Math.PI * Math.PI * this.waveHeights[i] / (9.8 * this.waveSteepness[i])),
+        T: this.wavePeriods[i],
         phase: this.wavePhases[i] || 0,
       };
       out.push(wave);
@@ -360,67 +349,6 @@ export class OceanParameters{
       link.delete;
       setTimeout(resolve, 10);
     })
-  }
-
-
-
-  // Generate Gaussian Distribution
-  // From uniform noise to normal noise (gaussian)
-  // https://en.wikipedia.org/wiki/Box%E2%80%93Muller_transform
-  // If skew needed, use https://stackoverflow.com/questions/25582882/javascript-math-random-normal-distribution-gaussian-bell-curve
-  // Or better here: https://spin.atomicobject.com/2019/09/30/skew-normal-prng-javascript/
-  generateGaussianDistribution = function (targetMean, targetStd, numPoints, out) {
-
-    out = out || [];
-
-    // Create points
-    for (let i = 0; i < numPoints / 2; i++) {
-
-      let U1 = Math.random();
-      let U2 = Math.random();
-      while (U1 == 0) U1 = Math.random(); // Make sure 0 does not happen
-      while (U2 == 0) U2 = Math.random();
-      // Normally distributed random number
-      let Z0 = targetStd * Math.sqrt(-2 * Math.log(U1)) * Math.cos(2 * Math.PI * U2) + targetMean;
-      let Z1 = targetStd * Math.sqrt(-2 * Math.log(U1)) * Math.sin(2 * Math.PI * U2) + targetMean;
-
-      out.push(Z0);
-      out.push(Z1);
-    }
-
-
-    // Calculate mean and std for testing
-    // let mean = out.reduce((total, el) => total += el) / out.length;
-    // let std = Math.sqrt(out.reduce((total, el) => total += (el - mean) * (el - mean)) / out.length);
-    // console.log("Mean: " + mean);
-    // console.log("Std: " + std);
-
-    return out;
-  }
-
-
-
-
-
-  // USER ACTIONS
-  // Regenerate distribution for waveHeight
-  randomizeWaveHeightDistribution = function(){
-    // Generate gaussian distribution for wave height
-    this.waveHeights = this.generateGaussianDistribution(this.oceanParameters.Hm0, this.oceanParameters.stdHeight, this.numWaves);
-    // Limit wave heights
-    this.waveHeights.forEach((el, index) => this.waveHeights[index] = el < 0 ? Math.abs(meanHeight + stdHeight * (Math.random() - 0.5)) : el); // If negative, resample as Hm0 + sigma*0.5*rand(-1,1);
-    this.waveHeights.forEach((el, index) => this.waveHeights[index] = el > this.oceanParameters.hMax ? el / 5 : el);
-
-    // TODO: SOMETIMES WAVES DISAPPEAR FOR NO REASON...
-    this.updateHTMLGidget();
-  }
-
-  // Regenerate distribution for waveHeight
-  randomizeWaveDirectionDistribution = function () {
-    // Generate gaussian distribution for wave height
-    this.waveDirections = this.generateGaussianDistribution(this.oceanParameters.Mdir, this.oceanParameters.Spr1, this.numWaves);
-
-    this.updateHTMLGidget();
   }
 
 }

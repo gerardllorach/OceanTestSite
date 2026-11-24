@@ -75,6 +75,9 @@ import DiscreteWavesPanel from './Panels/DiscreteWavesPanel.vue';
 import SeaStateAnalysisPanel from './Panels/SeaStateAnalysisPanel.vue';
 import RenderStereoPanel from './Panels/RenderStereoPanel.vue';
 import RenderHeightPanel from './Panels/RenderHeightPanel.vue';
+import SurfaceRipplesPanel from './Panels/SurfaceRipplesPanel.vue';
+import EnvironmentPanel from './Panels/EnvironmentPanel.vue';
+import SeaStatePanel from './Panels/SeaStatePanel.vue';
 
 // Options of a section hide again if none is clicked within this time
 const COLLAPSE_MS = 4000;
@@ -108,8 +111,9 @@ export default {
           id: 'waves', title: 'Waves', icon: '',
           children: [
             { title: 'Discrete waves', component: 'discrete-waves' },
+            { title: 'Surface ripples', component: 'surface-ripples' },
             { title: 'Sea state analysis', icon: '', component: 'sea-state-analysis' },
-            { title: 'Generate sea state', icon: '', unavailable: true },
+            { title: 'Generate sea state', icon: '', component: 'sea-state' },
           ]
         },
         {
@@ -126,7 +130,7 @@ export default {
           children: [
             { title: 'Add/Remove objects', unavailable: true },
             { title: 'Colors', unavailable: true },
-            { title: 'Environment', unavailable: true },
+            { title: 'Environment', component: 'environment' },
           ]
         },
       ],
@@ -280,6 +284,9 @@ export default {
     'sea-state-analysis': SeaStateAnalysisPanel,
     'render-heights': RenderHeightPanel,
     'render-stereo': RenderStereoPanel,
+    'surface-ripples': SurfaceRipplesPanel,
+    'environment': EnvironmentPanel,
+    'sea-state': SeaStatePanel,
   }
 }
 </script>

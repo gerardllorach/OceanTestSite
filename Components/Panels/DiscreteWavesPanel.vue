@@ -85,11 +85,13 @@ export default {
     if (window.sceneManager != undefined){
       this.discreteWaves = window.sceneManager.getDiscreteWaves();
     }
-    // Waves set from elsewhere (e.g. a dropped .json file, handled in SidePanel.vue)
+    // Waves set from elsewhere (e.g. a dropped .json file, handled in SidePanel.vue; the sea state generator; data)
     window.eventBus.on('DiscreteWavesPanel_setDiscreteWaves', this.onWavesSet);
+    window.eventBus.on('OceanEntity_wavesChanged', this.onWavesSet);
   },
   unmounted() {
     window.eventBus.off('DiscreteWavesPanel_setDiscreteWaves', this.onWavesSet);
+    window.eventBus.off('OceanEntity_wavesChanged', this.onWavesSet);
   },
   data() {
     return {

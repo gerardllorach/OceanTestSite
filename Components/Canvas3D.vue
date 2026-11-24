@@ -53,6 +53,21 @@ export default {
     window.eventBus.on('DiscreteWavesPanel_setDiscreteWaves', (discreteWaves) => {
       this.sceneManager.setDiscreteWaves(discreteWaves);
     });
+    // ***** GENERATE SEA STATE PANEL *****
+    window.eventBus.on('SeaStatePanel_changed', (settings) => {
+      this.sceneManager.generateSeaState(settings);
+    });
+    // ***** SURFACE RIPPLES PANEL *****
+    window.eventBus.on('SurfaceRipplesPanel_changed', (settings) => {
+      this.sceneManager.setRippleSettings(settings);
+    });
+    window.eventBus.on('SurfaceRipplesPanel_debugViewChanged', (view) => {
+      this.sceneManager.setDebugView(view);
+    });
+    // ***** ENVIRONMENT PANEL *****
+    window.eventBus.on('EnvironmentPanel_sunChanged', (sun) => {
+      this.sceneManager.setSun(sun);
+    });
     // ***** RECORD STEREO PANEL *****
     window.eventBus.on('RenderStereoPanel_renderFramesClicked', (el) => {
       this.sceneManager.record(el.duration, el.fps, el.grayscale);

@@ -19,13 +19,19 @@
         <div><input type="range" step="0.1" min="0.5" max="5" :value="samplingRate" @input="samplingRate = Number($event.target.value)" @change="update"><span>{{ samplingRate }} Hz</span></div>
       </div>
       <div class="container-horizontal">
-        <label class="checkbox-label" title="Analyse the wave parameters as encoded in the 8-bit texture sent to the GPU (what is rendered), instead of the exact values in the table">
-          <input type="checkbox" :checked="matchGPU" @change="matchGPU = $event.target.checked; update()"> Match rendered (8-bit) wave parameters
+        <label class="checkbox-label" title="Analyse the wave parameters as stored in the float32 texture sent to the GPU (what is rendered), instead of the exact values in the table">
+          <input type="checkbox" :checked="matchGPU" @change="matchGPU = $event.target.checked; update()"> Match rendered (GPU float32) wave parameters
         </label>
         <div class="buttons">
           <button class="clickable" @click="update">Re-run <span class="fa">&#xf2f1;</span></button>
           <button class="clickable" @click="exportAnalysis" :disabled="!hasResult">Export (.json) <span class="fa">&#xf56d;</span></button>
         </div>
+      </div>
+      <div class="container-horizontal">
+        <label class="checkbox-label" title="Include the surface ripples (Waves > Surface ripples) in the surface the buoy follows">
+          <input type="checkbox" :checked="includeRipples" @change="includeRipples = $event.target.checked; update()"> Include surface ripples
+        </label>
+        <div></div>
       </div>
     </div>
 
@@ -34,11 +40,16 @@
       Δf {{ fmt(info.df, 4) }} Hz · {{ info.degreesOfFreedom }} degrees of freedom · Nyquist {{ fmt(info.nyquist, 2) }} Hz
     </p>
     <p class="warning" v-for="w in warnings" :key="w">{{ w }}</p>
+    <p v-if="hasResult && hasRipples" class="record-info">
+      Surface ripples: {{ rippleInfo.numInBand }} of {{ rippleInfo.numRipples }} are inside the buoy band
+      (below {{ fmt(rippleInfo.cutoff, 2) }} Hz, 0.9 × Nyquist) and are scaled by the response of a {{ rippleInfo.buoyDiameter }} m hull.
+      The other {{ rippleInfo.numAboveBand }} are removed, as the anti-alias filter of a buoy does, instead of being aliased.
+    </p>
     <p v-if="!hasResult && message">{{ message }}</p>
 
     <!-- TABS -->
     <div v-if="hasResult" class="oa-tabs" role="tablist">
-      <button v-for="t in tabs" :key="t.id" role="tab" class="clickable" :class="{ 'oa-tab-sel': tab == t.id }"
+      <button v-for="t in visibleTabs" :key="t.id" role="tab" class="clickable" :class="{ 'oa-tab-sel': tab == t.id }"
         :aria-selected="tab == t.id" @click="selectTab(t.id)">{{ t.title }}</button>
     </div>
 
@@ -74,9 +85,12 @@
         ({{ matchGPU ? 'as encoded for the GPU' : 'exact values of the wave table' }}). Each wave is a sinusoid of
         amplitude H/2, so it adds a variance of (H/2)²/2 at frequency 1/T, from its direction.
         Statistics of individual waves (zero-crossing) have no theoretical equivalent for a sum of a few waves (–).
+        <template v-if="showFull">The theoretical column includes the surface ripples the buoy can follow (inside its band,
+          scaled by the hull response). <b>Full surface</b>: with all the ripples, as rendered. A buoy cannot measure it:
+          the short ripples mostly change the high-frequency moments (T<sub>m02</sub>, ε) and the slopes.</template>
       </p>
       <p v-if="theoryInterfering > 0" class="warning">{{ theoryInterfering }} group(s) of waves share exactly the same
-        period{{ matchGPU ? ' (the 8-bit encoding rounds periods to steps of 0.078 s)' : '' }}. They interfere, so their
+        period. They interfere, so their
         combined height and direction depend on their phases. The theoretical values include this interference.</p>
 
       <div v-for="group in paramGroups" :key="group.title" class="param-group">
@@ -86,6 +100,7 @@
               <th colspan="2" class="param-group-title">{{ group.title }}</th>
               <th class="param-value">Analytical</th>
               <th class="param-value">Theoretical</th>
+              <th class="param-value" v-if="showFull">Full surface</th>
             </tr>
           </thead>
           <tbody>
@@ -94,6 +109,7 @@
               <td class="param-desc">{{ row.name }}<div v-if="row.cf" class="param-cf">{{ row.cf }}</div></td>
               <td class="param-value">{{ row.measured }} <small v-if="row.measured != '–'">{{ row.unit }}</small></td>
               <td class="param-value">{{ row.theoretical }} <small v-if="row.theoretical != '–'">{{ row.unit }}</small></td>
+              <td class="param-value" v-if="showFull">{{ row.full }} <small v-if="row.full != '–'">{{ row.unit }}</small></td>
             </tr>
           </tbody>
         </table>
@@ -164,7 +180,9 @@
       <div class="chart" ref="chart-spectrum"></div>
       <p class="chart-title">Mean direction per band (waves from)</p>
       <div class="chart" ref="chart-spectrum-dir"></div>
-      <p class="footnote">The area under the curve is the variance m0, so Hs = 4·√m0. Click the y-axis to switch between
+      <p class="footnote">Dashed line: target spectrum, when the waves come from Waves &gt; Generate sea state. The measured
+        spectrum is spikier: each of the few dozen waves is a single frequency, narrower than the spectral bands.
+        The area under the curve is the variance m0, so Hs = 4·√m0. Click the y-axis to switch between
         m²/Hz against frequency and m²/s against period (S(T) = S(f)/T²).</p>
     </div>
 
@@ -211,6 +229,65 @@
         check factor should be 1. Bands with less than 1% of the peak energy are hidden.</p>
     </div>
 
+    <!-- SURFACE RIPPLES AND SLOPES -->
+    <div v-if="hasResult && hasRipples" v-show="tab == 'ripples'">
+      <div class="stats">
+        <span>Source <b>{{ rippleInfo.source }}</b></span>
+        <span>Wind <b>{{ fmt(rippleInfo.windSpeed, 1) }} m/s</b> from <b>{{ fmt(rippleInfo.windDir, 0) }}° {{ compass(rippleInfo.windDir) }}</b></span>
+        <span>Ripples <b>{{ rippleInfo.numRipples }}</b> ({{ rippleInfo.numInBand }} in the buoy band)</span>
+        <span>Buoy band <b>&lt; {{ fmt(rippleInfo.cutoff, 2) }} Hz</b></span>
+      </div>
+      <div class="param-group">
+        <table class="param-table">
+          <thead>
+            <tr>
+              <th class="param-group-title">Mean square slope</th>
+              <th class="param-value">Upwind</th>
+              <th class="param-value">Crosswind</th>
+              <th class="param-value">Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="row in rippleSlopeRows" :key="row.name" :class="{ 'row-total': row.total }">
+              <td class="param-desc">{{ row.name }}</td>
+              <td class="param-value">{{ fmt(row.v.up, 4) }}</td>
+              <td class="param-value">{{ fmt(row.v.cross, 4) }}</td>
+              <td class="param-value">{{ fmt(row.v.up + row.v.cross, 4) }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="param-group">
+        <table class="param-table">
+          <thead>
+            <tr>
+              <th class="param-group-title">Height added by the ripples</th>
+              <th class="param-value">Δm<sub>0</sub></th>
+              <th class="param-value">ΔH<sub>m0</sub></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="param-desc">All ripples (rendered surface)</td>
+              <td class="param-value">{{ fmt(rippleInfo.deltaM0.full * 1e4, 2) }} <small>cm²</small></td>
+              <td class="param-value">{{ fmt(rippleInfo.deltaHm0.full * 100, 2) }} <small>cm</small></td>
+            </tr>
+            <tr>
+              <td class="param-desc">Ripples the buoy follows (in band, hull response)</td>
+              <td class="param-value">{{ fmt(rippleInfo.deltaM0.inBand * 1e4, 2) }} <small>cm²</small></td>
+              <td class="param-value">{{ fmt(rippleInfo.deltaHm0.inBand * 100, 2) }} <small>cm</small></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="chart-title">Variance of each wave and ripple</p>
+      <div class="chart" ref="chart-ripples"></div>
+      <p class="footnote">Each point is one sinusoid, with variance (H/2)²/2. Ripples follow the saturation range
+        F(k) ∝ k⁻³: with log-spaced wavenumbers each one has the same slope variance, so their height variance falls as
+        f⁻⁴. Their slopes are scaled so that waves + ripples + tail match the Cox &amp; Munk (1954) mean square slope for
+        the wind speed. The tail is only roughness in the shader (sun glitter and Fresnel), it has no height.</p>
+    </div>
+
   </div>
 
 </template>
@@ -232,6 +309,7 @@ export default {
   mounted() {
     // Events
     window.eventBus.on('DiscreteWavesPanel_setDiscreteWaves', this.onWavesChanged);
+    window.eventBus.on('OceanEntity_ripplesChanged', this.onRipplesChanged);
     window.addEventListener('resize', this.windowResize);
     // If scene exists, analyse waves
     if (window.sceneManager != undefined)
@@ -241,6 +319,7 @@ export default {
   },
   unmounted() {
     window.eventBus.off('DiscreteWavesPanel_setDiscreteWaves', this.onWavesChanged);
+    window.eventBus.off('OceanEntity_ripplesChanged', this.onRipplesChanged);
     window.removeEventListener('resize', this.windowResize);
     // A redraw may still be pending (resize, tab change) when the panel closes
     cancelAnimationFrame(this.resizeFrame);
@@ -251,6 +330,11 @@ export default {
       duration: 60, // minutes
       samplingRate: 3,
       matchGPU: true,
+      includeRipples: true,
+      hasRipples: false,
+      showFull: false,
+      rippleInfo: {},
+      rippleSlopeRows: [],
       hasResult: false,
       message: '',
       warnings: [],
@@ -262,6 +346,7 @@ export default {
         { id: 'spectrum', title: 'Wave spectrum' },
         { id: 'polar', title: 'Polar spectrum' },
         { id: 'fourier', title: 'Fourier coefficients' },
+        { id: 'ripples', title: 'Ripples & slopes' },
       ],
       // Small reactive summaries for the template (the full result is kept in this.result)
       info: {},
@@ -285,11 +370,31 @@ export default {
       spectrumUnits: 'Hz',
     }
   },
+  computed: {
+    visibleTabs() {
+      return this.tabs.filter(t => t.id != 'ripples' || this.hasRipples);
+    },
+  },
   methods: {
 
     // EVENTS
+    // Changing the waves also changes the ripples (both events come in the same call): analyse once
     onWavesChanged: function (waves) {
-      this.update(waves);
+      this.pendingWaves = waves;
+      this.scheduleUpdate();
+    },
+    onRipplesChanged: function () {
+      this.scheduleUpdate();
+    },
+    scheduleUpdate: function () {
+      if (this.updateQueued) return;
+      this.updateQueued = true;
+      queueMicrotask(() => {
+        this.updateQueued = false;
+        const waves = this.pendingWaves;
+        this.pendingWaves = undefined;
+        if (!this.isUnmounted) this.update(waves);
+      });
     },
 
     // USER INPUT
@@ -315,9 +420,12 @@ export default {
         return;
       }
 
+      const ripples = window.sceneManager ? window.sceneManager.getRipples() : null;
       const r = this.oceanAnalysis.analyze(waves, {
-        samplingRate: this.samplingRate, seconds: this.duration * 60, matchGPU: this.matchGPU });
+        samplingRate: this.samplingRate, seconds: this.duration * 60, matchGPU: this.matchGPU,
+        ripples, includeRipples: this.includeRipples });
       this.result = r;
+      this.updateRippleInfo(r);
 
       const s = r.settings;
       this.info = { ...s, segmentSeconds: Math.round(s.segmentLength / s.samplingRate) };
@@ -345,16 +453,49 @@ export default {
       this.$nextTick(() => this.drawActiveTab());
     },
 
+    // Surface ripples: summary for the template
+    updateRippleInfo: function (r) {
+      const s = r.ripples;
+      this.hasRipples = !!s;
+      this.showFull = !!r.theoreticalFull;
+      if (!s) {
+        if (this.tab == 'ripples') this.tab = 'overview';
+        this.rippleInfo = {};
+        this.rippleSlopeRows = [];
+        return;
+      }
+      this.rippleInfo = {
+        source: s.settings.mode == 'wind' ? 'Wind' : 'From sea state',
+        windSpeed: s.windSpeed, windDir: s.windDir,
+        numRipples: s.numRipples, numInBand: s.numInBand, numAboveBand: s.numAboveBand,
+        cutoff: s.cutoff, buoyDiameter: s.buoyDiameter,
+        deltaM0: { ...s.deltaM0 }, deltaHm0: { ...s.deltaHm0 },
+      };
+      const sl = s.slopes;
+      this.rippleSlopeRows = [
+        { name: 'Waves (Gerstner)', v: sl.gerstner },
+        { name: 'Ripples (drawn when resolved, measured in band)', v: sl.ripples },
+        { name: 'Tail (roughness only)', v: sl.tail },
+        { name: 'Total', v: sl.total, total: true },
+        { name: 'Cox & Munk (1954) target', v: sl.coxMunk },
+      ];
+    },
+
     // Parameter table: analytical (measured by the buoy) and theoretical (from the input waves) columns
     buildParamGroups: function (r) {
-      const b = r.bulk, z = r.zeroCrossing, t = r.theoretical || {}, f = this.fmt;
+      const b = r.bulk, z = r.zeroCrossing, t = r.theoretical || {}, tf = r.theoreticalFull || {}, f = this.fmt;
       const NA = '–';
-      const row = (symbol, measured, theoretical, unit, name, cf) => ({ symbol, measured, theoretical, unit, name, cf });
+      // `theoretical` is NA or a function of a theoretical result: it fills the Theoretical (in the buoy band) and the
+      // Full surface (with all the ripples) columns
+      const row = (symbol, measured, theoretical, unit, name, cf) => {
+        const fn = typeof theoretical == 'function';
+        return { symbol, measured, unit, name, cf, theoretical: fn ? theoretical(t) : theoretical, full: fn ? theoretical(tf) : theoretical };
+      };
       const pair = (x, y, d) => (isFinite(x) && isFinite(y)) ? f(x, d) + ', ' + f(y, d) : NA;
       const peak2D = (T, dir) => (isFinite(T) && isFinite(dir)) ? f(T, 1) + ' s @ ' + f(dir, 0) + '°' : NA;
       return [
         { title: 'Wave heights', rows: [
-          row('H<sub>m0</sub>', f(b.Hm0, 2), f(t.Hm0, 2), 'm', 'Spectral significant wave height, 4·√m0', 'sea_surface_wave_significant_height'),
+          row('H<sub>m0</sub>', f(b.Hm0, 2), x => f(x.Hm0, 2), 'm', 'Spectral significant wave height, 4·√m0', 'sea_surface_wave_significant_height'),
           row('H<sub>1/3</sub>', f(z.H3, 2), NA, 'm', 'Mean height of the highest third of waves (zero-crossing)', ''),
           row('H<sub>1/10</sub>', f(z.H10, 2), NA, 'm', 'Mean height of the highest tenth of waves (zero-crossing)', 'sea_surface_wave_mean_height_of_highest_tenth'),
           row('H<sub>max</sub>', f(z.Hmax, 2), NA, 'm', 'Maximum wave height (zero-crossing)', 'sea_surface_wave_maximum_height'),
@@ -364,36 +505,36 @@ export default {
           row('η<sub>min</sub>', f(z.minTrough, 2), NA, 'm', 'Maximum trough depth', 'sea_surface_wave_maximum_trough_depth'),
         ]},
         { title: 'Wave periods', rows: [
-          row('T<sub>p</sub>', f(b.Tp, 2), f(t.Tp, 2), 's', 'Peak period, at the spectral maximum', 'sea_surface_wave_period_at_variance_spectral_density_maximum'),
-          row('T<sub>m01</sub>', f(b.Tm01, 2), f(t.Tm01, 2), 's', 'Mean period m0/m1 (CDIP average period Ta)', 'sea_surface_wave_mean_period_from_variance_spectral_density_first_frequency_moment'),
-          row('T<sub>m02</sub>', f(b.Tm02, 2), f(t.Tm02, 2), 's', 'Spectral zero-crossing period √(m0/m2)', 'sea_surface_wave_mean_period_from_variance_spectral_density_second_frequency_moment'),
-          row('T<sub>m-10</sub>', f(b.Tm_10, 2), f(t.Tm_10, 2), 's', 'Energy period m-1/m0', 'sea_surface_wave_mean_period_from_variance_spectral_density_inverse_frequency_moment'),
+          row('T<sub>p</sub>', f(b.Tp, 2), x => f(x.Tp, 2), 's', 'Peak period, at the spectral maximum', 'sea_surface_wave_period_at_variance_spectral_density_maximum'),
+          row('T<sub>m01</sub>', f(b.Tm01, 2), x => f(x.Tm01, 2), 's', 'Mean period m0/m1 (CDIP average period Ta)', 'sea_surface_wave_mean_period_from_variance_spectral_density_first_frequency_moment'),
+          row('T<sub>m02</sub>', f(b.Tm02, 2), x => f(x.Tm02, 2), 's', 'Spectral zero-crossing period √(m0/m2)', 'sea_surface_wave_mean_period_from_variance_spectral_density_second_frequency_moment'),
+          row('T<sub>m-10</sub>', f(b.Tm_10, 2), x => f(x.Tm_10, 2), 's', 'Energy period m-1/m0', 'sea_surface_wave_mean_period_from_variance_spectral_density_inverse_frequency_moment'),
           row('T<sub>z</sub>', f(z.Tz, 2), NA, 's', 'Mean zero up-crossing period (zero-crossing)', ''),
           row('T<sub>1/3</sub>', f(z.T3, 2), NA, 's', 'Mean period of the highest third of waves (zero-crossing)', 'sea_surface_wave_significant_period'),
           row('T<sub>1/10</sub>', f(z.T10, 2), NA, 's', 'Mean period of the highest tenth of waves (zero-crossing)', 'sea_surface_wave_mean_period_of_highest_tenth'),
           row('T<sub>max</sub>', f(z.Tmax, 2), NA, 's', 'Period of the highest wave (zero-crossing)', 'sea_surface_wave_period_of_highest_wave'),
         ]},
         { title: 'Wave direction', rows: [
-          row('D<sub>p</sub>', f(b.Dp, 1), f(t.Dp, 1), '°', 'Peak direction: mean direction at the spectral peak, atan2(b1, a1)', 'sea_surface_wave_from_direction_at_variance_spectral_density_maximum'),
-          row('M<sub>dir</sub>', f(b.Mdir, 1), f(t.Mdir, 1), '°', 'Mean direction over the whole spectrum, atan2(b̄1, ā1)', 'sea_surface_wave_from_direction'),
-          row('σ<sub>p</sub>', f(b.spreadPeak, 1), f(t.spreadPeak, 1), '°', 'Directional spread at the spectral peak, σ1 = √(2(1−r1))', 'sea_surface_wave_directional_spread_at_variance_spectral_density_maximum'),
-          row('σ', f(b.spreadMean, 1), f(t.spreadMean, 1), '°', 'Directional spread over the whole spectrum, from ā1, b̄1', 'sea_surface_wave_directional_spread'),
+          row('D<sub>p</sub>', f(b.Dp, 1), x => f(x.Dp, 1), '°', 'Peak direction: mean direction at the spectral peak, atan2(b1, a1)', 'sea_surface_wave_from_direction_at_variance_spectral_density_maximum'),
+          row('M<sub>dir</sub>', f(b.Mdir, 1), x => f(x.Mdir, 1), '°', 'Mean direction over the whole spectrum, atan2(b̄1, ā1)', 'sea_surface_wave_from_direction'),
+          row('σ<sub>p</sub>', f(b.spreadPeak, 1), x => f(x.spreadPeak, 1), '°', 'Directional spread at the spectral peak, σ1 = √(2(1−r1))', 'sea_surface_wave_directional_spread_at_variance_spectral_density_maximum'),
+          row('σ', f(b.spreadMean, 1), x => f(x.spreadMean, 1), '°', 'Directional spread over the whole spectrum, from ā1, b̄1', 'sea_surface_wave_directional_spread'),
           row('2D peak', peak2D(1 / r.polar.peak.f, r.polar.peak.dir),
-            t.largestWave ? peak2D(t.largestWave.T, t.largestWave.dir) : NA, '',
+            x => x.largestWave ? peak2D(x.largestWave.T, x.largestWave.dir) : NA, '',
             'Maximum of the directional spectrum (MEM). Theoretical: the largest input wave', ''),
-          row('a1, b1', pair(b.a1p, b.b1p, 3), pair(t.a1p, t.b1p, 3), '', 'First-order Fourier coefficients at the peak', ''),
-          row('a2, b2', pair(b.a2p, b.b2p, 3), pair(t.a2p, t.b2p, 3), '', 'Second-order Fourier coefficients at the peak', ''),
-          row('ā1, b̄1', pair(b.a1, b.b1, 3), pair(t.a1, t.b1, 3), '', 'First-order coefficients, energy-weighted over the spectrum', ''),
-          row('ā2, b̄2', pair(b.a2, b.b2, 3), pair(t.a2, t.b2, 3), '', 'Second-order coefficients, energy-weighted over the spectrum', ''),
+          row('a1, b1', pair(b.a1p, b.b1p, 3), x => pair(x.a1p, x.b1p, 3), '', 'First-order Fourier coefficients at the peak', ''),
+          row('a2, b2', pair(b.a2p, b.b2p, 3), x => pair(x.a2p, x.b2p, 3), '', 'Second-order Fourier coefficients at the peak', ''),
+          row('ā1, b̄1', pair(b.a1, b.b1, 3), x => pair(x.a1, x.b1, 3), '', 'First-order coefficients, energy-weighted over the spectrum', ''),
+          row('ā2, b̄2', pair(b.a2, b.b2, 3), x => pair(x.a2, x.b2, 3), '', 'Second-order coefficients, energy-weighted over the spectrum', ''),
         ]},
         { title: 'Spectral shape', rows: [
-          row('m<sub>0</sub>', f(b.m0, 4), f(t.m0, 4), 'm²', 'Variance of the sea surface (zeroth spectral moment)', ''),
-          row('f<sub>p</sub>', f(b.fp, 4), f(t.fp, 4), 'Hz', 'Peak frequency', ''),
-          row('ε', f(b.bandwidthEpsilon, 3), f(t.bandwidthEpsilon, 3), '', 'Spectral width, √(1 − m2²/(m0·m4)) (Cartwright & Longuet-Higgins)', ''),
-          row('ν', f(b.bandwidthNu, 3), f(t.bandwidthNu, 3), '', 'Spectral narrowness, √(m0·m2/m1² − 1) (Longuet-Higgins)', ''),
+          row('m<sub>0</sub>', f(b.m0, 4), x => f(x.m0, 4), 'm²', 'Variance of the sea surface (zeroth spectral moment)', ''),
+          row('f<sub>p</sub>', f(b.fp, 4), x => f(x.fp, 4), 'Hz', 'Peak frequency', ''),
+          row('ε', f(b.bandwidthEpsilon, 3), x => f(x.bandwidthEpsilon, 3), '', 'Spectral width, √(1 − m2²/(m0·m4)) (Cartwright & Longuet-Higgins)', ''),
+          row('ν', f(b.bandwidthNu, 3), x => f(x.bandwidthNu, 3), '', 'Spectral narrowness, √(m0·m2/m1² − 1) (Longuet-Higgins)', ''),
           row('Q<sub>p</sub>', f(b.peakedness, 2), NA, '', 'Goda peakedness parameter (undefined for a spectrum of single lines)', ''),
-          row('S<sub>p</sub>', f(b.steepness, 4), f(t.steepness, 4), '', 'Significant steepness, 2π·Hm0/(g·Tp²)', ''),
-          row('Check', f(b.checkFactorPeak, 3), f(t.checkFactorPeak, 3), '', 'Check factor at the peak, √((Cnn+Cee)/Czz): horizontal / vertical, 1 for deep water', ''),
+          row('S<sub>p</sub>', f(b.steepness, 4), x => f(x.steepness, 4), '', 'Significant steepness, 2π·Hm0/(g·Tp²)', ''),
+          row('Check', f(b.checkFactorPeak, 3), x => f(x.checkFactorPeak, 3), '', 'Check factor at the peak, √((Cnn+Cee)/Czz): horizontal / vertical, 1 for deep water', ''),
         ]},
       ];
     },
@@ -406,6 +547,36 @@ export default {
       else if (this.tab == 'spectrum') this.drawSpectrum();
       else if (this.tab == 'polar') this.drawPolar();
       else if (this.tab == 'fourier') this.drawFourier();
+      else if (this.tab == 'ripples') this.drawRipples();
+    },
+
+    // Variance of each sinusoid against its frequency (log-log): waves, ripples in and above the buoy band
+    drawRipples: function () {
+      const r = this.result;
+      if (!r || !r.ripples || this.tab != 'ripples') return;
+      const C = window.AnalysisCharts.COLORS;
+      const variance = w => Math.pow(w.hm0 / 2, 2) / 2;
+      const waves = r.waves.filter(w => w.T > 0 && w.hm0 > 0);
+      const inBand = r.ripples.ripples.filter(w => w.inBand), above = r.ripples.ripples.filter(w => !w.inBand);
+      const all = waves.concat(r.ripples.ripples);
+      const fMin = Math.min(...all.map(w => 1 / w.T)), fMax = Math.max(...all.map(w => 1 / w.T));
+      const series = (list, name, color) => ({ name, color, type: 'points', radius: 4, unit: 'm²', digits: 6,
+        x: list.map(w => 1 / w.T), y: list.map(variance) });
+      window.AnalysisCharts.lineChart(this.$refs['chart-ripples'], {
+        height: 260,
+        x: { label: 'Frequency (Hz)', type: 'log', domain: [fMin / 1.3, fMax * 1.3],
+          tickValues: [0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10, 20].filter(v => v >= fMin / 1.3 && v <= fMax * 1.3),
+          tickFormat: v => String(v) },
+        y: { label: 'Variance (m²)', type: 'log' },
+        series: [
+          series(waves, 'Waves', C.series[0]),
+          series(inBand, 'Ripples in the buoy band', C.series[2]),
+          series(above, 'Ripples above the band', C.series[1]),
+        ].filter(s => s.x.length),
+        markers: [{ x: r.ripples.cutoff, label: 'Buoy band' }, { x: r.settings.nyquist, label: 'Nyquist' }],
+        directLabels: false,
+        tooltipX: v => `${v.toFixed(3)} Hz (${(1 / v).toFixed(2)} s)`,
+      });
     },
 
     drawDisplacement: function () {
@@ -513,11 +684,19 @@ export default {
       const C = window.AnalysisCharts.COLORS;
       const a = this.spectrumAxis();
       const peakX = this.spectrumUnits == 'Hz' ? r.bulk.fp : r.bulk.Tp;
+      const series = [{ name: 'Energy density', x: a.x, y: a.density, color: C.series[0], type: 'area', unit: a.unit, digits: 4 }];
+      // Target spectrum of the generated sea (Waves > Generate sea state), when the waves come from one
+      const freqs = a.ks.map(k => r.spectrum.freq[k]);
+      const target = window.sceneManager ? window.sceneManager.getSeaSpectralDensity(freqs) : null;
+      if (target)
+        series.push({ name: 'Target spectrum', x: a.x, y: this.spectrumUnits == 'Hz' ? target : target.map((S, i) => S * freqs[i] * freqs[i]),
+          color: C.ink2, dashed: true, width: 1.5, unit: a.unit, digits: 4 });
       window.AnalysisCharts.lineChart(this.$refs['chart-spectrum'], {
         height: 240,
         x: a.axis,
         y: { label: 'Energy density (' + a.unit + ')' },
-        series: [{ name: 'Energy density', x: a.x, y: a.density, color: C.series[0], type: 'area', unit: a.unit, digits: 4 }],
+        series,
+        directLabels: false,
         markers: [{ x: peakX, label: 'Tp ' + r.bulk.Tp.toFixed(1) + ' s' }],
         onYAxisClick: this.toggleSpectrumUnits,
         yAxisTitle: 'Click to switch between m²/Hz and m²/s',
@@ -615,6 +794,8 @@ export default {
         waves: r.waves,
         bulk: r.bulk,
         theoretical: r.theoretical,
+        theoreticalFull: r.theoreticalFull,
+        ripples: r.ripples,
         zeroCrossing: { ...this.zc, waves: r.zeroCrossing.waves },
         spectrum: {
           frequency: toArray(r.spectrum.freq), energyDensity: toArray(r.spectrum.Czz),
@@ -841,6 +1022,10 @@ input {
 
 .param-value small {
   color: #52514e;
+}
+
+.row-total td {
+  font-weight: 600;
 }
 
 .param-cf {

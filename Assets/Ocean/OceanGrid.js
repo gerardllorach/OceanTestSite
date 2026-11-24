@@ -51,6 +51,8 @@ export class OceanGrid {
     let divisions = Math.floor(Math.sqrt(numVertices/extraYFactor));
     
     let gridGeom = new THREE.PlaneGeometry( size, size, divisions , divisions * extraYFactor );
+    // Spacing between vertices (used by the shader to know which ripples the mesh can represent)
+    this.gridStep = new THREE.Vector2(size / divisions, size / (divisions * extraYFactor));
 
     console.log("Number of vertices: " + divisions * divisions * extraYFactor);
     

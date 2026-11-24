@@ -17,7 +17,7 @@ const fmt = (v, d = 2) => (v == null || !isFinite(v)) ? '–' : Number(v).toFixe
 // Line / area / points / bars chart with crosshair tooltip
 // ---------------------------------------------------------------------------------------------
 // opt = {
-//   height, x: {label, type: 'linear'|'log', domain, ticks, tickFormat}, y: {label, domain, ticks, tickFormat},
+//   height, x: {label, type: 'linear'|'log', domain, ticks, tickFormat}, y: {label, type: 'linear'|'log', domain, ticks, tickFormat},
 //   series: [{name, color, x, y, type: 'line'|'area'|'points', unit, digits}],
 //   bars: {x0, x1, y, color, name},
 //   markers: [{x, label}], hlines: [{y, label}],
@@ -50,23 +50,30 @@ export function lineChart(el, opt) {
   const g = svg.append('g').attr('transform', `translate(${m.left},${m.top})`);
 
   const x = (opt.x.type == 'log' ? d3.scaleLog() : d3.scaleLinear()).domain(opt.x.domain).range([0, iw]);
+  const yLog = opt.y.type == 'log';
+  const yValid = v => isFinite(v) && (!yLog || v > 0);
   let yDomain = opt.y.domain;
   if (!yDomain) {
-    let lo = 0, hi = 0;
+    let lo = yLog ? Infinity : 0, hi = yLog ? -Infinity : 0;
     const visit = (xs, ys) => {
       for (let i = 0; i < ys.length; i++) {
-        if (!isFinite(ys[i]) || xs[i] < x.domain()[0] || xs[i] > x.domain()[1]) continue;
+        if (!yValid(ys[i]) || xs[i] < x.domain()[0] || xs[i] > x.domain()[1]) continue;
         lo = Math.min(lo, ys[i]); hi = Math.max(hi, ys[i]);
       }
     };
     series.forEach(s => visit(s.x, s.y));
     if (opt.bars) visit(opt.bars.x0, opt.bars.y);
-    if (hi == lo) hi = lo + 1;
-    const pad = (hi - lo) * 0.06;
-    yDomain = [lo < 0 ? lo - pad : 0, hi + pad];
+    if (yLog) {
+      if (!isFinite(lo)) { lo = 1e-3; hi = 1; }
+      yDomain = [lo / 2, (hi > lo ? hi : lo * 10) * 2];
+    } else {
+      if (hi == lo) hi = lo + 1;
+      const pad = (hi - lo) * 0.06;
+      yDomain = [lo < 0 ? lo - pad : 0, hi + pad];
+    }
   }
-  const y = d3.scaleLinear().domain(yDomain).range([ih, 0]);
-  if (!opt.y.domain) y.nice(5);
+  const y = (yLog ? d3.scaleLog() : d3.scaleLinear()).domain(yDomain).range([ih, 0]);
+  if (!opt.y.domain) y.nice(yLog ? undefined : 5);
 
   // Grid (recessive)
   const gridAxis = d3.axisLeft(y).ticks(opt.y.ticks || 5).tickSize(-iw).tickFormat('');
@@ -95,12 +102,12 @@ export function lineChart(el, opt) {
   series.forEach(s => {
     const idx = d3.range(s.y.length).filter(i => s.x[i] > 0 || opt.x.type != 'log');
     if (s.type == 'points') {
-      plot.selectAll(null).data(idx.filter(i => isFinite(s.y[i]))).enter().append('circle')
+      plot.selectAll(null).data(idx.filter(i => yValid(s.y[i]))).enter().append('circle')
         .attr('cx', i => x(s.x[i])).attr('cy', i => y(s.y[i])).attr('r', s.radius || 3)
         .attr('fill', s.color).attr('stroke', COLORS.surface).attr('stroke-width', 1);
       return;
     }
-    const line = d3.line().defined(i => isFinite(s.y[i])).x(i => x(s.x[i])).y(i => y(s.y[i]));
+    const line = d3.line().defined(i => yValid(s.y[i])).x(i => x(s.x[i])).y(i => y(s.y[i]));
     if (s.type == 'area') {
       const area = d3.area().defined(i => isFinite(s.y[i])).x(i => x(s.x[i])).y0(y(0)).y1(i => y(s.y[i]));
       plot.append('path').datum(idx).attr('d', area).attr('fill', s.color).attr('fill-opacity', 0.14);
@@ -140,7 +147,7 @@ export function lineChart(el, opt) {
   if (opt.x.tickValues) xAxis.tickValues(opt.x.tickValues);
   if (opt.x.tickFormat) xAxis.tickFormat(opt.x.tickFormat);
   g.append('g').attr('class', 'oa-axis').attr('transform', `translate(0,${ih})`).call(xAxis);
-  const yAxis = d3.axisLeft(y).ticks(opt.y.ticks || 5);
+  const yAxis = d3.axisLeft(y).ticks(opt.y.ticks || 5, yLog ? '.0e' : undefined);
   if (opt.y.tickValues) yAxis.tickValues(opt.y.tickValues);
   if (opt.y.tickFormat) yAxis.tickFormat(opt.y.tickFormat);
   g.append('g').attr('class', 'oa-axis').call(yAxis);

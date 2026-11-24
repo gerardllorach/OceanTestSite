@@ -3,7 +3,8 @@ import { GLTFLoader } from '/OceanTestSite/lib/three.js/examples/jsm/loaders/GLT
 
 class SkyboxEntity {
 
-  constructor(scene){
+  // onLoad(root): called once the skybox is in the scene (e.g. to capture it for the water reflections)
+  constructor(scene, onLoad){
     const gltfLoader = new GLTFLoader();
     gltfLoader.load('/OceanTestSite/Assets/Skybox/skybox.glb', (gltf) => { // '../Assets/Skybox/skybox.glb'
       // GLTF scene
@@ -16,6 +17,8 @@ class SkyboxEntity {
       root.position.y = -1;
 
       scene.add(root);
+      this.root = root;
+      if (onLoad) onLoad(root);
     });
 
     scene.background = new THREE.Color(0x47A0B9);

@@ -6,6 +6,7 @@ import { SkyboxEntity } from '/OceanTestSite/Assets/Skybox/SkyboxEntity.js';
 
 import * as FogShader from '/OceanTestSite/Assets/Terrain/FogShader.js'
 import { OceanEntity } from '/OceanTestSite/Assets/Ocean/OceanEntity.js';
+import { spectralDensity } from '/OceanTestSite/Assets/Ocean/SeaSpectrum.js';
 
 import { TextMeshEntity } from '/OceanTestSite/Assets/TextMesh/TextMeshEntity.js';
 
@@ -98,10 +99,10 @@ class SceneManager{
       #endif
     #endif`
 
-    // Skybox
-    this.skybox = new SkyboxEntity(scene);
     // Ocean
     this.ocean = new OceanEntity(scene);
+    // Skybox. Once loaded, the water reflects it
+    this.skybox = new SkyboxEntity(scene, (root) => this.ocean.captureSky(this.renderer, root));
 
 
 
@@ -144,20 +145,103 @@ class SceneManager{
       scene.add(light);
     }
 
-    { // LIGHT
+    { // LIGHT (sun): its direction is set by setSun()
       const color = 0xFFFFFF;
       const intensity = 0.8;
       const light = new THREE.DirectionalLight(color, intensity);
       light.position.set(0, 10, 0);
-      light.target.position.set(-5, 0, 0);
+      light.target.position.set(0, 0, 0);
       scene.add(light);
       scene.add(light.target);
+      this.sunLight = light;
     }
+    this.setSun(this.sunSettings);
 
 
     // RECORDER
     this.recorder = new Recorder(scene, this.ocean);
 
+  }
+
+
+
+  // SUN
+  // The sun moves on a vertical semicircle (Scene > Environment): arcAngle 0 = horizon at bearing `azimuth`,
+  // 90 = zenith, 180 = horizon at the opposite bearing. Bearings in degrees clockwise from north (north = -z, east = +x).
+  sunSettings = { arcAngle: 90, azimuth: 90 };
+  sunDirection = new THREE.Vector3(0, 1, 0);
+  sunColor = new THREE.Color(1, 1, 1);
+
+  setSun = function(settings){
+    Object.assign(this.sunSettings, settings);
+    const a = this.sunSettings.arcAngle * Math.PI / 180;
+    const phi = this.sunSettings.azimuth * Math.PI / 180;
+    // Horizontal direction of the bearing phi, times cos(a), plus the vertical, times sin(a)
+    this.sunDirection.set(Math.cos(a) * Math.sin(phi), Math.sin(a), -Math.cos(a) * Math.cos(phi)).normalize();
+    // A low sun is dimmer and warmer (longer path through the atmosphere)
+    const y = this.sunDirection.y;
+    const warm = THREE.MathUtils.smoothstep(y, 0.0, 0.35);
+    const intensity = THREE.MathUtils.lerp(0.45, 1.0, THREE.MathUtils.smoothstep(y, 0.0, 0.5));
+    this.sunColor.setRGB(
+      intensity,
+      THREE.MathUtils.lerp(0.62, 0.97, warm) * intensity,
+      THREE.MathUtils.lerp(0.38, 0.92, warm) * intensity);
+    // Ocean shader and directional light (lights the other objects of the scene)
+    this.ocean.setSun(this.sunDirection, this.sunColor);
+    if (this.sunLight) {
+      this.sunLight.position.copy(this.sunDirection).multiplyScalar(10);
+      this.sunLight.color.copy(this.sunColor);
+      this.sunLight.intensity = 0.8;
+    }
+    // Listeners: EnvironmentPanel (keeps its controls in sync when the sun is moved from elsewhere)
+    if (window.eventBus) window.eventBus.emit('SceneManager_sunChanged', this.getSunSettings());
+  }
+
+  getSunSettings = function(){
+    return { ...this.sunSettings };
+  }
+
+  // Elevation (deg) and bearing (deg, clockwise from north) of the sun
+  getSunPosition = function(){
+    const d = this.sunDirection;
+    return {
+      elevation: Math.asin(THREE.MathUtils.clamp(d.y, -1, 1)) * 180 / Math.PI,
+      bearing: ((Math.atan2(d.x, -d.z) * 180 / Math.PI) + 360) % 360,
+    };
+  }
+
+
+  // SEA STATE FROM A SPECTRUM (see Assets/Ocean/SeaSpectrum.js)
+  // settings: {Hm0, Tp (null: fully developed sea), gamma, Mdir, Spr1, numComponents, seed}
+  generateSeaState = function(settings){
+    this.ocean.generateSeaState(settings);
+  }
+  getSeaSettings = function(){
+    return this.ocean.getSeaSettings();
+  }
+  // Spectrum of the current waves ({settings, waves, bins, ...}) or null if they were set by hand
+  getSea = function(){
+    return this.ocean.getSea();
+  }
+  // Target variance density S(f) (m^2/Hz) of the current spectrum at the frequencies `freqs`, or null
+  getSeaSpectralDensity = function(freqs){
+    const sea = this.ocean.getSea();
+    return sea ? Array.from(freqs, f => spectralDensity(f, sea.settings)) : null;
+  }
+
+
+  // SURFACE RIPPLES (see Assets/Ocean/RippleSpectrum.js)
+  setRippleSettings = function(settings){
+    this.ocean.setRippleSettings(settings);
+  }
+  getRippleSettings = function(){
+    return this.ocean.getRippleSettings();
+  }
+  getRipples = function(){
+    return this.ocean.getRipples();
+  }
+  setDebugView = function(view){
+    this.ocean.setDebugView(view);
   }
 
 
@@ -319,9 +403,31 @@ class SceneManager{
     return this.ocean.getDiscreteWaves();
   }
 
-  // Export JSON
+  // Export JSON: discreteWaves.json (unchanged format: a list of waves) and surfaceRipples.json (sidecar with the
+  // ripples and the sun, so that a render can be reproduced)
   exportOceanParamsJSON = function(){
-    this.ocean.oceanParams.exportOceanParameters();
+    this.ocean.oceanParams.exportOceanParameters().then(() => this.exportRipplesJSON());
+  }
+
+  exportRipplesJSON = function(){
+    const r = this.ocean.getRipples();
+    if (!r) return;
+    const data = {
+      description: 'Surface ripples rendered in the fragment shader (Assets/Ocean/RippleSpectrum.js). Same wave format ' +
+        'as discreteWaves.json: hm0 = 2 x amplitude (m), T (s), dir (deg, from, clockwise from north), phase (deg). ' +
+        'tailSigma2: slope variance not drawn as ripples (roughness), upwind and crosswind. ' +
+        'Regenerate them with generateRipples(discreteWaves, settings).',
+      settings: r.settings,
+      windSpeed: r.windSpeed, windDir: r.windDir,
+      ripples: r.ripples.map(w => ({ hm0: w.hm0, T: w.T, dir: w.dir, phase: w.phase, chop: w.chop })),
+      tailSigma2: r.tailSigma2,
+      slopes: r.slopes,
+      sun: { ...this.getSunSettings(), ...this.getSunPosition() },
+    };
+    const link = document.createElement('a');
+    link.download = 'surfaceRipples.json';
+    link.href = window.URL.createObjectURL(new Blob([JSON.stringify(data)], { type: 'text/json' }));
+    link.click();
   }
 
   // Camera used to render the view: 'F' (free, orbit controls), 'L' / 'R' (stereo cameras), 'Top' (heights camera)

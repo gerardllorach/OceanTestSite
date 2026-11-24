@@ -21,18 +21,61 @@ const DEG2RAD = Math.PI / 180;
 // 1. Buoy displacements
 // ---------------------------------------------------------------------------------------------
 // Returns heave (up +), north (+) and west (+) excursions from the mean position, as Datawell does.
-export function simulateBuoy(waves, samplingRate, durationSeconds, x0 = 0, z0 = 0) {
+// ripples: surface ripples the buoy can follow (already filtered by buoyRipples()), or null
+export function simulateBuoy(waves, samplingRate, durationSeconds, x0 = 0, z0 = 0, ripples = null) {
   const n = Math.max(2, Math.round(samplingRate * durationSeconds));
   const heave = new Float64Array(n), north = new Float64Array(n), west = new Float64Array(n);
   const p = [0, 0, 0];
   for (let i = 0; i < n; i++) {
-    Gerstner.getParticlePosition(p, waves, i / samplingRate, x0, z0);
+    Gerstner.getParticlePosition(p, waves, i / samplingRate, x0, z0, ripples);
     heave[i] = p[1];
     north[i] = -(p[2] - z0); // north is -z
     west[i] = -(p[0] - x0);  // east is +x
   }
   removeMean(heave); removeMean(north); removeMean(west);
   return { samplingRate, duration: n / samplingRate, heave, north, west };
+}
+
+// ---------------------------------------------------------------------------------------------
+// 1b. What the buoy can follow of the surface ripples (Assets/Ocean/RippleSpectrum.js)
+// ---------------------------------------------------------------------------------------------
+// Ripples have periods of ~0.1-1.6 s, mostly above the Nyquist frequency of the record. A real buoy does not
+// alias them: (1) its hull averages the surface over its diameter, so it cannot follow waves shorter than itself,
+// and (2) its anti-alias filter removes the energy above its band before sampling. Both are modelled here:
+//   (1) each ripple is scaled by the response of a disc of radius r, R(k) = 2 J1(k r) / (k r)
+//   (2) ripples above `bandFraction` x Nyquist are left out of the record
+// The Gerstner waves are not scaled (R > 0.995 for wavelengths over 20 m), so the analysis without ripples is unchanged.
+export const BUOY_DIAMETER = 0.9;  // m, Datawell DWR-MkIII
+export const BUOY_BAND_FRACTION = 0.9;
+
+// Bessel function of the first kind, order 1: J1(x) = (1/pi) * integral over [0, pi] of cos(t - x sin t) dt
+export function besselJ1(x) {
+  const n = 256;
+  let sum = 0;
+  for (let i = 0; i <= n; i++) {
+    const t = Math.PI * i / n;
+    sum += (i == 0 || i == n ? 0.5 : 1) * Math.cos(t - x * Math.sin(t));
+  }
+  return sum / n;
+}
+
+// Heave response of a disc of diameter `diameter` (m) to a wave of wavenumber k (rad/m)
+export function hullResponse(k, diameter = BUOY_DIAMETER) {
+  const x = k * diameter / 2;
+  return x < 1e-6 ? 1 : 2 * besselJ1(x) / x;
+}
+
+// Split the ripples into the ones the buoy records (scaled by the hull response) and the ones above its band
+export function buoyRipples(ripples, samplingRate, diameter = BUOY_DIAMETER, bandFraction = BUOY_BAND_FRACTION) {
+  const cutoff = bandFraction * samplingRate / 2;
+  const inBand = [], aboveBand = [];
+  (ripples || []).forEach(r => {
+    const k = r.k || 4 * Math.PI * Math.PI / (r.T * r.T * Gerstner.G);
+    if (1 / r.T > cutoff) { aboveBand.push(r); return; }
+    const response = hullResponse(k, diameter);
+    inBand.push({ hm0: r.hm0 * response, T: r.T, dir: r.dir, phase: r.phase, chop: r.chop, hullResponse: response });
+  });
+  return { cutoff, inBand, aboveBand };
 }
 
 function removeMean(arr) {
@@ -330,11 +373,13 @@ export function theoreticalParameters(waves) {
     if (!lines.has(key)) lines.set(key, { f, numWaves: 0, Zr: 0, Zi: 0, Nr: 0, Ni: 0, Er: 0, Ei: 0 });
     const L = lines.get(key);
     // Complex amplitudes A of Re(A exp(-i w t)): heave A = -i a e^{i phase}, horizontal A = -dir a e^{i phase}
+    // (horizontal scaled by `chop` for the surface ripples)
     const cr = a * Math.cos(ph), ci = a * Math.sin(ph);
+    const h = w.chop ?? 1;
     L.numWaves++;
     L.Zr += ci; L.Zi -= cr;
-    L.Nr -= Math.cos(th) * cr; L.Ni -= Math.cos(th) * ci;
-    L.Er -= Math.sin(th) * cr; L.Ei -= Math.sin(th) * ci;
+    L.Nr -= h * Math.cos(th) * cr; L.Ni -= h * Math.cos(th) * ci;
+    L.Er -= h * Math.sin(th) * cr; L.Ei -= h * Math.sin(th) * ci;
     if (!largest || a > largest.a) largest = { a, T: w.T, dir: wrap360((w.dir || 0)) };
   });
 
@@ -398,6 +443,7 @@ export class OceanAnalysis {
   numDirections = 72;
   polarFmin = 1 / 33; // Hz
   polarFmax = 1 / 3;
+  buoyDiameter = BUOY_DIAMETER; // m, for the response to the surface ripples
 
   constructor(samplingRate, seconds) {
     this.samplingRate = samplingRate || this.samplingRate;
@@ -406,12 +452,16 @@ export class OceanAnalysis {
 
   // waves: [{hm0, T, dir, phase}] as in the discrete waves panel / sceneManager.getDiscreteWaves()
   // options.matchGPU: analyse the waves as encoded in the 8-bit parameter texture (what is rendered)
+  // options.ripples: surface ripples, as sceneManager.getRipples() (Assets/Ocean/RippleSpectrum.js). They are sent to
+  //   the GPU as floats, so they are never quantised. options.includeRipples === false leaves them out.
   analyze(waves, options = {}) {
     const samplingRate = options.samplingRate || this.samplingRate;
     const seconds = options.seconds || this.seconds;
     const analysedWaves = options.matchGPU === false ? waves : Gerstner.toRenderedWaves(waves);
+    const rippleSet = options.includeRipples !== false && options.ripples && options.ripples.ripples.length ? options.ripples : null;
+    const band = buoyRipples(rippleSet ? rippleSet.ripples : [], samplingRate, this.buoyDiameter);
 
-    const buoy = simulateBuoy(analysedWaves, samplingRate, seconds);
+    const buoy = simulateBuoy(analysedWaves, samplingRate, seconds, 0, 0, band.inBand);
     const east = buoy.west.map(v => -v);
     const spec = crossSpectra(buoy.heave, buoy.north, east, samplingRate, this.segmentSeconds);
     const dir = directionalMoments(spec);
@@ -425,11 +475,38 @@ export class OceanAnalysis {
     return {
       settings: { samplingRate, seconds: buoy.duration, numSamples: buoy.heave.length,
         segmentLength: spec.segmentLength, numSegments: spec.numSegments, df: spec.df,
-        degreesOfFreedom: spec.degreesOfFreedom, nyquist, matchGPU: options.matchGPU !== false },
+        degreesOfFreedom: spec.degreesOfFreedom, nyquist, matchGPU: options.matchGPU !== false,
+        includeRipples: !!rippleSet, buoyDiameter: this.buoyDiameter, buoyCutoff: band.cutoff },
       waves: analysedWaves,
-      expected: { aliased },
-      theoretical: theoreticalParameters(analysedWaves),
+      expected: { aliased, ripplesAboveBand: band.aboveBand },
+      // Theoretical: what the buoy can measure (waves + ripples in its band, with the hull response)
+      theoretical: theoreticalParameters(analysedWaves.concat(band.inBand)),
+      // Full surface: waves + all the ripples (what is rendered; a buoy cannot measure it)
+      theoreticalFull: rippleSet ? theoreticalParameters(analysedWaves.concat(rippleSet.ripples)) : null,
+      ripples: rippleSet ? this.rippleSummary(analysedWaves, rippleSet, band) : null,
       buoy, spectrum: spec, directional: dir, bulk, zeroCrossing: zc, polar,
+    };
+  }
+
+  // Contribution of the ripples: variance (and Hm0) of the full surface and of what the buoy measures, slopes
+  rippleSummary(waves, rippleSet, band) {
+    const variance = list => list.reduce((sum, w) => sum + Math.pow(w.hm0 / 2, 2) / 2, 0);
+    const m0Waves = variance(waves);
+    const hm0 = m0 => 4 * Math.sqrt(m0);
+    const full = variance(rippleSet.ripples), inBand = variance(band.inBand);
+    return {
+      settings: rippleSet.settings, windSpeed: rippleSet.windSpeed, windDir: rippleSet.windDir,
+      numRipples: rippleSet.ripples.length, numInBand: band.inBand.length, numAboveBand: band.aboveBand.length,
+      cutoff: band.cutoff, buoyDiameter: this.buoyDiameter,
+      m0Waves,
+      deltaM0: { full, inBand },
+      deltaHm0: { full: hm0(m0Waves + full) - hm0(m0Waves), inBand: hm0(m0Waves + inBand) - hm0(m0Waves) },
+      slopes: rippleSet.slopes, tailSigma2: rippleSet.tailSigma2,
+      ripples: rippleSet.ripples.map(r => {
+        const inBandRipple = band.inBand.find(b => b.T == r.T && b.dir == r.dir);
+        return { hm0: r.hm0, T: r.T, dir: r.dir, phase: r.phase, chop: r.chop, f: 1 / r.T, k: r.k, wavelength: r.wavelength,
+          inBand: !!inBandRipple, hullResponse: inBandRipple ? inBandRipple.hullResponse : null };
+      }),
     };
   }
 

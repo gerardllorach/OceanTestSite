@@ -19,7 +19,11 @@ export default {
 
   },
   mounted() {
-    // Declare listening events
+    // Initial angle (degrees, 0 = up, clockwise)
+    if (this.value != undefined) this.setAngle(this.value);
+  },
+  unmounted() {
+    this.removeEventListeners();
   },
   data() {
     return {
@@ -28,9 +32,16 @@ export default {
     }
   },
   props: {
-    size: String
+    size: String,
+    value: Number, // Initial angle in degrees, 0 = up, clockwise (optional)
+  },
+  watch: {
+    value(angle) { if (angle != undefined) this.setAngle(angle); },
   },
   methods: {
+    setAngle: function (angle) {
+      if (this.$refs.knob) this.$refs.knob.style.transform = `rotate(${angle}deg)`;
+    },
     // Remove event listeners
     removeEventListeners: function(){
       // Knob event
@@ -60,6 +71,7 @@ export default {
       // Calculate angle
       let angleRad = Math.atan2(vecY, vecX);
       let angle = angleRad * 180 / Math.PI - 90;
+      angle = ((angle % 360) + 360) % 360; // 0..360, 0 = up, clockwise
       // Emit event
       this.$emit("change", angle);
       // Rotate knob

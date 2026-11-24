@@ -6,6 +6,7 @@ import { OceanGrid } from '/OceanTestSite/Assets/Ocean/OceanGrid.js';
 import {OceanProjectedGridVertShader, OceanProjectedGridFragShader} from '/OceanTestSite/Assets/Ocean/OceanProjectedGridShader.js';
 
 import { OceanParameters } from '/OceanTestSite/Assets/Ocean/OceanParams.js';
+import { MAX_RIPPLES, DEFAULT_RIPPLE_SETTINGS, generateRipples, writeRippleUniforms } from '/OceanTestSite/Assets/Ocean/RippleSpectrum.js';
 
 class OceanEntity {
 
@@ -33,34 +34,25 @@ class OceanEntity {
   // Constructor
   constructor(scene){
 
-    // Creates a texture that has parameters for generating waves. It includes wave steepness, height, direction X, and direction Z (RGBA).
-    let numWaves = 10;
-    this.numWaves = numWaves;
+    // Creates a float texture with the parameters of the waves (period, height, direction, phase), one texel per wave.
+    // The waves are a realisation of a wave spectrum (JONSWAP / Pierson-Moskowitz, Assets/Ocean/SeaSpectrum.js)
     this.dataTextureSize = 32;
-    this.oceanParams = new OceanParameters({}, numWaves);
+    this.oceanParams = new OceanParameters({});
+    let numWaves = this.oceanParams.numWaves;
+    this.numWaves = numWaves;
     let paramsData = this.oceanParams.getWaveParamsImageData(this.dataTextureSize);
-    let paramsTexture = new THREE.DataTexture(paramsData, this.dataTextureSize, this.dataTextureSize, THREE.RGBAFormat, THREE.UnsignedByteType);
+    let paramsTexture = new THREE.DataTexture(paramsData, this.dataTextureSize, this.dataTextureSize, THREE.RGBAFormat, THREE.FloatType);
     paramsTexture.magFilter = THREE.NearestFilter;
+    paramsTexture.minFilter = THREE.NearestFilter;
+    paramsTexture.generateMipmaps = false;
     paramsTexture.needsUpdate = true;
+    this.paramsTexture = paramsTexture;
 
-    // Load normal texture for smaller waves that the geometry cannot capture
-    // let normalTexture = new THREE.TextureLoader().load('/OceanTestSite/Assets/Terrain/OceanNormal.png');
-    // normalTexture.wrapS = normalTexture.wrapT = THREE.RepeatWrapping;
-
-    // Create video texture
-    // https://blenderartists.org/t/animated-water-normal-map-tileable-looped/673140
-    // /OceanTestSite/lib/three.js/examples/?q=video#webgl_materials_video
-    // https://github.com/mrdoob/three.js/blob/master/examples/webgl_materials_video.html
-    let videoEl = document.createElement("video");
-    videoEl.loop = true; videoEl.crossOrigin = 'anonymous'; videoEl.playsInline = true; videoEl.muted = "muted";
-    videoEl.src = '/OceanTestSite/Assets/Terrain/OceanNormal.mp4';
-    videoEl.play();
-    let normalTexture = new THREE.VideoTexture(videoEl);
-    normalTexture.wrapS = normalTexture.wrapT = THREE.RepeatWrapping;
-    normalTexture.colorSpace = THREE.LinearSRGBColorSpace; // Normal maps should not have a color correction https://threejs.org/docs/#manual/en/introduction/Color-management
+    // Smaller waves that the geometry cannot capture: procedural ripples in the fragment shader (see updateRipples).
+    // They replace a looping video normal map, which aliased at grazing angles (no mipmaps), broke the Fresnel term,
+    // was damaged by the video compression and was not synchronised with the simulation time.
 
 
-    
     // Create geometry
     this.gridEntity = new OceanGrid(scene.camera, 1 * 10e5);
     
@@ -83,7 +75,25 @@ class OceanEntity {
         // u_steepnessFactor: { value: 0.2 },
         // u_wavelength: { value: 7.0 },
         // u_direction: { value: new THREE.Vector2(1, 0) },
-        u_normalTexture: {value: normalTexture}, // TODO: WHAT IF THE TEXTURE TAKES TOO LONG TO LOAD?
+
+        // Surface ripples (Assets/Ocean/RippleSpectrum.js)
+        u_ripples: {value: Array.from({length: MAX_RIPPLES}, () => new THREE.Vector4())},
+        u_rippleInfo: {value: Array.from({length: MAX_RIPPLES}, () => new THREE.Vector4())},
+        u_rippleCount: {value: 0},
+        u_rippleTailSigma2: {value: new THREE.Vector2(0.003, 0.003)},
+        u_windDirection: {value: new THREE.Vector2(0, 1)},
+        u_rippleChop: {value: 0}, // Horizontal displacement factor of the ripples (Gerstner choppiness)
+        // Spacing of the grid vertices (mesh units, before the viewport scale): the vertex shader only displaces the
+        // geometry with ripples that are at least ~4 vertices long
+        u_gridStep: {value: this.gridEntity.gridStep.clone()},
+        // Sun
+        u_sunDirection: {value: new THREE.Vector3(0, 1, 0)},
+        u_sunColor: {value: new THREE.Vector3(1, 1, 1)},
+        // Sky reflection: the skybox rendered into a cube map (captureSky). Gradient until it is ready
+        u_skyCube: {value: null},
+        u_skyReady: {value: false},
+        // Debug views: 0 final, 1 Fresnel, 2 normal, 3 roughness, 4 ripple slopes
+        u_debugView: {value: 0},
 
         // Projected grid parameters
         u_cameraModelMatrix: {value: this.gridEntity.cameraGrid.matrix},
@@ -107,6 +117,9 @@ class OceanEntity {
 
     scene.add(this.oceanTile);
 
+    // Ripples for the initial waves
+    this.updateRipples();
+
     this.isLoaded = true;
 
     
@@ -115,27 +128,29 @@ class OceanEntity {
   
 
 
+  // Waves set one by one (discrete waves panel, dropped .json): they no longer come from a spectrum
   setDiscreteWaves = function(discreteWaves){
-    this.numWaves = discreteWaves.length;
-    let params = this.oceanParams;
-    params.numWaves = this.numWaves;
-    params.waveHeights = [];
-    params.waveSteepness = [];
-    params.waveDirections = [];
-    params.wavePhases = [];
-    for (let i = 0; i < this.numWaves; i++){
-      params.waveHeights[i] = discreteWaves[i].hm0;
-      let T = discreteWaves[i].T;
-      params.waveSteepness[i] = 4 * Math.PI * Math.PI * discreteWaves[i].hm0 * 0.5 / (T * T * 9.8);
-      params.waveDirections[i] = discreteWaves[i].dir;
-      params.wavePhases[i] = discreteWaves[i].phase;
-    }
-
+    this.oceanParams.setDiscreteWaves(discreteWaves);
     this.updateParamsTexture();
   }
 
   getDiscreteWaves = function(){
     return this.oceanParams.getDiscreteWavesJSON();
+  }
+
+  // Generate the waves from a spectrum. settings: {Hm0, Tp (null: fully developed), gamma, Mdir, Spr1, numComponents, seed}
+  generateSeaState = function(settings){
+    this.oceanParams.setSeaSettings(settings);
+    this.updateParamsTexture();
+  }
+
+  getSeaSettings = function(){
+    return this.oceanParams.getSeaSettings();
+  }
+
+  // Output of generateSea() (Assets/Ocean/SeaSpectrum.js) for the current waves, or null if they were set by hand
+  getSea = function(){
+    return this.oceanParams.sea;
   }
 
 
@@ -199,15 +214,88 @@ class OceanEntity {
   updateParamsTexture() {
     if (!this.oceanTile)
       return;
-    let paramsData = this.oceanParams.getWaveParamsImageData(this.dataTextureSize);
-    let paramsTexture = new THREE.DataTexture(paramsData, this.dataTextureSize, this.dataTextureSize, THREE.RGBAFormat, THREE.UnsignedByteType);
-    paramsTexture.magFilter = THREE.NearestFilter;
-    paramsTexture.minFilter = THREE.NearestFilter;
-    paramsTexture.generateMipmaps = false;
-    paramsTexture.needsUpdate = true;
-    // Update uniforms
-    this.oceanTile.material.uniforms.u_paramsTexture.value = paramsTexture;
+    this.numWaves = this.oceanParams.numWaves;
+    // Same texture, new data
+    this.oceanParams.getWaveParamsImageData(this.dataTextureSize, this.paramsTexture.image.data);
+    this.paramsTexture.needsUpdate = true;
     this.oceanTile.material.uniforms.u_numWaves.value = this.numWaves;
+    // The ripples depend on the waves (slope budget; wind in 'seaState' mode)
+    this.updateRipples();
+    // Listeners: panels that show the waves
+    if (window.eventBus) window.eventBus.emit('OceanEntity_wavesChanged', this.getDiscreteWaves());
+  }
+
+
+
+  // SKY REFLECTION
+  // Render the skybox once into a cube map that the water reflects (with mipmaps: rough water reflects a blurred sky)
+  captureSky(renderer, skyObject) {
+    if (!this.oceanTile || !skyObject) return;
+    const target = new THREE.WebGLCubeRenderTarget(256, {
+      generateMipmaps: true, minFilter: THREE.LinearMipmapLinearFilter, magFilter: THREE.LinearFilter });
+    const cubeCamera = new THREE.CubeCamera(0.1, 5000, target);
+    const skyScene = new THREE.Scene();
+    skyScene.add(skyObject.clone()); // Shares geometry and material, keeps the transform
+    cubeCamera.update(renderer, skyScene);
+    const u = this.oceanTile.material.uniforms;
+    if (u.u_skyCube.value) u.u_skyCube.value.dispose();
+    u.u_skyCube.value = target.texture;
+    u.u_skyReady.value = true;
+  }
+
+
+
+  // SURFACE RIPPLES
+  rippleSettings = { ...DEFAULT_RIPPLE_SETTINGS };
+  ripples = null; // Output of generateRipples(): the ripples sent to the GPU, also used by the sea state analysis
+
+  // partial: {mode: 'wind' | 'seaState', windSpeed (m/s), windDir (deg, from), count (0..MAX_RIPPLES)}
+  setRippleSettings(partial) {
+    Object.assign(this.rippleSettings, partial);
+    this.updateRipples();
+  }
+
+  getRippleSettings() {
+    return { ...this.rippleSettings };
+  }
+
+  // Exact (float) ripples, as sent to the GPU
+  getRipples() {
+    return this.ripples;
+  }
+
+  updateRipples() {
+    this.ripples = generateRipples(this.getDiscreteWaves(), this.rippleSettings);
+    if (this.oceanTile) {
+      const u = this.oceanTile.material.uniforms;
+      u.u_rippleCount.value = this.ripples.ripples.length;
+      u.u_rippleTailSigma2.value.set(this.ripples.tailSigma2.up, this.ripples.tailSigma2.cross);
+      u.u_rippleChop.value = this.ripples.chop;
+      this.writeRipplePhases();
+    }
+    if (window.eventBus) window.eventBus.emit('OceanEntity_ripplesChanged', this.ripples);
+  }
+
+  // Ripple phases at the current time (wrapped in double precision on the CPU)
+  writeRipplePhases() {
+    if (!this.oceanTile || !this.ripples) return;
+    const u = this.oceanTile.material.uniforms;
+    const { windDirection } = writeRippleUniforms(this.ripples, this.time, u.u_ripples.value, u.u_rippleInfo.value);
+    u.u_windDirection.value.set(windDirection[0], windDirection[1]);
+  }
+
+  // SUN
+  // direction: THREE.Vector3 from the surface towards the sun. color: THREE.Color or {r, g, b} (intensity included)
+  setSun(direction, color) {
+    if (!this.oceanTile) return;
+    const u = this.oceanTile.material.uniforms;
+    u.u_sunDirection.value.copy(direction).normalize();
+    if (color) u.u_sunColor.value.set(color.r, color.g, color.b);
+  }
+
+  // 0 final, 1 Fresnel, 2 normal, 3 roughness, 4 ripple slopes
+  setDebugView(view) {
+    if (this.oceanTile) this.oceanTile.material.uniforms.u_debugView.value = Number(view) || 0;
   }
 
 
@@ -318,6 +406,7 @@ class OceanEntity {
     if (this.oceanTile != undefined) {
       let oceanTile = this.oceanTile;
       oceanTile.material.uniforms.u_time.value = this.time; // dt
+      this.writeRipplePhases();
 
       this.gridEntity.update(oceanTile);
 
