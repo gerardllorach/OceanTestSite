@@ -99,7 +99,16 @@ export default {
   name: "BottomSection",
   created() {},
   mounted() {
-
+    // Drag and drop a .json with discrete waves anywhere on the page
+    document.body.addEventListener('dragover', this.onDragOver);
+    document.body.addEventListener('drop', this.onDropFile);
+    // Information icon (top-right)
+    window.eventBus.on('AppManager_infoClicked', this.openAbout);
+  },
+  unmounted() {
+    document.body.removeEventListener('dragover', this.onDragOver);
+    document.body.removeEventListener('drop', this.onDropFile);
+    window.eventBus.off('AppManager_infoClicked', this.openAbout);
   },
   data () {
     return {
@@ -215,6 +224,61 @@ export default {
       setTimeout(() => {
         window.dispatchEvent(new Event('resize'));
       }, 750);
+    },
+
+    // OPEN SECTIONS FROM OUTSIDE THE MENU
+    openSection: function(menuTitle, subTitle){
+      const el = this.menu.find(m => m.title == menuTitle);
+      if (!el) return;
+      this.menuLeftItemClicked(el);
+      if (subTitle){
+        const subEl = (el.children || []).find(c => c.title == subTitle);
+        if (subEl) this.submenuItemClicked(subEl);
+      }
+      if (!this.isSectionOpen)
+        this.bottomSectionClicked();
+    },
+    openAbout: function(){
+      this.openSection('About');
+    },
+
+    // DRAG & DROP A .JSON WITH DISCRETE WAVES (format: see "Export discrete waves (.json)")
+    onDragOver: function(event) {
+      event.preventDefault();
+      event.stopPropagation();
+    },
+    onDropFile: function(event) {
+      event.preventDefault();
+      event.stopPropagation();
+      let files = event.dataTransfer.files;
+      if (!files || files.length == 0) return;
+      let file = files[files.length - 1]; // Latest file
+      let reader = new FileReader();
+      reader.addEventListener('load', () => {
+        let waves;
+        try {
+          waves = JSON.parse(reader.result);
+          if (!Array.isArray(waves))
+            throw new Error('Expected a list of waves: [{"hm0": 1, "T": 10, "dir": 0, "phase": 0}, ...]');
+          waves = waves.map((w, i) => {
+            const wave = { hm0: Number(w.hm0), T: Number(w.T), dir: Number(w.dir) || 0, phase: Number(w.phase) || 0 };
+            if (!(wave.hm0 > 0) || !(wave.T > 0))
+              throw new Error('Wave ' + (i + 1) + ' needs a positive "hm0" (m) and "T" (s)');
+            return wave;
+          });
+        } catch (e) {
+          console.error(e);
+          alert('Could not read ' + file.name + '\n' + e.message);
+          return;
+        }
+        // Same event as editing the discrete waves table: the scene, the table and the analysis update
+        window.eventBus.emit('DiscreteWavesPanel_setDiscreteWaves', waves);
+        this.openSection('Waves', 'Discrete waves');
+      });
+      reader.addEventListener('error', e => {
+        console.error('Could not read file ' + file.name, e);
+      });
+      reader.readAsText(file);
     },
   },
   components: {

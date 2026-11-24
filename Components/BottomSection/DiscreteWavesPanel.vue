@@ -4,7 +4,7 @@
 
     <p>In this section you can visualize and modify manually the discrete waves that form the sea state.</p>
 
-    <p>You can also drag and drop a .json file with the discrete waves. Download the properties ("Export data" button) to see the format of the .json file.</p>
+    <p>You can also drag and drop a .json file with the discrete waves anywhere on the page. Download the properties ("Export wave's properties" button) to see the format of the .json file.</p>
 
     <p>Waves are limited to 10 meter height and periods of 20 seconds.</p>
 
@@ -82,11 +82,14 @@ export default {
 
   },
   mounted() {
-    document.body.addEventListener("drop", this.onDropFile);
-    document.body.addEventListener("dragover", this.onDragOver);
     if (window.sceneManager != undefined){
       this.discreteWaves = window.sceneManager.getDiscreteWaves();
     }
+    // Waves set from elsewhere (e.g. a dropped .json file, handled in BottomSection.vue)
+    window.eventBus.on('DiscreteWavesPanel_setDiscreteWaves', this.onWavesSet);
+  },
+  unmounted() {
+    window.eventBus.off('DiscreteWavesPanel_setDiscreteWaves', this.onWavesSet);
   },
   data() {
     return {
@@ -100,41 +103,10 @@ export default {
     }
   },
   methods: {
-    // DRAG AND DROP
-    // DRAG & DROP FILES
-    onDragOver: function(event) {
-      event.preventDefault();
-      event.stopPropagation();
-    },
-    // On drop event
-    onDropFile: function(event) {
-      event.preventDefault();
-      event.stopPropagation();
-
-      let files = event.dataTransfer.files;
-      let file = files[files.length - 1]; // Latest file
-
-      let reader = new FileReader();
-      reader.fileName = file.name;
-      console.log("File dropped: " + file.name);
-
-      // On load file
-      reader.addEventListener('load', e => {
-        try {
-          this.discreteWaves = JSON.parse(reader.result);
-          window.eventBus.emit('DiscreteWavesPanel_setDiscreteWaves', this.discreteWaves);
-        } catch (e) {
-          console.error(e);
-          alert('Could not read .json\n' + e);
-        }
-      });
-      reader.addEventListener('error', e => {
-        console.error('Could not read file ' + reader.file.name);
-        console.error(e);
-      })
-      // Read as text
-      reader.readAsText(file);
-    
+    // EVENTS
+    onWavesSet: function(waves){
+      if (waves !== this.discreteWaves) // Ignore our own edits
+        this.discreteWaves = waves.map(w => ({...w}));
     },
     // USER INPUT
     addWave: function(e){

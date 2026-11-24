@@ -88,12 +88,12 @@ export default {
 
   },
   mounted() {
-    window.eventBus.on('SceneManager_recordProgress', (progress) => {
-      this.progress = progress;
-    });
-    window.eventBus.on('SceneManager_recordFinished', () => {
-      this.progress = 100;
-    });
+    window.eventBus.on('SceneManager_recordProgress', this.onRecordProgress);
+    window.eventBus.on('SceneManager_recordFinished', this.onRecordFinished);
+  },
+  unmounted() {
+    window.eventBus.off('SceneManager_recordProgress', this.onRecordProgress);
+    window.eventBus.off('SceneManager_recordFinished', this.onRecordFinished);
   },
   data() {
     return {
@@ -106,6 +106,13 @@ export default {
     }
   },
   methods: {
+    // EVENTS
+    onRecordProgress: function(progress){
+      this.progress = progress;
+    },
+    onRecordFinished: function(){
+      this.progress = 100;
+    },
     // USER INPUT
     renderFramesClicked: function(){
       window.eventBus.emit('RenderHeightPanel_renderFramesClicked', {

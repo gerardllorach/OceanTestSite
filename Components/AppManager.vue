@@ -7,9 +7,6 @@
       <canvas3D></canvas3D>
       <!-- Bottom section -->
       <bottom-section></bottom-section>
-
-      <!-- Central Panel -->
-      <central-panel></central-panel>
     </div>
     
 
@@ -60,18 +57,6 @@
       </button>
     </div>
 
-
-
-    <!-- ****** TOP-LEFT ICONS ****** -->
-    <div class="top-left-icons-container">
-      <button class="clickable" @click="wavesPropsClicked"><span>Wave's properites </span><span
-          class="fa">&#xf085;</span></button>
-      <button class="clickable" @click="renderStereoClicked"><span>Render stereo </span><span
-          class="fa">&#xe131;</span></button>
-      <button class="clickable" @click="renderHeightClicked"><span>Render heights </span><span
-          class="fa">&#xf773;</span></button>
-    </div>
-
   </div>
 </template>
 
@@ -83,7 +68,6 @@
 // Import components
 import Canvas3D from "./Canvas3D.vue"
 import BottomSection from "./BottomSection.vue"
-import CentralPanel from "./CentralPanel.vue"
 
 export default {
   name: "AppManager",
@@ -118,7 +102,8 @@ export default {
   methods: {
     //onclick: function(e){},
     infoIconClicked: function () {
-      window.eventBus.emit('OpenCentralPanel', 'infoPanel');
+      // Opens the About section of the bottom menu
+      window.eventBus.emit('AppManager_infoClicked');
     },
     fpsClicked: function () {
       window.eventBus.emit('AppManager_fpsButtonClicked');
@@ -129,21 +114,10 @@ export default {
     compassButtonClicked: function (e) {
       window.eventBus.emit('TopRightMenu_compassButtonClicked');
     },
-
-    wavesPropsClicked: function () {
-      window.eventBus.emit('OpenCentralPanel', 'wavesProperties');
-    },
-    renderStereoClicked: function () {
-      window.eventBus.emit('OpenCentralPanel', 'renderStereo');
-    },
-    renderHeightClicked: function () {
-      window.eventBus.emit('OpenCentralPanel', 'renderHeight');
-    },
   },
   components: {
     "canvas3D": Canvas3D,
     "bottom-section": BottomSection,
-    "central-panel": CentralPanel,
   }
 }
 </script>
@@ -203,22 +177,6 @@ export default {
   margin: 5px;
   z-index: 10;
 }
-
-
-.top-left-icons-container {
-  position: absolute;
-  top: 60px;
-  left: 20px;
-
-  display: flex;
-  flex-direction: column;
-  flex-wrap: nowrap;
-}
-
-.top-left-icons-container>* {
-  margin: 5px;
-}
-
 
 
 .camera-icons-container {

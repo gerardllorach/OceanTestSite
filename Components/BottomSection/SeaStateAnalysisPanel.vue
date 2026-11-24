@@ -223,7 +223,6 @@ export default {
   mounted() {
     // Events
     window.eventBus.on('DiscreteWavesPanel_setDiscreteWaves', this.onWavesChanged);
-    window.eventBus.on('WavesPropertiesPanel_setWavesProperties', this.onWavesChanged);
     window.addEventListener('resize', this.windowResize);
     // If scene exists, analyse waves
     if (window.sceneManager != undefined)
@@ -233,7 +232,6 @@ export default {
   },
   unmounted() {
     window.eventBus.off('DiscreteWavesPanel_setDiscreteWaves', this.onWavesChanged);
-    window.eventBus.off('WavesPropertiesPanel_setWavesProperties', this.onWavesChanged);
     window.removeEventListener('resize', this.windowResize);
   },
   data() {

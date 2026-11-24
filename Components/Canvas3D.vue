@@ -48,10 +48,6 @@ export default {
     window.eventBus.on('AppManager_cameraClicked', (value) => {
       this.sceneManager.changeCamera(value);
     });
-    // ***** WAVE PROPERTIES PANEL *****
-    window.eventBus.on('WavesPropertiesPanel_setWavesProperties', (wavesProperties) => {
-      this.sceneManager.setDiscreteWaves(wavesProperties);
-    });
     // ***** DISCRETE WAVES PANEL *****
     window.eventBus.on('DiscreteWavesPanel_setDiscreteWaves', (discreteWaves) => {
       this.sceneManager.setDiscreteWaves(discreteWaves);
