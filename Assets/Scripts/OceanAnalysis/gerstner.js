@@ -1,99 +1,82 @@
+// Gerstner waves on the CPU, mirroring GerstnerWave() in Assets/Ocean/OceanProjectedGridShader.js.
+// Keep both in sync: the analysis must measure exactly the surface that is rendered.
+//
+// Scene axes: x = east, y = up, z = south (north is -z, see the "N" text mesh in SceneManager).
+// Wave direction `dir` is where the waves come FROM, in degrees clockwise from north
+// (shader: travel vector = (sin(-dir), cos(-dir)) in xz, so dir = 0 travels towards +z = south).
 
+const G = 9.8; // Same gravity as the shader
+const DEG2RAD = Math.PI / 180;
 
+// Displacement produced by one wave for the particle at `position` (x, y, z). Written into `out`.
+const getGerstnerDisplacement = function (out, position, wave, time) {
+  const amplitude = Math.max(wave.hm0, 0.01) / 2;
+  const T = wave.T;
+  const steepness = Math.max(4 * Math.PI * Math.PI * amplitude / (T * T * G), 0.01);
+  const wavelength = amplitude * 2 * Math.PI / steepness;
+  const k = 2 * Math.PI / wavelength;
+  const velocity = Math.sqrt(G / k);
 
-const getGerstnerPosition = function(displacement, position, hm0, phaseDeg, steepness, direction, time){
-  let amplitude = hm0 / 2;
-  let dir = direction;
-  let phase = phaseDeg == undefined ? 0 : phaseDeg * Math.PI / 180;
+  const dirRad = (wave.dir || 0) * DEG2RAD;
+  const dirX = Math.sin(-dirRad);
+  const dirZ = Math.cos(-dirRad);
+  const phase = (wave.phase || 0) * DEG2RAD;
 
-  // Calculate direction
-  let dirX = Math.sin(dir * Math.PI / 180);
-  let dirZ = Math.cos(dir * Math.PI / 180);
+  const f = k * (dirX * position[0] + dirZ * position[2] - velocity * time) + phase;
 
-  let wavelength = amplitude * 2 * Math.PI / steepness;
-
-  let k = 2 * Math.PI / wavelength;
-  let velocity = Math.sqrt(9.8 / k);
-
-  let f = k * ((dirX * position[0] + dirZ * position[2]) -  velocity * time);
-
-  // Calculate position
-  displacement[0] = dirX * amplitude * Math.cos(f);
-  displacement[1] = amplitude * Math.sin(f);
-  displacement[2] = dirZ * amplitude * Math.cos(f);
+  out[0] = dirX * amplitude * Math.cos(f);
+  out[1] = amplitude * Math.sin(f);
+  out[2] = dirZ * amplitude * Math.cos(f);
+  return out;
 }
 
 
-
-
-let position = [0, 0, 0];
-let displacement = [0, 0, 0];
-let accDisplacement = [0, 0, 0];
-let prevPos = [0, 0, 0];
-const findHeightAt00 = (oceanParams, time) => {
-
-    position[0] = 0;
-    position[1] = 0;
-    position[2] = 0;
-
-    
-
-    for (let i = 0; i<20; i++){
-        // console.log('****')
-        // console.log(position)
-        prevPos[0] = position[0];
-        prevPos[2] = position[2];
-        position[1] = 0;
-
-        // accDisplacement[0] = 0; 
-        // accDisplacement[1] = 0; 
-        // accDisplacement[2] = 0;
-
-        for (let waveIndex = 0; waveIndex < oceanParams.length; waveIndex++){
-          let hm0 = oceanParams[waveIndex].hm0;
-          let T = oceanParams[waveIndex].T;
-          let angle = oceanParams[waveIndex].dir;
-          let phase = oceanParams[waveIndex].phase;
-
-          let steep = 4 * Math.PI * Math.PI * hm0 * 0.5 / (T * T * 9.8);
-          getGerstnerPosition(displacement, position, hm0, phase, steep, angle, time);
-
-          // It is a displacement, so add to the starting position
-          position[0] += displacement[0];
-          position[1] += displacement[1];
-          position[2] += displacement[2];
-
-          // accDisplacement[0] += displacement[0];
-          // accDisplacement[1] += displacement[1];
-          // accDisplacement[2] += displacement[2];
-        }
-
-        // It is a displacement, so add to the starting position
-        // position[0] += accDisplacement[0];
-        // position[1] = accDisplacement[1];
-        // position[2] += accDisplacement[2];
-        
-        
-
-        let dist = Math.sqrt(position[0]*position[0] + position[2]*position[2]);
-        
-        // console.log(position);
-        // console.log("Distance: " + dist);
-        // console.log("Iteration: " + i);
-        // console.log('****')
-        // Exit
-        if (dist < 0.01)
-          return position[1];
-        // Estimate closest new XZ
-        position[0] = prevPos[0] - position[0];
-        position[2] = prevPos[2] - position[2];
-    }
-    return position[1];
-
-  
+// Position at `time` of the surface particle whose rest position is (x0, 0, z0).
+// Like the shader, each wave is evaluated at the position already displaced by the previous ones.
+// A moored wave buoy follows this particle, so this is what a buoy measures (Lagrangian).
+const displacement = [0, 0, 0];
+const getParticlePosition = function (out, waves, time, x0 = 0, z0 = 0) {
+  out[0] = x0; out[1] = 0; out[2] = z0;
+  for (let i = 0; i < waves.length; i++) {
+    getGerstnerDisplacement(displacement, out, waves[i], time);
+    out[0] += displacement[0];
+    out[1] += displacement[1];
+    out[2] += displacement[2];
+  }
+  return out;
 }
 
 
+// Surface height at the fixed point (0, 0) (Eulerian, like a pressure sensor or a fixed pole).
+// Gerstner waves move particles horizontally, so we look for the rest position P whose particle
+// is currently above (0, 0): P = -D(P), solved by fixed-point iteration.
+const particle = [0, 0, 0];
+const findHeightAt00 = function (waves, time) {
+  let x0 = 0, z0 = 0;
+  for (let i = 0; i < 20; i++) {
+    getParticlePosition(particle, waves, time, x0, z0);
+    if (Math.hypot(particle[0], particle[2]) < 0.001)
+      break;
+    x0 -= particle[0];
+    z0 -= particle[2];
+  }
+  return particle[1];
+}
 
 
-export {getGerstnerPosition, findHeightAt00}
+// The waves as the GPU sees them: OceanParams.getWaveParamsImageData() packs each parameter into
+// one byte of an RGBA texture (Uint8Clamped: rounded and clamped to 0..255), and the shader decodes them.
+// Heights are quantised in steps of WAVE_MAX/255 m, periods in PERIOD_MAX/255 s, angles in 360/255 deg.
+// Directions or phases outside 0..360 are clamped, not wrapped.
+const toRenderedWaves = function (waves, WAVE_MAX = 10, PERIOD_MAX = 20) {
+  const encode = (value, max) => Math.min(255, Math.max(0, Math.round(255 * value / max))) / 255 * max;
+  return waves.map(w => ({
+    hm0: encode(Math.abs(w.hm0), WAVE_MAX),
+    T: encode(w.T, PERIOD_MAX),
+    dir: encode(w.dir || 0, 360),
+    phase: encode(w.phase || 0, 360),
+  }));
+}
+
+
+export { G, getGerstnerDisplacement, getParticlePosition, findHeightAt00, toRenderedWaves }

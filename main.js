@@ -13,9 +13,11 @@ window.SceneManager = SceneManager;
 import WMSDataRetriever from '/OceanTestSite/Assets/Scripts/WMSDataRetriever.js';
 window.WMSDataRetriever = WMSDataRetriever;
 
-// Ocean Analsys
+// Ocean Analysis (virtual wave buoy) and its charts
 import { OceanAnalysis } from "./Assets/Scripts/OceanAnalysis/OceanAnalysis.js";
 window.OceanAnalysis = OceanAnalysis;
+import * as AnalysisCharts from "./Assets/Scripts/OceanAnalysis/AnalysisCharts.js";
+window.AnalysisCharts = AnalysisCharts;
 
 
 // Declare event emitter
