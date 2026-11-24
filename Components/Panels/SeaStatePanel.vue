@@ -29,7 +29,7 @@
         <span>Mean direction (from)</span>
         <div class="knob-row">
           <knob size="50px" :value="s.Mdir" @change="v => change({ Mdir: Math.round(v) })"></knob>
-          <span>{{ compass(s.Mdir) }}</span>
+          <span class="knob-value">{{ compass(s.Mdir) }}</span>
         </div>
       </div>
       <div class="container-horizontal">
@@ -205,6 +205,13 @@ export default {
 
 .knob-row {
   gap: 12px;
+}
+
+/* Fixed width, so the knob does not move while dragging as the text changes ("5° N" vs "158° SSE") */
+.knob-value {
+  width: 9ch;
+  text-align: left;
+  font-variant-numeric: tabular-nums;
 }
 
 .knob-row button {

@@ -101,6 +101,15 @@ export default {
 
 
 <style scoped>
+/* The positioning context of the disc (.slider::before). Without it, the absolute disc was placed against an ancestor
+   outside the panel's scroll container and stayed put on scroll, while the white dot (inside .knob) scrolled away */
+.slider {
+    position: relative;
+    width: v-bind('sizeKnob');
+    height: v-bind('sizeKnob');
+    flex-shrink: 0;
+  }
+
 .slider::before {
     width: v-bind('sizeKnob');
     height: v-bind('sizeKnob');
