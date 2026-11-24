@@ -12,6 +12,9 @@
       In the following menu you can configure the export settings and the positions of the cameras. Scene objects are not rendered.
     </p>
 
+    <!-- Preview the stereo cameras in the 3D view -->
+    <camera-view-buttons :cameras="[{ id: 'L', title: 'Left camera', iconClass: 'flip' }, { id: 'R', title: 'Right camera' }]"></camera-view-buttons>
+
 
     <!-- TABLE -->
     <div class="container-vertical options">
@@ -109,6 +112,7 @@
 
 
 <script>
+import CameraViewButtons from './CameraViewButtons.vue';
 
 
 
@@ -168,7 +172,7 @@ export default {
     }
   },
   components: {
-
+    'camera-view-buttons': CameraViewButtons,
   }
 }
 </script>

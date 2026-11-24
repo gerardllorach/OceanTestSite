@@ -38,14 +38,15 @@ export default {
     window.eventBus.on('InstrumentsMenu_baseButtonClicked', () => {
       this.sceneManager.focusOnBase();
     });
-    // ***** APP MANAGER *****
-    window.eventBus.on('AppManager_fpsButtonClicked', () => {
+    // ***** MENU *****
+    window.eventBus.on('MenuPanel_fpsClicked', () => {
       this.sceneManager.showHideFPS();
     });
     window.eventBus.on('RenderStereoPanel_calibrateClicked', () => {
       this.sceneManager.calibrate();
     });
-    window.eventBus.on('AppManager_cameraClicked', (value) => {
+    // ***** CAMERA VIEWS (render sections) *****
+    window.eventBus.on('CameraViewButtons_cameraClicked', (value) => {
       this.sceneManager.changeCamera(value);
     });
     // ***** DISCRETE WAVES PANEL *****
@@ -66,15 +67,20 @@ export default {
     window.eventBus.on('RenderHeightPanel_renderFramesClicked', (el) => {
       this.sceneManager.recordHeights(el);
     });
-    // ***** TOP-RIGHT ICONS *****
-    // Face northward
-    window.eventBus.on('TopRightMenu_compassButtonClicked', () => {
+    // ***** BOTTOM-RIGHT BUTTONS *****
+    // They move the free camera, so switch back to it first
+    window.eventBus.on('SidePanel_faceNorthClicked', () => {
+      this.sceneManager.changeCamera('F');
       this.sceneManager.faceNorthward();
+    });
+    window.eventBus.on('SidePanel_centerCameraClicked', () => {
+      this.sceneManager.changeCamera('F');
+      this.sceneManager.centerCamera();
     });
 
 
-    // ***** BOTTOM SECTION - EXPORT WAVES *****
-    window.eventBus.on('BottomSection_ExportWavesClicked', ()=>{
+    // ***** SIDE PANEL - EXPORT WAVES *****
+    window.eventBus.on('SidePanel_ExportWavesClicked', ()=>{
       this.sceneManager.exportOceanParamsJSON();
     })
 
@@ -251,7 +257,7 @@ export default {
 
 
     // Event emitters
-    // Listeners: TopRightMenu, BottomSection
+    // Listeners: SidePanel (compass)
     this.sceneManager.controls.addEventListener('change', (e) => {
       window.eventBus.emit('Canvas3D_cameraChange', this.sceneManager);
 

@@ -12,7 +12,7 @@
     <div class="container-vertical options">
       <div class="container-horizontal">
         <span>Duration</span>
-        <div><input type="range" min="10" max="50" :value="duration" @input="duration = Number($event.target.value)" @change="update"><span>{{ duration }} minutes</span></div>
+        <div><input type="range" min="30" max="180" step="10" :value="duration" @input="duration = Number($event.target.value)" @change="update"><span>{{ formatDuration(duration) }}</span></div>
       </div>
       <div class="container-horizontal">
         <span>Sampling rate</span>
@@ -233,10 +233,13 @@ export default {
   unmounted() {
     window.eventBus.off('DiscreteWavesPanel_setDiscreteWaves', this.onWavesChanged);
     window.removeEventListener('resize', this.windowResize);
+    // A redraw may still be pending (resize, tab change) when the panel closes
+    cancelAnimationFrame(this.resizeFrame);
+    this.isUnmounted = true;
   },
   data() {
     return {
-      duration: 20,
+      duration: 60, // minutes
       samplingRate: 3,
       matchGPU: true,
       hasResult: false,
@@ -382,7 +385,7 @@ export default {
 
     // DRAWING
     drawActiveTab: function () {
-      if (!this.result) return;
+      if (!this.result || this.isUnmounted) return;
       if (this.tab == 'displacement') this.drawDisplacement();
       else if (this.tab == 'histogram') this.drawHistograms();
       else if (this.tab == 'spectrum') this.drawSpectrum();
@@ -580,6 +583,10 @@ export default {
     },
 
     // HELPERS
+    formatDuration: function (minutes) {
+      const h = Math.floor(minutes / 60), m = minutes % 60;
+      return (h ? h + ' h' : '') + (h && m ? ' ' : '') + (m ? m + ' min' : '');
+    },
     fmt: function (v, d = 2) {
       return (v == null || !isFinite(v)) ? '–' : Number(v).toFixed(d);
     },

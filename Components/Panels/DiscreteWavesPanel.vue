@@ -85,7 +85,7 @@ export default {
     if (window.sceneManager != undefined){
       this.discreteWaves = window.sceneManager.getDiscreteWaves();
     }
-    // Waves set from elsewhere (e.g. a dropped .json file, handled in BottomSection.vue)
+    // Waves set from elsewhere (e.g. a dropped .json file, handled in SidePanel.vue)
     window.eventBus.on('DiscreteWavesPanel_setDiscreteWaves', this.onWavesSet);
   },
   unmounted() {

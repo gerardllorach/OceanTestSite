@@ -391,7 +391,7 @@ export function theoreticalParameters(waves) {
 export class OceanAnalysis {
 
   samplingRate = 2;     // Hz
-  seconds = 60 * 20;    // Record length
+  seconds = 60 * 60;    // Record length
   segmentSeconds = 256; // Welch segment length
   numDirections = 72;   // 5 degree bins, as CDIP polar spectra
   polarBandWidth = 0.01; // Hz, as CDIP polar spectra

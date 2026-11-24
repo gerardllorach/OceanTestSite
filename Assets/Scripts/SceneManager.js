@@ -324,6 +324,8 @@ class SceneManager{
     this.ocean.oceanParams.exportOceanParameters();
   }
 
+  // Camera used to render the view: 'F' (free, orbit controls), 'L' / 'R' (stereo cameras), 'Top' (heights camera)
+  selectedCameraName = 'F';
   changeCamera = function(value){
     if (value == 'F')
       this.selectedCamera = this.camera;
@@ -333,6 +335,18 @@ class SceneManager{
       this.selectedCamera = this.recorder.cameraL;
     else if (value == 'Top')
       this.selectedCamera = this.recorder.cameraTop;
+    else
+      return;
+    this.selectedCameraName = value;
+    window.eventBus.emit('SceneManager_cameraChanged', value);
+  }
+
+  // Move the free camera so that it looks at the centre of the scene (0,0), keeping its viewing angle and distance
+  centerCamera = function(){
+    const offset = this.camera.position.clone().sub(this.controls.target);
+    this.controls.target.set(0, 0, 0);
+    this.camera.position.copy(this.controls.target).add(offset);
+    this.controls.update();
   }
 
   faceNorthward = function(){

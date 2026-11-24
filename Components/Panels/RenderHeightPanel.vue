@@ -16,6 +16,9 @@
       Scene objects and reflections are not rendered, only the sea surface height in grayscale.
     </p>
 
+    <!-- Preview the heights camera in the 3D view -->
+    <camera-view-buttons :cameras="[{ id: 'Top', title: 'Top camera', iconClass: 'rotate90' }]"></camera-view-buttons>
+
     <!-- TABLE -->
     <div class="container-vertical options">
       <!-- DURATION -->
@@ -78,6 +81,7 @@
 
 
 <script>
+import CameraViewButtons from './CameraViewButtons.vue';
 
 
 
@@ -128,7 +132,7 @@ export default {
     }
   },
   components: {
-
+    'camera-view-buttons': CameraViewButtons,
   }
 }
 </script>

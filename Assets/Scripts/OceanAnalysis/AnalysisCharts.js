@@ -24,6 +24,7 @@ const fmt = (v, d = 2) => (v == null || !isFinite(v)) ? '–' : Number(v).toFixe
 //   yAxisTitle, onYAxisClick, tooltipX: (x) => string, legend
 // }
 export function lineChart(el, opt) {
+  if (!el) return; // The panel was closed before a pending redraw
   el.replaceChildren();
   el.classList.add('oa-chart');
   const width = Math.max(280, el.clientWidth || 600);
@@ -209,6 +210,7 @@ export function lineChart(el, opt) {
 // Radius is linear in frequency: long periods at the centre, short periods at the rim.
 // Angles are where the waves come FROM, clockwise from north. Colour: MEM energy density.
 export function polarChart(el, polar, opt = {}) {
+  if (!el) return; // The panel was closed before a pending redraw
   el.replaceChildren();
   el.classList.add('oa-chart', 'oa-polar');
   const size = Math.min(480, Math.max(280, el.clientWidth || 420));
