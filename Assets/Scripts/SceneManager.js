@@ -7,6 +7,7 @@ import { SkyboxEntity } from '/OceanTestSite/Assets/Skybox/SkyboxEntity.js';
 import * as FogShader from '/OceanTestSite/Assets/Terrain/FogShader.js'
 import { OceanEntity } from '/OceanTestSite/Assets/Ocean/OceanEntity.js';
 import { spectralDensity } from '/OceanTestSite/Assets/Ocean/SeaSpectrum.js';
+import * as InputSpectrum from '/OceanTestSite/Assets/Ocean/InputSpectrum.js';
 
 import { TextMeshEntity } from '/OceanTestSite/Assets/TextMesh/TextMeshEntity.js';
 
@@ -99,8 +100,9 @@ class SceneManager{
       #endif
     #endif`
 
-    // Ocean
+    // Ocean (the FFT sea is computed with the renderer)
     this.ocean = new OceanEntity(scene);
+    this.ocean.setRenderer(renderer);
     // Skybox. Once loaded, the water reflects it
     this.skybox = new SkyboxEntity(scene, (root) => this.ocean.captureSky(this.renderer, root));
 
@@ -223,10 +225,34 @@ class SceneManager{
   getSea = function(){
     return this.ocean.getSea();
   }
+  // FFT sea ({settings, L, kCut, components, ...}) or null
+  getFFTSea = function(){
+    return this.ocean.getFFTSea();
+  }
   // Target variance density S(f) (m^2/Hz) of the current spectrum at the frequencies `freqs`, or null
   getSeaSpectralDensity = function(freqs){
-    const sea = this.ocean.getSea();
+    const sea = this.ocean.getSea() || this.ocean.getFFTSea();
     return sea ? Array.from(freqs, f => spectralDensity(f, sea.settings)) : null;
+  }
+
+  // INPUT SPECTRUM: the sea (FFT), the swell (discrete Gerstner waves) and the ripples together
+  // (see Assets/Ocean/InputSpectrum.js)
+  getInputSpectrumState = function(){
+    const fft = this.ocean.getFFTSea(), sea = this.ocean.getSea();
+    // With a Gerstner sea (fallback), the discrete waves are its components, not swells
+    return { fft, sea: fft ? null : sea, swell: sea && !fft ? [] : this.ocean.getDiscreteWaves(), ripples: this.ocean.getRipples() };
+  }
+  // {sea, ripples (m^2/Hz at `freqs`), swell lines [{f, T, dir, variance}], seaBand, rippleBand}
+  getInputFrequencySpectrum = function(freqs){
+    return InputSpectrum.frequencySpectrum(this.getInputSpectrumState(), freqs);
+  }
+  // Polar grid {freq, df, dirs, binWidth, energy (m^2/Hz/deg), max, peak}. options: {fmin, fmax, numFreqs, numDirections}
+  getInputDirectionalSpectrum = function(options){
+    return InputSpectrum.directionalSpectrum(this.getInputSpectrumState(), options);
+  }
+  // Variance of each layer {sea, swell, ripples} (m^2)
+  getInputLayerVariances = function(){
+    return InputSpectrum.layerVariances(this.getInputSpectrumState());
   }
 
 
@@ -413,15 +439,17 @@ class SceneManager{
     const r = this.ocean.getRipples();
     if (!r) return;
     const data = {
-      description: 'Surface ripples rendered in the fragment shader (Assets/Ocean/RippleSpectrum.js). Same wave format ' +
-        'as discreteWaves.json: hm0 = 2 x amplitude (m), T (s), dir (deg, from, clockwise from north), phase (deg). ' +
-        'tailSigma2: slope variance not drawn as ripples (roughness), upwind and crosswind. ' +
-        'Regenerate them with generateRipples(discreteWaves, settings).',
+      description: 'Surface ripples: second FFT cascade (Assets/Ocean/RippleSpectrum.js generateRipples). ' +
+        'Deterministic: the same settings (seed included), discrete waves and FFT sea give the same ripples. ' +
+        'Grid of N x N wavevectors on a tile of L metres, from kMin to kCut (rad/m). ' +
+        'tailSigma2: slope variance finer than the grid (roughness only), upwind and crosswind.',
       settings: r.settings,
       windSpeed: r.windSpeed, windDir: r.windDir,
-      ripples: r.ripples.map(w => ({ hm0: w.hm0, T: w.T, dir: w.dir, phase: w.phase, chop: w.chop })),
+      grid: { N: r.N, L: r.L, kMin: r.kMin, kCut: r.kCut, components: r.numComponents, choppiness: r.choppiness },
+      heightVariance: r.heightVariance,
       tailSigma2: r.tailSigma2,
       slopes: r.slopes,
+      fftSea: this.ocean.getFFTSea() ? { settings: this.ocean.getFFTSea().settings, L: this.ocean.getFFTSea().L, N: this.ocean.getFFTSea().N } : null,
       sun: { ...this.getSunSettings(), ...this.getSunPosition() },
     };
     const link = document.createElement('a');

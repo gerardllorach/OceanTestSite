@@ -39,15 +39,14 @@
 // Surface ripples and ocean lighting (fragment shader)
 // Bruneton, Neyret & Holzschuch 2010, "Real-time realistic ocean lighting using seamless transitions from geometry to BRDF"
 // https://inria.hal.science/inria-00443630 -- ripples finer than a pixel become roughness (slope variance), so Fresnel,
-// sky reflection and sun glitter stay consistent at every distance. The ripples are generated in Assets/Ocean/RippleSpectrum.js.
+// sky reflection and sun glitter stay consistent at every distance. The sea and the ripples are two FFT cascades
+// (Assets/Ocean/FFTOcean.js, spectra in SeaSpectrum.js and RippleSpectrum.js); the discrete waves are Gerstner waves.
 
-import { MAX_RIPPLES } from '/OceanTestSite/Assets/Ocean/RippleSpectrum.js';
 
 // Use VS plugin "Comment tagged templates" and add /* glsl */
 export const OceanProjectedGridVertShader = /* glsl */ `
 
   #define PI 3.141592653589793
-  #define MAX_RIPPLES ${MAX_RIPPLES}
   // highp: world coordinates reach ~1e5 m on the projected grid (lowp / mediump break on mobile GPUs)
   precision highp float;
 
@@ -65,15 +64,20 @@ export const OceanProjectedGridVertShader = /* glsl */ `
   uniform vec2 u_cameraViewportScale;
   uniform vec2 u_gridStep; // Spacing of the grid vertices (mesh units, before the viewport scale)
 
-  // Surface ripples (Assets/Ocean/RippleSpectrum.js), sorted from the longest to the shortest
-  uniform vec4 u_ripples[MAX_RIPPLES];    // kx, kz (rad/m), amplitude (m), phase now (rad)
-  uniform vec4 u_rippleInfo[MAX_RIPPLES]; // wavelength (m), ...
-  uniform int u_rippleCount;
-  uniform float u_rippleChop;             // Horizontal displacement factor of the ripples
+  // FFT cascades (Assets/Ocean/FFTOcean.js): displacement (Dx, h, Dz) of a tile of Size metres and N texels, repeated.
+  // Sea (u_fft*) and surface ripples (u_ripple*)
+  uniform bool u_fftEnabled;
+  uniform sampler2D u_fftDisplacement;
+  uniform float u_fftSize;
+  uniform float u_fftN;
+  uniform bool u_rippleEnabled;
+  uniform sampler2D u_rippleDisplacement;
+  uniform float u_rippleSize;
+  uniform float u_rippleN;
 
   varying vec3 v_WorldPosition; // Rest position of the surface point (projected grid on the plane y = 0)
-  varying vec3 v_Normal;        // Normal of the Gerstner surface (without the ripples: the fragment shader adds them)
-  varying vec3 v_wavePosition;  // Position displaced by the Gerstner waves and the ripples the mesh can represent
+  varying vec3 v_Normal;        // Normal of the Gerstner surface (without the FFT cascades: the fragment shader adds them)
+  varying vec3 v_wavePosition;  // Position displaced by the Gerstner waves and the FFT cascades (filtered to the mesh)
 
 
 
@@ -170,6 +174,14 @@ export const OceanProjectedGridVertShader = /* glsl */ `
   }
 
 
+  // Displacement of an FFT cascade at rest position xz. Mip level from the size of the mesh: where the mesh is coarser
+  // than the texels, it takes the filtered displacement instead of aliasing it
+  vec3 cascadeDisplacement(sampler2D map, float size, float n, vec2 xz, float footprint) {
+    float lod = clamp(log2(max(footprint, 1e-6) * n / size), 0.0, log2(n));
+    return textureLod(map, xz / size + 0.5 / n, lod).xyz;
+  }
+
+
   void main() {
 
     // ******************************** //
@@ -198,11 +210,14 @@ export const OceanProjectedGridVertShader = /* glsl */ `
     vec3 binormal = vec3(0.0, 0.0, 1.0);
 
 
-    // Gerstner Waves
-    // Iterate over all the waves
-    int counter = 0;
-    for (int j = 0; j < int(u_imgSize.y); j++){
-      for (int i = 0; i < int(u_imgSize.x); i++){
+    // Gerstner Waves (the discrete waves), chained: each one is evaluated at the position displaced by the previous ones
+    // Iterate over all the waves (none when the sea is only an FFT sea)
+    int numTexels = int(u_imgSize.x * u_imgSize.y);
+    for (int n = 0; n < numTexels; n++){
+      if (n >= u_numWaves) break;
+      int i = n % int(u_imgSize.x);
+      int j = n / int(u_imgSize.x);
+      {
         // u_paramsTexture(period, wave height, direction, phase), sampled at the centre of the texel
         vec4 params = texture2D(u_paramsTexture, vec2((float(i) + 0.5)/u_imgSize.x, (float(j) + 0.5)/u_imgSize.y));
         // Skip if height or steepness are zero
@@ -229,12 +244,6 @@ export const OceanProjectedGridVertShader = /* glsl */ `
           tangent = normalize(tangent);
           binormal = normalize(binormal);
         //}
-
-        counter++;
-        if (counter == u_numWaves){
-          i = int(u_imgSize.x);
-          j = int(u_imgSize.y);
-        }
       }
     }
 
@@ -243,22 +252,12 @@ export const OceanProjectedGridVertShader = /* glsl */ `
     vec3 normal = normalize(cross(binormal, tangent));
     v_Normal = normalize(normal.xyz);
 
-    // Surface ripples on the geometry, where the mesh is fine enough (near the camera). Like in the analysis
-    // (Assets/Scripts/OceanAnalysis/gerstner.js) they are evaluated at the rest position and added after the
-    // Gerstner waves, with their horizontal displacement scaled by u_rippleChop. Their slopes are not added to the
-    // normal here: the fragment shader computes them per pixel.
-    for (int i = 0; i < MAX_RIPPLES; i++) {
-      if (i >= u_rippleCount) break;
-      float wavelength = u_rippleInfo[i].x;
-      if (wavelength < 3.0 * footprint) break; // This one and all the next ones are too short for the mesh
-      vec4 r = u_ripples[i];
-      // 1 with 6 or more vertices per wavelength, 0 with 3
-      float w = clamp((wavelength / footprint - 3.0) / 3.0, 0.0, 1.0);
-      vec2 dir = r.xy * (wavelength / (2.0 * PI)); // Unit travel direction (k / |k|)
-      float phase = dot(r.xy, intersectionPoint.xz) + r.w;
-      float a = w * r.z;
-      modPos += vec3(u_rippleChop * dir.x * a * cos(phase), a * sin(phase), u_rippleChop * dir.y * a * cos(phase));
-    }
+    // FFT cascades (sea and ripples): displacement at the rest position (Tessendorf: linear superposition of
+    // trochoidal components), added after the discrete waves, like in the analysis
+    if (u_fftEnabled)
+      modPos += cascadeDisplacement(u_fftDisplacement, u_fftSize, u_fftN, intersectionPoint.xz, footprint);
+    if (u_rippleEnabled)
+      modPos += cascadeDisplacement(u_rippleDisplacement, u_rippleSize, u_rippleN, intersectionPoint.xz, footprint);
 
     // World position
     //vec4 worldPosition = modelMatrix * vec4(modPos, 1.0);
@@ -287,20 +286,14 @@ export const OceanProjectedGridVertShader = /* glsl */ `
 export const OceanProjectedGridFragShader = /* glsl */`
 
   #define PI 3.141592653589793
-  #define MAX_RIPPLES ${MAX_RIPPLES}
   precision highp float;
 
   varying vec3 v_WorldPosition; // Rest position of the surface point (projected grid on the plane y = 0)
   varying vec3 v_Normal;        // Normal of the Gerstner surface
-  varying vec3 v_wavePosition;  // Position displaced by the Gerstner waves and the ripples the mesh can represent
+  varying vec3 v_wavePosition;  // Position displaced by the Gerstner waves and the FFT cascades
 
-  // Surface ripples (Assets/Ocean/RippleSpectrum.js), sorted from the longest to the shortest
-  uniform vec4 u_ripples[MAX_RIPPLES];    // kx, kz (rad/m), amplitude (m), phase now (rad, wrapped on the CPU)
-  uniform vec4 u_rippleInfo[MAX_RIPPLES]; // wavelength (m), slope variance of ripples i..n-1 (upwind, crosswind), unused
-  uniform int u_rippleCount;
-  uniform vec2 u_rippleTailSigma2;        // Slope variance of the unresolved tail (upwind, crosswind)
+  uniform vec2 u_rippleTailSigma2;        // Slope variance finer than the ripple grid (upwind, crosswind)
   uniform vec2 u_windDirection;           // Direction the wind blows towards, in the xz plane (unit)
-  uniform float u_rippleChop;             // Horizontal displacement factor of the ripples (sharper crests)
 
   // Sun
   uniform vec3 u_sunDirection;            // From the surface towards the sun (unit)
@@ -308,6 +301,18 @@ export const OceanProjectedGridFragShader = /* glsl */`
 
   // Sky: the skybox rendered into a cube map, with mipmaps (OceanEntity.captureSky)
   uniform samplerCube u_skyCube;
+
+  // FFT cascades (Assets/Ocean/FFTOcean.js), mipmapped: sea (u_fft*) and surface ripples (u_ripple*)
+  uniform bool u_fftEnabled;
+  uniform sampler2D u_fftSlopes; // (hx, hz, Dxx, Dzz)
+  uniform sampler2D u_fftExtra;  // (Dxz, hx^2, hz^2, hx hz)
+  uniform float u_fftSize;
+  uniform float u_fftN;
+  uniform bool u_rippleEnabled;
+  uniform sampler2D u_rippleSlopes;
+  uniform sampler2D u_rippleExtra;
+  uniform float u_rippleSize;
+  uniform float u_rippleN;
   uniform bool u_skyReady;
 
   // 0: final colour, 1: Fresnel, 2: normal, 3: roughness (red upwind, green crosswind), 4: resolved ripple slopes
@@ -398,6 +403,22 @@ export const OceanProjectedGridFragShader = /* glsl */`
 
 
 
+  // Slopes and Jacobian of an FFT cascade at rest position xz, at the mip level of the pixel (trilinear filtering):
+  // adds (hx, hz, Dxx, Dzz) to s and Dxz to dxz. Its mipmaps of the squared slopes keep the slope variance finer than
+  // that level (LEAN mapping); returned as (upwind, crosswind) for the wind direction windU
+  vec2 sampleCascade(sampler2D slopes, sampler2D extra, float size, float n, vec2 xz, vec2 windU, inout vec4 s, inout float dxz) {
+    vec2 uv = xz / size + 0.5 / n;
+    vec4 a = texture2D(slopes, uv); // (hx, hz, Dxx, Dzz)
+    vec4 b = texture2D(extra, uv);  // (Dxz, hx^2, hz^2, hx hz)
+    s += a;
+    dxz += b.x;
+    float vxx = max(0.0, b.y - a.x * a.x), vzz = max(0.0, b.z - a.y * a.y), vxz = b.w - a.x * a.y;
+    return max(vec2(0.0), vec2(
+      windU.x * windU.x * vxx + 2.0 * windU.x * windU.y * vxz + windU.y * windU.y * vzz,
+      windU.y * windU.y * vxx - 2.0 * windU.x * windU.y * vxz + windU.x * windU.x * vzz));
+  }
+
+
   void main(){
 
     vec3 V = normalize(cameraPosition - v_wavePosition); // Towards the camera, from the displaced surface
@@ -405,37 +426,28 @@ export const OceanProjectedGridFragShader = /* glsl */`
     vec3 geoNormal = normalize(v_Normal);
 
     // ******************************** //
-    // SURFACE RIPPLES
-    // Evaluated at the rest position, like the virtual buoy of the analysis (Assets/Scripts/OceanAnalysis/gerstner.js).
-    // Size of a pixel on the surface: a ripple needs 2 pixels per wavelength to be drawn. Shorter ripples, and all the
-    // ones after them (they are sorted by wavelength), only add their slope variance as roughness.
+    // FFT CASCADES (sea and ripples), at the rest position like the virtual buoy of the analysis.
+    // Their fields add up (linear superposition): one normal from the summed slopes and Jacobian of the horizontal
+    // displacement; their unresolved slope variances add up as roughness.
     vec2 xz = v_WorldPosition.xz;
-    float footprint = max(length(dFdx(xz)), length(dFdy(xz)));
     vec2 windU = u_windDirection;
-    vec2 windC = vec2(-windU.y, windU.x);
-    // Tangent and binormal of the ripple surface (Gerstner waves: the horizontal displacement sharpens the crests)
-    vec3 rippleT = vec3(1.0, 0.0, 0.0);
-    vec3 rippleB = vec3(0.0, 0.0, 1.0);
-    vec2 unresolved = vec2(0.0);  // Slope variance of the ripples finer than the pixel (upwind, crosswind)
-    for (int i = 0; i < MAX_RIPPLES; i++) {
-      if (i >= u_rippleCount) break;
-      vec4 info = u_rippleInfo[i];
-      if (info.x < 2.0 * footprint) { unresolved += info.yz; break; }
-      vec4 r = u_ripples[i];
-      // 1 with 4 or more pixels per wavelength, 0 with 2: the slope moves smoothly from the normal to the roughness
-      float w = clamp((info.x / footprint - 2.0) * 0.5, 0.0, 1.0);
-      float phase = dot(r.xy, xz) + r.w;
-      float s = sin(phase), c = cos(phase);
-      vec2 dir = r.xy * (info.x / (2.0 * PI)); // Unit travel direction
-      float A = w * r.z * 2.0 * PI / info.x;   // Slope amplitude w a k
-      float C = u_rippleChop * A;
-      rippleT += vec3(-dir.x * dir.x * C * s, dir.x * A * c, -dir.x * dir.y * C * s);
-      rippleB += vec3(-dir.x * dir.y * C * s, dir.y * A * c, -dir.y * dir.y * C * s);
-      vec2 kUC = vec2(dot(r.xy, windU), dot(r.xy, windC));
-      unresolved += (1.0 - w * w) * 0.5 * r.z * r.z * kUC * kUC;
+    vec4 cs = vec4(0.0); // (hx, hz, Dxx, Dzz)
+    float cDxz = 0.0;
+    vec2 unresolved = vec2(0.0); // Slope variance finer than the pixel (upwind, crosswind)
+    vec2 rippleVariance = vec2(0.0);
+    vec4 rippleS = vec4(0.0); float rippleDxz = 0.0;
+    if (u_fftEnabled)
+      unresolved += sampleCascade(u_fftSlopes, u_fftExtra, u_fftSize, u_fftN, xz, windU, cs, cDxz);
+    if (u_rippleEnabled) {
+      rippleVariance = sampleCascade(u_rippleSlopes, u_rippleExtra, u_rippleSize, u_rippleN, xz, windU, rippleS, rippleDxz);
+      cs += rippleS; cDxz += rippleDxz;
+      unresolved += rippleVariance;
     }
-    vec3 rippleNormal = normalize(cross(rippleB, rippleT));
-    vec2 rippleSlope = -rippleNormal.xz / max(rippleNormal.y, 0.05); // d(height)/dx, d(height)/dz
+    vec3 cT = vec3(1.0 + cs.z, cs.x, cDxz);
+    vec3 cB = vec3(cDxz, cs.y, 1.0 + cs.w);
+    vec3 cN = normalize(cross(cB, cT));
+    vec2 cascadeSlope = -cN.xz / max(cN.y, 0.05); // d(height)/dx, d(height)/dz
+    vec2 rippleSlope = rippleS.xy;
 
     // Render wave heights: the geometry (Gerstner waves and the ripples the mesh represents)
     if (u_paintWaveHeight){
@@ -446,7 +458,7 @@ export const OceanProjectedGridFragShader = /* glsl */`
 
     // Normal: slopes of the Gerstner surface plus the resolved ripples (partial derivative blending,
     // https://blog.selfshadow.com/publications/blending-in-detail/)
-    vec2 slope = -geoNormal.xz / max(geoNormal.y, 0.05) + rippleSlope;
+    vec2 slope = -geoNormal.xz / max(geoNormal.y, 0.05) + cascadeSlope;
     vec3 N = normalize(vec3(-slope.x, 1.0, -slope.y));
     if (underwater) { N = -N; geoNormal = -geoNormal; }
 

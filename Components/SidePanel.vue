@@ -12,12 +12,12 @@
       <!-- Section button; its options slide out below it (the sections below move down) -->
       <div v-for="section in sections" :key="section.id" class="section-group"
         @mouseenter="pauseCollapse" @mouseleave="resumeCollapse(section)">
-        <div class="section-button clickable" role="button" :aria-expanded="expandedId == section.id"
+        <div class="section-button clickable" role="button" :aria-expanded="isExpanded(section)"
           :class="{ selected: openId == section.id }" :title="section.title" @click="sectionClicked(section)">
           <span class="section-text">{{ section.title }}</span>
           <span class="fa section-icon">{{ section.icon }}</span>
         </div>
-        <div class="sub-buttons" :class="{ expanded: expandedId == section.id }">
+        <div class="sub-buttons" :class="{ expanded: isExpanded(section) }">
           <div class="sub-buttons-inner">
             <div v-for="child in section.children" :key="child.title" class="sub-button" role="button"
               :class="[child.unavailable ? 'sub-unavailable' : 'clickable', { selected: item === child }]"
@@ -71,13 +71,11 @@
 <script>
 
 import MenuPanel from './Panels/MenuPanel.vue';
-import DiscreteWavesPanel from './Panels/DiscreteWavesPanel.vue';
 import SeaStateAnalysisPanel from './Panels/SeaStateAnalysisPanel.vue';
 import RenderStereoPanel from './Panels/RenderStereoPanel.vue';
 import RenderHeightPanel from './Panels/RenderHeightPanel.vue';
-import SurfaceRipplesPanel from './Panels/SurfaceRipplesPanel.vue';
 import EnvironmentPanel from './Panels/EnvironmentPanel.vue';
-import SeaStatePanel from './Panels/SeaStatePanel.vue';
+import SeaStateGenerationPanel from './Panels/SeaStateGenerationPanel.vue';
 
 // Options of a section hide again if none is clicked within this time
 const COLLAPSE_MS = 4000;
@@ -108,12 +106,10 @@ export default {
       isWide: false,
       sections: [
         {
-          id: 'waves', title: 'Waves', icon: '',
+          id: 'seastate', title: 'Sea State', icon: '',
           children: [
-            { title: 'Discrete waves', component: 'discrete-waves' },
-            { title: 'Surface ripples', component: 'surface-ripples' },
-            { title: 'Sea state analysis', icon: '', component: 'sea-state-analysis' },
-            { title: 'Generate sea state', icon: '', component: 'sea-state' },
+            { title: 'Generation', icon: '', component: 'sea-state-generation' },
+            { title: 'Analysis', icon: '', component: 'sea-state-analysis' },
           ]
         },
         {
@@ -146,7 +142,7 @@ export default {
     },
     // Leaves room for the column of buttons on narrow screens
     panelWidth() {
-      return this.isWide ? 'min(900px, calc(100vw - 56px))' : 'min(552px, calc(100vw - 56px))';
+      return this.isWide ? 'min(1000px, calc(100vw - 56px))' : 'min(680px, calc(100vw - 56px))';
     },
   },
   watch: {
@@ -166,7 +162,13 @@ export default {
       this.open(this.isOpen ? '' : 'menu');
     },
     // Section button: shows / hides its options below it. It never closes the panel
+    // Options of a section shown below its button: while one of them is open in the panel, they stay (to switch to
+    // another option of the same section); the others show for a while after clicking their section
+    isExpanded: function (section) {
+      return this.expandedId == section.id || (this.item != null && this.openId == section.id);
+    },
     sectionClicked: function (section) {
+      if (this.item != null && this.openId == section.id) return this.collapse(); // Its options stay open anyway
       if (this.expandedId == section.id) {
         this.collapse();
       } else {
@@ -268,9 +270,12 @@ export default {
           alert('Could not read ' + file.name + '\n' + e.message);
           return;
         }
+        // The sea is the FFT sea plus up to 2 discrete Gerstner waves (Assets/Ocean/OceanParams.js MAX_DISCRETE_WAVES)
+        if (waves.length > 2)
+          alert(file.name + ' has ' + waves.length + ' waves. The sea is the FFT sea plus up to 2 discrete Gerstner waves: the 2 highest are used.');
         // Same event as editing the discrete waves table: the scene, the table and the analysis update
         window.eventBus.emit('DiscreteWavesPanel_setDiscreteWaves', waves);
-        this.open('waves', 'Discrete waves');
+        this.open('seastate', 'Generation');
       });
       reader.addEventListener('error', e => {
         console.error('Could not read file ' + file.name, e);
@@ -280,13 +285,11 @@ export default {
   },
   components: {
     'menu-panel': MenuPanel,
-    'discrete-waves': DiscreteWavesPanel,
     'sea-state-analysis': SeaStateAnalysisPanel,
     'render-heights': RenderHeightPanel,
     'render-stereo': RenderStereoPanel,
-    'surface-ripples': SurfaceRipplesPanel,
     'environment': EnvironmentPanel,
-    'sea-state': SeaStatePanel,
+    'sea-state-generation': SeaStateGenerationPanel,
   }
 }
 </script>

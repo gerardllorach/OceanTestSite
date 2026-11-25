@@ -1,12 +1,16 @@
 <template>
   
-  <div id="discrete-waves-panel" class="content">
+  <div id="discrete-waves-panel" class="content" :class="{ embedded }">
 
-    <p>In this section you can visualize and modify manually the discrete waves that form the sea state.</p>
+    <template v-if="!embedded">
+    <p>The sea is the FFT sea plus up to {{ maxWaves }} discrete waves defined here, e.g.
+      one or two swells from other directions. Each one is a Gerstner (trochoidal) wave, evaluated for every vertex of
+      the mesh.</p>
 
     <p>You can also drag and drop a .json file with the discrete waves anywhere on the page. Download the properties ("Export wave's properties" button) to see the format of the .json file.</p>
 
     <p>Waves are limited to 10 meter height and periods of 20 seconds.</p>
+    </template>
 
     <!-- TABLE -->
     <div class="container-vertical">
@@ -48,8 +52,8 @@
 
       </div>
       <!-- Add new wave -->
-      <div class="container-horizontal" :class="discreteWaves.length%2 == 0 ? 'odd' : ''">
-        <button class="add-button clickable" @click="addWave"><span>+</span></button>
+      <div class="container-horizontal" :class="discreteWaves.length%2 == 0 ? 'odd' : ''" v-if="discreteWaves.length < maxWaves">
+        <button class="add-button clickable" @click="addWave" title="Add a swell"><span>+</span></button>
         <span></span>
         <span></span>
         <span></span>
@@ -78,6 +82,8 @@
 
 export default {
   name: "DiscreteWavesPanel",
+  // embedded: inside the Generation page (no introduction)
+  props: { embedded: Boolean },
   created() {
 
   },
@@ -95,12 +101,8 @@ export default {
   },
   data() {
     return {
-      discreteWaves: [
-        {hm0: 0.92, T: 10, dir: 50, phase: 0},
-        {hm0: 0.15, T: 3.7, dir: 84, phase: 0},
-        {hm0: 0.53, T: 5.1, dir: 345, phase: 0},
-        {hm0: 0.18, T: 5.2, dir: 239, phase: 0},
-      ],
+      discreteWaves: [],
+      maxWaves: 2, // MAX_DISCRETE_WAVES in Assets/Ocean/OceanParams.js
       isEditing: false,
     }
   },
@@ -113,11 +115,12 @@ export default {
     // USER INPUT
     addWave: function(e){
       if (e){ e.preventDefault(); e.stopPropagation();}
-      // Create wave
+      if (this.discreteWaves.length >= this.maxWaves) return;
+      // Create a swell (long period, moderate height)
       this.discreteWaves.push({
-        hm0: (Math.random()*1+0.5),
-        T: (Math.random()*12 + 2),
-        dir: (Math.random()*90),
+        hm0: (Math.random()*0.7+0.3),
+        T: (Math.random()*8 + 8),
+        dir: (Math.random()*360),
         phase: Math.random()*360,
       });
       this.startEditing();
@@ -192,6 +195,13 @@ export default {
   overflow: auto;
   font-size: small;
   max-width: 700px;
+}
+
+/* Inside the Generation page */
+.content.embedded {
+  padding: 0;
+  overflow: visible;
+  max-width: none;
 }
 
 .container-vertical{

@@ -77,6 +77,9 @@ export class OceanGrid {
 
 
   updateCameraGrid = function(){
+    // Only the horizon case below sets the vertical scale: reset it, otherwise a value from a previous view (camera
+    // looking at the horizon) stays and the grid no longer covers the screen when looking down
+    this.yHeightScale = 1;
 
     // Create the central top or bottom vertex
     // When cameraUser is below XZ plane, the central vertex of the last row should be taken

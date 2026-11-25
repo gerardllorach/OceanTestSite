@@ -1,41 +1,43 @@
-// Surface ripples: the short waves (~4 m to ~2 cm) that the projected grid cannot resolve.
-// They are rendered in the fragment shader as slopes only (Assets/Ocean/OceanProjectedGridShader.js) and are
-// measured by the virtual buoy of the sea state analysis (Assets/Scripts/OceanAnalysis), so both use this set.
+// Surface ripples: the short waves (from where the FFT sea stops, ~4 m, down to a few cm) on a second FFT cascade
+// (Assets/Ocean/FFTOcean.js), a small tile next to the tile of the sea. The GPU computes their displacement, slopes
+// and Jacobian; the shader adds them to the sea, displaces the geometry with them where the mesh is fine enough and
+// draws their normals down to the pixel. Finer than that, the mipmaps keep their slope variance as roughness.
 //
-// Each ripple is a small deep-water Gerstner wave in the same format as the discrete waves:
-//   {hm0: 2 * amplitude (m), T (s), dir (deg, where it comes FROM, clockwise from north), phase (deg), chop}
-// where chop (<= 1) scales its horizontal displacement. They displace the geometry where the mesh is fine enough
-// (vertex shader) and the normals down to the pixel (fragment shader).
-// with the same dispersion relation as the Gerstner waves (k = w^2 / g, g = 9.8), so the analysis can evaluate them
-// with Assets/Scripts/OceanAnalysis/gerstner.js. The capillary term of the dispersion relation (only relevant below
-// ~5 cm) is left out on purpose to keep a single wave model.
+// Each grid point is a trochoidal (Gerstner) component, like the FFT sea: height a sin(k.x - w t + phi), horizontal
+// (k / |k|) a cos(...), deep-water dispersion w^2 = g k (g = 9.8, the capillary term below ~5 cm is left out to keep
+// a single wave model). The sea state analysis adds them at the rest position, like the FFT sea.
 //
-// Amplitudes follow the saturation range of the wavenumber spectrum, F(k) ~ k^-3 (Phillips 1958), scaled so that the
-// total mean square slope of the surface (Gerstner waves + ripples + unresolved tail) matches Cox & Munk (1954).
-// Ripples finer than a pixel are not drawn as normals: their slope variance becomes roughness (Bruneton et al. 2010,
-// "Real-time realistic ocean lighting using seamless transitions from geometry to BRDF"). The part of the slope
-// budget that is not given to explicit ripples is the "tail": roughness only.
+// Spectrum: the saturation range, F(k) ~ k^-3 (Phillips 1958), i.e. the same slope variance per octave, with a
+// directional spreading around the wind that is broader for shorter ripples. In the wavevector plane
+//   Psi(kx, kz) = F(k) D(theta) / k ~ k^-4 D(theta)          (the 1/k is the Jacobian from polar to Cartesian)
+// It is scaled so that the mean square slope of the whole surface (discrete waves + FFT sea + ripples + tail) matches
+// Cox & Munk (1954). The tail (the part of the slope budget finer than the ripple grid) is roughness only (Bruneton et
+// al. 2010, "Real-time realistic ocean lighting using seamless transitions from geometry to BRDF").
 
 const G = 9.8; // Same gravity as the shader and gerstner.js
 const DEG2RAD = Math.PI / 180;
 const RAD2DEG = 180 / Math.PI;
 const TWO_PI = 2 * Math.PI;
 
-export const MAX_RIPPLES = 64;  // Size of the uniform arrays in the shader
-export const RIPPLE_K_MIN = 1.5; // rad/m (wavelength ~4.2 m)
-export const RIPPLE_K_MAX = 300; // rad/m (wavelength ~2.1 cm, period 0.116 s: above the 0.1 s floor of gerstner.js)
-export const EXPLICIT_FRACTION = 0.7; // Part of the ripple slope budget given to the explicit ripples (the rest: tail)
+export const RIPPLE_K_MIN = 1.5; // rad/m (wavelength ~4.2 m): where the ripples start without an FFT sea
+export const RIPPLE_N = 512;     // Grid of the ripple cascade
+// Components up to this fraction of the Nyquist wavenumber (~2.9 texels per wavelength or more). A bit closer to the
+// limit than the sea (0.5): the shortest ripples only show in the normals, where the interpolation matters less
+export const RIPPLE_K_FRACTION = 0.7;
+export const EXPLICIT_FRACTION = 0.7; // Part of the ripple slope budget given to the ripple grid (the rest: tail)
 export const MAX_WIND_SPEED = 25; // m/s
-// Gerstner crests loop where the waves add up when the sum of (horizontal factor x a k) exceeds 1. The horizontal
-// displacement of the ripples (their choppiness) is scaled so that their sum stays below this value
-export const MAX_RIPPLE_CHOP_SUM = 0.6;
 
 export const DEFAULT_RIPPLE_SETTINGS = {
-  mode: 'seaState', // 'wind': windSpeed / windDir below. 'seaState': derived from the discrete waves
+  mode: 'seaState', // 'wind': windSpeed / windDir below. 'seaState': derived from the waves
   windSpeed: 7,     // U10, m/s
   windDir: 0,       // Where the wind comes FROM, deg clockwise from north
-  count: 48,
+  enabled: true,    // false: no ripple grid, only roughness (the tail carries the whole budget)
   seed: 20261124,   // Fixed seed: the same settings always give the same ripples (reproducible renders)
+  // Directionality
+  directionMode: 'wind', // 'wind': the ripples come from the wind direction (or the mean wave direction). 'custom'
+  direction: 0,          // Custom direction the ripples come FROM (deg clockwise from north)
+  spreadMode: 'auto',    // 'auto': spread from the Cox-Munk cross/up slope ratio, broader for shorter ripples. 'custom'
+  spread: 30,            // Custom directional spread (deg, width of the wrapped normal distribution), the same for all
 };
 
 
@@ -51,11 +53,11 @@ function mulberry32(seed) {
   };
 }
 
-// Standard normal sample (Box-Muller)
-function gaussian(rand) {
-  let u = 0;
-  while (u == 0) u = rand();
-  return Math.sqrt(-2 * Math.log(u)) * Math.cos(TWO_PI * rand());
+// Wrapped normal distribution of width sigma (rad), per radian
+export function wrappedNormal(theta, sigma) {
+  let sum = 0;
+  for (let m = -2; m <= 2; m++) sum += Math.exp(-Math.pow(theta + TWO_PI * m, 2) / (2 * sigma * sigma));
+  return sum / (Math.sqrt(TWO_PI) * sigma);
 }
 
 const wrap360 = deg => ((deg % 360) + 360) % 360;
@@ -115,111 +117,152 @@ export function slopeVariance(waves, dirDeg) {
 }
 
 
-// Generate the ripples for the discrete waves `waves` ([{hm0, T, dir, phase}]) and the settings.
-export function generateRipples(waves, settings = {}) {
+// Slope variance of the FFT sea along / across the direction `dirDeg` (from), from its slope tensor {xx, zz, xz}
+function fftSlopeVariance(fft, dirDeg) {
+  if (!fft) return { up: 0, cross: 0 };
+  const [ux, uz] = travelVector(dirDeg);
+  const t = fft.slopeTensor;
+  return {
+    up: ux * ux * t.xx + 2 * ux * uz * t.xz + uz * uz * t.zz,
+    cross: uz * uz * t.xx - 2 * ux * uz * t.xz + ux * ux * t.zz,
+  };
+}
+
+// Generate the ripple cascade for the discrete waves `waves` ([{hm0, T, dir, phase}]), the settings and the FFT sea
+// `fft` (generateFFTSea in Assets/Ocean/SeaSpectrum.js, or null). The ripples start where its grid ends.
+// Returns the grid for FFTOcean.setSpectrum() (L, amp, phase, omega, choppiness), the components that carry 99.95% of
+// the ripple variance (discrete-wave format, for the analysis), and the slope bookkeeping.
+export function generateRipples(waves, settings = {}, fft = null, N = RIPPLE_N) {
   const s = { ...DEFAULT_RIPPLE_SETTINGS, ...settings };
   waves = (waves || []).filter(w => w && w.T > 0 && isFinite(w.hm0));
 
   // Wind
   const fromSeaState = s.mode == 'seaState';
-  const seaState = seaStateWind(waves);
+  const seaState = seaStateWind(fft ? waves.concat(fft.components) : waves);
   const windSpeed = fromSeaState ? seaState.windSpeed : clamp(Number(s.windSpeed) || 0, 0, MAX_WIND_SPEED);
-  const windDir = wrap360(fromSeaState ? seaState.windDir : (Number(s.windDir) || 0));
+  const sourceWindDir = wrap360(fromSeaState ? seaState.windDir : (Number(s.windDir) || 0));
+  // Direction of the ripples: the wind, or a custom one. The slopes are split into upwind / crosswind components
+  // along this direction (Cox-Munk, the shader's roughness frame)
+  const windDir = s.directionMode == 'custom' ? wrap360(Number(s.direction) || 0) : sourceWindDir;
 
-  // Slope budget: Cox-Munk minus what the Gerstner waves already carry
+  // Slope budget: Cox-Munk minus what the Gerstner waves and the FFT sea already carry
   const target = coxMunk(windSpeed);
   const gerstner = slopeVariance(waves, windDir);
-  const budget = { up: Math.max(0, target.up - gerstner.up), cross: Math.max(0, target.cross - gerstner.cross) };
+  const fftSlopes = fftSlopeVariance(fft, windDir);
+  const budget = { up: Math.max(0, target.up - gerstner.up - fftSlopes.up),
+    cross: Math.max(0, target.cross - gerstner.cross - fftSlopes.cross) };
 
-  // Wavenumbers: log-spaced bins, from just above the shortest Gerstner wave (at least RIPPLE_K_MIN) to RIPPLE_K_MAX.
-  // With a spectral sea (Assets/Ocean/SeaSpectrum.js) the Gerstner waves stop at RIPPLE_K_MIN, so the two connect.
-  const n = clamp(Math.round(s.count), 0, MAX_RIPPLES);
+  // Grid: the ripples start just above the shortest wave of the other layers (where the FFT grid ends, or
+  // RIPPLE_K_MIN, or 1.2 x the shortest discrete wave). The grid spacing is kMin / 2, so that there are wavevectors
+  // from kMin on in every direction (kMin, 1.12 kMin, 1.41 kMin, 1.5 kMin...); it then covers a factor
+  // RIPPLE_K_FRACTION * N / 4 in wavenumber (~4 m down to ~4.5 cm).
   const kMaxGerstner = waves.reduce((m, w) => Math.max(m, wavenumber(w.T)), 0);
-  const kMin = Math.min(RIPPLE_K_MAX / 2, Math.max(RIPPLE_K_MIN, 1.2 * kMaxGerstner));
+  const kStart = fft ? fft.kCut : RIPPLE_K_MIN;
+  const kMin = Math.max(kStart, 1.2 * kMaxGerstner);
+  const L = 2 * TWO_PI / kMin;
+  const dk = TWO_PI / L;
+  const kCut = RIPPLE_K_FRACTION * Math.PI * N / L;
 
-  // Directional spread around the wind: wrapped normal of width sigmaTheta, chosen so that the cross / up ratio of
-  // the slopes, <sin^2> / <cos^2> = (1 - e) / (1 + e) with e = exp(-2 sigma^2), matches the budget.
-  // Shorter ripples spread more (towards +60% at the shortest), as observed for short wind waves.
+  // Directional spread around the ripple direction: wrapped normal of width sigmaTheta.
+  //  - auto: chosen so that the cross / up ratio of the slopes, <sin^2> / <cos^2> = (1 - e) / (1 + e) with
+  //    e = exp(-2 sigma^2), matches the budget, and broader for shorter ripples (towards +60% at the shortest), as
+  //    observed for short wind waves. The tail then completes Cox-Munk along both axes.
+  //  - custom: the same width for all the ripples. The total slope stays the Cox-Munk one, but its split between
+  //    upwind and crosswind follows the chosen spread (a narrow spread gives long-crested ripples)
   const ratio = budget.up > 0 ? Math.min(0.98, budget.cross / budget.up) : 0.98;
-  const sigmaTheta = Math.sqrt(-0.5 * Math.log((1 - ratio) / (1 + ratio)));
+  const autoSpread = s.spreadMode != 'custom';
+  const sigmaTheta = autoSpread ? Math.sqrt(-0.5 * Math.log((1 - ratio) / (1 + ratio)))
+    : clamp(Number(s.spread) || 30, 1, 180) * DEG2RAD;
+  const spreadGrowth = autoSpread ? 0.6 : 0;
+  const logRange = Math.log(kCut / kMin);
 
-  // Spectrum F(k) = k^-3 (any scale). The variance in a bin is F(k) dk = a^2 / 2, so a = sqrt(2 F(k) dk), where dk is the
-  // width of the (log-spaced) bin: the Jacobian between the bin index and k. With log bins dk = k dln(k), so every
-  // ripple ends up with about the same slope variance (a k)^2 / 2 = dln(k): equal slope per octave (saturation range).
-  // One ripple per bin, each with a random wavenumber inside its bin and its own direction: neighbouring ripples have
-  // similar lengths and different directions, so they form short-crested patches instead of long parallel stripes.
+  const amp = new Float64Array(N * N), phase = new Float64Array(N * N), omega = new Float64Array(N * N);
   const rand = mulberry32(s.seed);
-  const ripples = [];
-  const logRange = Math.log(RIPPLE_K_MAX / kMin);
-  for (let i = 0; i < n; i++) { // Longest first: the shader stops at the first ripple too short for the pixel
-    const e0 = kMin * Math.exp(logRange * i / n), e1 = kMin * Math.exp(logRange * (i + 1) / n);
-    const k = e0 * Math.pow(e1 / e0, 0.1 + 0.8 * rand()), dk = e1 - e0;
-    const a = Math.sqrt(2 * Math.pow(k, -3) * dk);
-    const spreadI = Math.min(1.6, sigmaTheta * (1 + 0.6 * i / Math.max(1, n - 1)));
-    const dir = wrap360(windDir + spreadI * gaussian(rand) * RAD2DEG);
-    const phase = rand() * 360;
-    ripples.push({ a, k, dir, phase });
+  let rawSlope = 0;
+  const windRad = windDir * DEG2RAD;
+  for (let m = 0; m < N; m++) {
+    for (let n = 0; n < N; n++) {
+      const ph = rand() * TWO_PI; // Drawn for every texel: the phases do not depend on the range
+      if (!s.enabled) continue;
+      const nn = n < N / 2 ? n : n - N, mm = m < N / 2 ? m : m - N;
+      const kx = nn * dk, kz = mm * dk, k = Math.hypot(kx, kz);
+      if (k < kMin * (1 - 1e-9) || k > kCut) continue;
+      const from = Math.atan2(-kx / k, kz / k); // Direction the component comes from
+      let rel = from - windRad;
+      rel = Math.atan2(Math.sin(rel), Math.cos(rel));
+      const sigma = autoSpread ? Math.min(1.6, sigmaTheta * (1 + spreadGrowth * Math.log(k / kMin) / logRange)) : sigmaTheta;
+      const psi = Math.pow(k, -4) * wrappedNormal(rel, sigma); // Saturation range, any scale
+      const a = Math.sqrt(2 * psi * dk * dk);
+      const i = m * N + n;
+      amp[i] = a; phase[i] = ph; omega[i] = Math.sqrt(G * k);
+      rawSlope += 0.5 * a * a * k * k;
+    }
   }
 
-  // Scale the amplitudes so the explicit ripples carry EXPLICIT_FRACTION of the slope budget
-  const rawSlope = ripples.reduce((sum, r) => sum + 0.5 * Math.pow(r.a * r.k, 2), 0);
-  const explicitSlope = EXPLICIT_FRACTION * (budget.up + budget.cross);
-  const scale = rawSlope > 0 ? Math.sqrt(explicitSlope / rawSlope) : 0;
-  // Choppiness: horizontal (Gerstner) displacement of the ripples, scaled so that crests do not loop
-  const akSum = ripples.reduce((sum, r) => sum + r.a * scale * r.k, 0);
-  const chop = akSum > 0 ? Math.min(1, MAX_RIPPLE_CHOP_SUM / akSum) : 1;
-  const out = ripples.map(r => {
-    const a = r.a * scale;
-    const omega = Math.sqrt(G * r.k);
-    return { hm0: 2 * a, T: TWO_PI / omega, dir: r.dir, phase: r.phase, chop, k: r.k, wavelength: TWO_PI / r.k };
-  });
+  // Scale so that the grid carries EXPLICIT_FRACTION of the slope budget
+  const scale = rawSlope > 0 ? Math.sqrt(EXPLICIT_FRACTION * (budget.up + budget.cross) / rawSlope) : 0;
+  const slopeTensor = { xx: 0, zz: 0, xz: 0 };
+  const all = [];
+  for (let m = 0; m < N; m++) {
+    for (let n = 0; n < N; n++) {
+      const i = m * N + n;
+      if (!(amp[i] > 0)) continue;
+      const a = amp[i] * scale;
+      amp[i] = a;
+      const nn = n < N / 2 ? n : n - N, mm = m < N / 2 ? m : m - N;
+      const kx = nn * dk, kz = mm * dk, k = Math.hypot(kx, kz);
+      const v = 0.5 * a * a;
+      slopeTensor.xx += v * kx * kx; slopeTensor.zz += v * kz * kz; slopeTensor.xz += v * kx * kz;
+      all.push({ a, kx, kz, k, w: omega[i], phase: phase[i] });
+    }
+  }
+  const ripplesSlopes = fftSlopeVariance({ slopeTensor }, windDir);
 
-  // Tail: the rest of the budget along each axis (roughness only)
-  const explicit = slopeVariance(out, windDir);
-  const tail = { up: Math.max(0, budget.up - explicit.up), cross: Math.max(0, budget.cross - explicit.cross) };
-  const total = { up: gerstner.up + explicit.up + tail.up, cross: gerstner.cross + explicit.cross + tail.cross };
+  // Components for the analysis: the largest ones, up to 99.95% of the variance
+  all.sort((p, q) => q.a - p.a);
+  const variance = all.reduce((sum, c) => sum + c.a * c.a / 2, 0);
+  const components = [];
+  let acc = 0;
+  for (const c of all) {
+    if (acc >= 0.9995 * variance) break;
+    acc += c.a * c.a / 2;
+    components.push({ hm0: 2 * c.a, T: TWO_PI / c.w, dir: wrap360(Math.atan2(-c.kx / c.k, c.kz / c.k) * RAD2DEG),
+      phase: wrap360(c.phase * RAD2DEG), chop: 1, k: c.k, wavelength: TWO_PI / c.k });
+  }
+
+  // Tail: the rest of the budget along each axis (roughness only). With a custom spread, what the grid carries in
+  // excess along one axis is taken from the tail of the other one, so that the total stays Cox-Munk
+  let tail = { up: Math.max(0, budget.up - ripplesSlopes.up), cross: Math.max(0, budget.cross - ripplesSlopes.cross) };
+  const excess = Math.max(0, ripplesSlopes.up - budget.up) + Math.max(0, ripplesSlopes.cross - budget.cross);
+  if (excess > 0) {
+    const t = tail.up + tail.cross;
+    const keep = t > 0 ? Math.max(0, t - excess) / t : 0;
+    tail = { up: tail.up * keep, cross: tail.cross * keep };
+  }
+  const total = { up: gerstner.up + fftSlopes.up + ripplesSlopes.up + tail.up,
+    cross: gerstner.cross + fftSlopes.cross + ripplesSlopes.cross + tail.cross };
 
   return {
-    settings: { ...s, count: n },
-    windSpeed, windDir,
+    settings: s,
+    enabled: s.enabled && all.length > 0,
+    windSpeed,
+    windDir,       // Direction of the ripples (from): the wind, or the custom direction
+    sourceWindDir, // Wind direction (or mean wave direction in 'seaState' mode)
+    spread: sigmaTheta * RAD2DEG, // Directional spread of the longest ripples (deg)
+    autoSpread,
     seaStateHm0: seaState.Hm0,
-    kMin, kMax: RIPPLE_K_MAX,
-    ripples: out,
-    chop, // Horizontal displacement factor of all the ripples (1 = Gerstner)
+    // Grid (FFTOcean.setSpectrum)
+    N, L, dk, kMin, kMax: kCut, kCut, amp, phase, omega, choppiness: 1,
+    numComponents: all.length,
+    // Continuous spectrum the grid samples (rippleDirectionalDensity in Assets/Ocean/InputSpectrum.js):
+    // Psi(kx, kz) = scale^2 k^-4 D(theta; sigma(k)) for kMin <= k <= kCut
+    spectrum: { scale, sigmaTheta, spreadGrowth, logRange },
+    components,
+    ripples: components, // Same list (older name)
+    chop: 1, // Horizontal displacement factor (1: trochoids)
+    slopeTensor,
     tailSigma2: tail, // Upwind / crosswind slope variance of the tail
-    slopes: { coxMunk: target, gerstner, ripples: explicit, tail, total },
-    heightVariance: out.reduce((sum, r) => sum + Math.pow(r.hm0 / 2, 2) / 2, 0), // m^2
+    slopes: { coxMunk: target, gerstner, fft: fftSlopes, ripples: ripplesSlopes, tail, total },
+    heightVariance: variance, // m^2
   };
-}
-
-
-// Shader uniforms for the ripples at time `time` (s), written into the arrays of THREE.Vector4 / plain objects:
-//   ripples[i] = (kx, kz, amplitude, phase now)   info[i] = (wavelength, suffix slope variance up, cross, 0)
-// The phase now is phase - w t, wrapped to [0, 2 pi) here in double precision: in the shader (float32) w t would
-// lose precision as the time grows. The suffix sums are the slope variance of ripples i..n-1, which the shader turns
-// into roughness when it stops at the first ripple that is too short for the pixel.
-export function writeRippleUniforms(result, time, ripplesOut, infoOut) {
-  const list = result.ripples;
-  const [ux, uz] = travelVector(result.windDir);
-  let suffixUp = 0, suffixCross = 0;
-  for (let i = list.length - 1; i >= 0; i--) {
-    const r = list[i];
-    const [dx, dz] = travelVector(r.dir);
-    const a = r.hm0 / 2;
-    const kx = r.k * dx, kz = r.k * dz;
-    const kUp = kx * ux + kz * uz, kCross = -kx * uz + kz * ux;
-    suffixUp += 0.5 * a * a * kUp * kUp;
-    suffixCross += 0.5 * a * a * kCross * kCross;
-    const omega = TWO_PI / r.T;
-    let phase = (r.phase * DEG2RAD - omega * time) % TWO_PI;
-    if (phase < 0) phase += TWO_PI;
-    if (ripplesOut) set4(ripplesOut[i], kx, kz, a, phase);
-    if (infoOut) set4(infoOut[i], r.wavelength, suffixUp, suffixCross, 0);
-  }
-  return { windDirection: [ux, uz] };
-}
-
-function set4(v, x, y, z, w) {
-  if (v.set) v.set(x, y, z, w);
-  else { v.x = x; v.y = y; v.z = z; v.w = w; }
 }

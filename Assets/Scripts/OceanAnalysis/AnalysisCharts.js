@@ -18,7 +18,7 @@ const fmt = (v, d = 2) => (v == null || !isFinite(v)) ? '–' : Number(v).toFixe
 // ---------------------------------------------------------------------------------------------
 // opt = {
 //   height, x: {label, type: 'linear'|'log', domain, ticks, tickFormat}, y: {label, type: 'linear'|'log', domain, ticks, tickFormat},
-//   series: [{name, color, x, y, type: 'line'|'area'|'points', unit, digits}],
+//   series: [{name, color, x, y, type: 'line'|'area'|'points', unit, digits, format: (y) => string}],
 //   bars: {x0, x1, y, color, name},
 //   markers: [{x, label}], hlines: [{y, label}],
 //   yAxisTitle, onYAxisClick, tooltipX: (x) => string, legend
@@ -109,7 +109,7 @@ export function lineChart(el, opt) {
     }
     const line = d3.line().defined(i => yValid(s.y[i])).x(i => x(s.x[i])).y(i => y(s.y[i]));
     if (s.type == 'area') {
-      const area = d3.area().defined(i => isFinite(s.y[i])).x(i => x(s.x[i])).y0(y(0)).y1(i => y(s.y[i]));
+      const area = d3.area().defined(i => yValid(s.y[i])).x(i => x(s.x[i])).y0(yLog ? ih : y(0)).y1(i => y(s.y[i]));
       plot.append('path').datum(idx).attr('d', area).attr('fill', s.color).attr('fill-opacity', 0.14);
     }
     plot.append('path').datum(idx).attr('d', line).attr('fill', 'none')
@@ -186,16 +186,21 @@ export function lineChart(el, opt) {
     if (!hoverSeries.length) return;
     const rect = overlay.node().getBoundingClientRect();
     const xv = x.invert(ev.clientX - rect.left);
-    const i0 = nearest(hoverSeries[0], xv);
-    if (i0 < 0) return;
-    const xs = hoverSeries[0].x[i0];
+    // opt.hoverAll: the crosshair follows the pointer over the whole axis, and each series shows only where it has a
+    // value near it (series that cover different ranges). Otherwise it snaps to the first series
+    const i0 = opt.hoverAll ? -1 : nearest(hoverSeries[0], xv);
+    if (!opt.hoverAll && i0 < 0) return;
+    const xs = opt.hoverAll ? xv : hoverSeries[0].x[i0];
     cross.attr('x1', x(xs)).attr('x2', x(xs)).style('display', null);
     let html = `<div class="oa-tooltip-title">${opt.tooltipX ? opt.tooltipX(xs) : fmt(xs)}</div>`;
     hoverSeries.forEach((s, k) => {
-      const i = s === hoverSeries[0] ? i0 : nearest(s, xs);
+      if (dots[k]) dots[k].style('display', 'none');
+      const i = !opt.hoverAll && s === hoverSeries[0] ? i0 : nearest(s, xs);
       if (i < 0) return;
+      if (opt.hoverAll && Math.abs(x(s.x[i]) - x(xs)) > (s.type == 'points' ? 10 : 4)) return;
       if (dots[k]) dots[k].attr('cx', x(s.x[i])).attr('cy', y(s.y[i])).style('display', null);
-      html += `<div>${s.color ? `<i style="background:${s.color}"></i>` : ''}${s.name}: <b>${fmt(s.y[i], s.digits ?? 3)}</b> ${s.unit || ''}</div>`;
+      const value = s.format ? s.format(s.y[i]) : fmt(s.y[i], s.digits ?? 3);
+      html += `<div>${s.color ? `<i style="background:${s.color}"></i>` : ''}${s.name}: <b>${value}</b> ${s.unit || ''}</div>`;
     });
     tooltip.innerHTML = html;
     tooltip.style.display = 'block';
@@ -242,10 +247,13 @@ export function polarChart(el, polar, opt = {}) {
   const df = polar.df;
   const inView = f => f >= fmin && f <= fmax;
 
-  // Colours are scaled to the strongest cell of the visible period range
+  // Colours are scaled to the strongest cell of the visible period range. Linear: cells under 1% of it are not
+  // painted. Log (opt.logDecades = n): n decades below it, for spectra that span orders of magnitude
   let viewMax = 0;
   polar.energy.forEach((row, k) => { if (row && inView(polar.freq[k])) viewMax = Math.max(viewMax, ...row); });
-  const threshold = 0.01 * viewMax; // Cells under 1% of the maximum are not painted
+  const decades = opt.logDecades || 0;
+  const threshold = decades ? viewMax * Math.pow(10, -decades) : 0.01 * viewMax;
+  const colorOf = v => turbo(decades ? 1 + Math.log10(v / viewMax) / decades : v / viewMax);
 
   // Energy cells
   for (let k = 0; k < polar.freq.length && viewMax > 0; k++) {
@@ -260,7 +268,7 @@ export function polarChart(el, polar, opt = {}) {
       ctx.arc(cx, cy, r1, a0, a1);
       ctx.arc(cx, cy, r0, a1, a0, true);
       ctx.closePath();
-      ctx.fillStyle = turbo(row[d] / viewMax);
+      ctx.fillStyle = colorOf(row[d]);
       ctx.fill();
     }
   }
@@ -314,8 +322,8 @@ export function polarChart(el, polar, opt = {}) {
   bar.className = 'oa-colorbar';
   const stops = d3.range(0, 1.0001, 0.1).map(t => `${turbo(t)} ${t * 100}%`).join(',');
   bar.innerHTML = `<div class="oa-colorbar-ramp" style="background:linear-gradient(90deg,${stops})"></div>
-    <div class="oa-colorbar-labels"><span>0</span><span>${viewMax > 0 ? viewMax.toPrecision(3) : '0'}</span></div>
-    <div class="oa-colorbar-unit">m²/Hz/deg</div>`;
+    <div class="oa-colorbar-labels"><span>${decades && viewMax > 0 ? threshold.toExponential(0) : '0'}</span><span>${viewMax > 0 ? (decades ? viewMax.toExponential(1) : viewMax.toPrecision(3)) : '0'}</span></div>
+    <div class="oa-colorbar-unit">m²/Hz/deg${decades ? ' (log scale)' : ''}</div>`;
   el.appendChild(bar);
 
   // Zoom: the inner half of the circle zooms in (longer periods), the outer half zooms out.

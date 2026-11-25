@@ -15,7 +15,12 @@ export const G = 9.8; // Same gravity as the shader and the analysis
 const DEG2RAD = Math.PI / 180;
 const RAD2DEG = 180 / Math.PI;
 
+// How the spectrum is rendered: 'fft' (Tessendorf, Assets/Ocean/FFTOcean.js), 'gerstner' (discrete Gerstner
+// components, generateSea), 'none' (only the waves of the discrete waves list)
+export const SEA_METHODS = ['fft', 'gerstner', 'none'];
+
 export const DEFAULT_SEA_SETTINGS = {
+  method: 'fft',
   Hm0: 1.0,     // Significant wave height (m)
   Tp: null,     // Peak period (s). null: fully developed sea for Hm0 (Pierson-Moskowitz)
   gamma: 3.3,   // JONSWAP peak enhancement (1 = Pierson-Moskowitz, 3.3 = mean JONSWAP)
@@ -23,6 +28,7 @@ export const DEFAULT_SEA_SETTINGS = {
   spread: 30,   // Directional spread sigma1 (deg, Kuik et al. 1988)
   count: 40,    // Number of components (Gerstner waves)
   seed: 1,
+  choppiness: 1, // FFT: horizontal displacement factor (Tessendorf's lambda). 1: every component is a trochoid
 };
 
 // Frequency where the ripples take over (deep water: f = sqrt(g k) / 2 pi): ~0.61 Hz, 1.6 s, 4.2 m
@@ -79,6 +85,8 @@ export function resolveSeaSettings(settings = {}) {
   if (s.TpAuto) s.Tp = fullyDevelopedPeakPeriod(s.Hm0);
   s.gamma = Math.max(1, Number(s.gamma) || 1);
   s.count = Math.max(1, Math.round(s.count));
+  s.choppiness = Math.max(0, Number(s.choppiness ?? 1));
+  if (!SEA_METHODS.includes(s.method)) s.method = 'fft';
   return s;
 }
 
@@ -150,5 +158,143 @@ export function generateSea(settings = {}) {
     realizedHm0: 4 * Math.sqrt(variance), // Slightly below Hm0: the tail above fHi belongs to the ripples
     // Sum of a k: Gerstner crests can loop where the waves add up if it is over 1
     steepnessSum,
+  };
+}
+
+
+
+// ---------------------------------------------------------------------------------------------
+// FFT sea (Tessendorf 2001, "Simulating Ocean Water")
+// ---------------------------------------------------------------------------------------------
+// The same spectrum, sampled on a regular grid of wavevectors (kx, kz) = 2 pi (n, m) / L, n, m in [-N/2, N/2).
+// Each grid point is one component: a deep-water wave of wavevector k, amplitude a and random phase phi.
+// With Tessendorf's horizontal displacement D = lambda * (k / |k|) * a cos(...), every component is a trochoidal
+// (Gerstner) wave, like the discrete waves:
+//   height = a sin(k.x - w t + phi),   horizontal = lambda * (k / |k|) * a cos(k.x - w t + phi)
+// The difference with the discrete waves is how they are combined: the FFT adds all the components at the rest
+// position x (linear superposition of trochoids), while the shader chains the discrete waves (each one evaluated at
+// the position displaced by the previous ones). The sea state analysis follows the same rules.
+//
+// Amplitude: the variance of a grid cell is Psi(kx, kz) dk^2 = a^2 / 2, with the wavenumber spectrum
+//   Psi(kx, kz) = E(f, theta) * cg / (2 pi k)        (m^4)
+// E(f, theta) = S(f) D(theta) is the directional spectrum (m^2/Hz/rad), cg / (2 pi) = df/dk the Jacobian from f to k
+// and 1 / k the Jacobian from polar (k, theta) to Cartesian (kx, kz).
+// Amplitudes are deterministic (sqrt of the expected variance) with random phases, so the realisation follows the
+// target spectrum closely (Tessendorf draws Gaussian amplitudes instead, which adds Rayleigh scatter).
+
+export const FFT_N = 512;          // Grid size (texture size)
+export const FFT_MIN_SIZE = 512;   // Minimum tile size (m)
+// Components are kept up to this fraction of the Nyquist wavenumber pi N / L (4 texels per wavelength or more):
+// shorter ones would be distorted by the interpolation between texels. The ripples take over from there.
+export const FFT_K_FRACTION = 0.5;
+
+// Tile size: at least 4 peak wavelengths, so that the longest waves fit and the peak is well sampled
+export function fftTileSize(Tp) {
+  const peakWavelength = G * Tp * Tp / (2 * Math.PI);
+  return Math.max(FFT_MIN_SIZE, 4 * peakWavelength);
+}
+
+// Integral of cos^2s(theta / 2) over a full turn, to have D(theta) in 1/rad
+const spreadingNormCache = new Map();
+export function spreadingNorm(s) {
+  if (!spreadingNormCache.has(s)) {
+    const n = 2880;
+    let sum = 0;
+    for (let i = 0; i < n; i++) sum += Math.pow(Math.cos((-Math.PI + 2 * Math.PI * (i + 0.5) / n) / 2), 2 * s) * 2 * Math.PI / n;
+    spreadingNormCache.set(s, sum);
+  }
+  return spreadingNormCache.get(s);
+}
+
+// Variance of the target spectrum below fCut (numerical integral)
+function bandVariance(settings, fCut) {
+  const n = 4000, lo = Math.log(0.2 / settings.Tp), hi = Math.log(fCut);
+  let sum = 0;
+  for (let i = 0; i < n; i++) {
+    const f0 = Math.exp(lo + (hi - lo) * i / n), f1 = Math.exp(lo + (hi - lo) * (i + 1) / n);
+    sum += 0.5 * (spectralDensity(f0, settings) + spectralDensity(f1, settings)) * (f1 - f0);
+  }
+  return sum;
+}
+
+// FFT sea for the settings. Returns:
+//   amp, phase, omega: Float64Array N*N, per texel (n, m) at m * N + n -> FFTOcean.setSpectrum()
+//   components: the components that carry 99.95% of the variance, in the discrete-wave format
+//     {hm0: 2a, T, dir (from), phase (deg), chop}, for the sea state analysis
+//   slopeTensor: {xx, zz, xz}, mean square slopes of all the components (for the ripples' slope budget)
+export function generateFFTSea(settings = {}, N = FFT_N) {
+  const s = resolveSeaSettings(settings);
+  const L = fftTileSize(s.Tp);
+  const dk = 2 * Math.PI / L;
+  const kCut = FFT_K_FRACTION * Math.PI * N / L;
+  const fCut = Math.sqrt(G * kCut) / (2 * Math.PI);
+  const spreadExp = spreadingExponent(s.spread);
+  const dNorm = spreadingNorm(spreadExp);
+  const meanDir = s.Mdir * DEG2RAD;
+  const rand = mulberry32(s.seed + 31337);
+
+  const amp = new Float64Array(N * N), phases = new Float64Array(N * N), omega = new Float64Array(N * N);
+  let variance = 0;
+  for (let m = 0; m < N; m++) {
+    for (let n = 0; n < N; n++) {
+      const phase = rand() * 2 * Math.PI; // Drawn for every texel: the phases do not depend on the cut
+      const nn = n < N / 2 ? n : n - N, mm = m < N / 2 ? m : m - N;
+      const kx = nn * dk, kz = mm * dk, k = Math.hypot(kx, kz);
+      if (k == 0 || k > kCut) continue;
+      const f = Math.sqrt(G * k) / (2 * Math.PI);
+      // Direction the component comes FROM (clockwise from north), from its travel direction (kx, kz) / k
+      const from = Math.atan2(-kx / k, kz / k);
+      let rel = from - meanDir;
+      rel = Math.atan2(Math.sin(rel), Math.cos(rel));
+      const D = Math.pow(Math.cos(rel / 2), 2 * spreadExp) / dNorm;           // 1/rad
+      const E = spectralDensity(f, s) * D;                                    // m^2/Hz/rad
+      const cg = 0.5 * Math.sqrt(G / k);
+      const psi = E * cg / (2 * Math.PI * k);                                 // m^4
+      const a = Math.sqrt(2 * psi * dk * dk);
+      amp[m * N + n] = a;
+      phases[m * N + n] = phase;
+      variance += a * a / 2;
+    }
+  }
+  // The grid samples the spectrum coarsely around the peak: scale to the exact variance of the band below kCut
+  const target = bandVariance(s, fCut);
+  const scale = variance > 0 ? Math.sqrt(target / variance) : 0;
+
+  const all = [];
+  const slopeTensor = { xx: 0, zz: 0, xz: 0 };
+  for (let m = 0; m < N; m++) {
+    for (let n = 0; n < N; n++) {
+      const i = m * N + n;
+      const a = amp[i] * scale;
+      amp[i] = a;
+      if (!(a > 0)) continue;
+      const nn = n < N / 2 ? n : n - N, mm = m < N / 2 ? m : m - N;
+      const kx = nn * dk, kz = mm * dk, k = Math.hypot(kx, kz);
+      const w = Math.sqrt(G * k);
+      omega[i] = w;
+      const v = 0.5 * a * a;
+      slopeTensor.xx += v * kx * kx; slopeTensor.zz += v * kz * kz; slopeTensor.xz += v * kx * kz;
+      all.push({ a, kx, kz, k, w, phase: phases[i] });
+    }
+  }
+
+  // Components for the analysis: the largest ones, up to 99.95% of the variance
+  all.sort((p, q) => q.a - p.a);
+  const totalVariance = all.reduce((sum, c) => sum + c.a * c.a / 2, 0);
+  const components = [];
+  let acc = 0;
+  for (const c of all) {
+    if (acc >= 0.9995 * totalVariance) break;
+    acc += c.a * c.a / 2;
+    components.push({ hm0: 2 * c.a, T: 2 * Math.PI / c.w, dir: wrap360(Math.atan2(-c.kx / c.k, c.kz / c.k) * RAD2DEG),
+      phase: wrap360(c.phase * RAD2DEG), chop: s.choppiness, k: c.k });
+  }
+
+  return {
+    settings: s, N, L, dk, kCut, fCut,
+    amp, phase: phases, omega, choppiness: s.choppiness, components, slopeTensor,
+    numComponents: all.length,
+    realizedHm0: 4 * Math.sqrt(totalVariance),
+    componentsHm0: 4 * Math.sqrt(acc),
   };
 }

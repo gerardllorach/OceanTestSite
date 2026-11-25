@@ -27,11 +27,18 @@ MeanDir_ADCPWaves : Direction (from) mean of waves {mean wave direction} on the 
 Unidir_Ind_ADCP_Waves : Unidirectivity index of waves on the water body by acoustic doppler wave array and computation using protocol of Barstow et al. (1991)
 */
 
-import { generateSea, DEFAULT_SEA_SETTINGS } from '/OceanTestSite/Assets/Ocean/SeaSpectrum.js';
+import { generateSea, generateFFTSea, DEFAULT_SEA_SETTINGS } from '/OceanTestSite/Assets/Ocean/SeaSpectrum.js';
 
-// The discrete waves of the ocean. They are generated as a random realisation of a wave spectrum (JONSWAP /
-// Pierson-Moskowitz, Assets/Ocean/SeaSpectrum.js) from the sea state parameters, or set one by one (discrete waves
-// panel, dropped .json). They are sent to the GPU in a float texture (getWaveParamsImageData).
+// The sea is made of layers:
+//  - FFT sea: the spectrum of the sea state (JONSWAP / Pierson-Moskowitz from the sea state parameters, Assets/Ocean/
+//    SeaSpectrum.js) on a grid of wavevectors (generateFFTSea), computed on the GPU (Assets/Ocean/FFTOcean.js).
+//  - Up to MAX_DISCRETE_WAVES discrete Gerstner waves (this list) added on top of it, e.g. one or two swells: set one
+//    by one (discrete waves panel, dropped .json). Sent to the GPU in a float texture (getWaveParamsImageData).
+// Only if the browser cannot run the FFT (no float render targets), the spectrum is rendered with Gerstner components
+// instead (method 'gerstner', generateSea), which then replace the discrete waves.
+
+// Discrete Gerstner waves on top of the FFT sea (each one is evaluated for every vertex)
+export const MAX_DISCRETE_WAVES = 2;
 export class OceanParameters{
 
   oceanParameters = {
@@ -43,20 +50,25 @@ export class OceanParameters{
     Spr1: 36.7,
     timestamp: '2019-11-14 02:05h',
     // Spectrum (see SeaSpectrum.js)
+    method: DEFAULT_SEA_SETTINGS.method, // 'fft', 'gerstner' or 'none'
     Tp: null,      // Peak period (s). null: fully developed sea for Hm0 (Pierson-Moskowitz)
     gamma: DEFAULT_SEA_SETTINGS.gamma,
-    numComponents: DEFAULT_SEA_SETTINGS.count,
+    numComponents: DEFAULT_SEA_SETTINGS.count, // Method 'gerstner'
+    choppiness: DEFAULT_SEA_SETTINGS.choppiness, // Method 'fft'
     seed: DEFAULT_SEA_SETTINGS.seed,
   }
 
+  numWaves = 0;
   waveHeights = [];
   wavePeriods = [];
   waveDirections = [];
   waveSteepness = [];
   wavePhases = [];
 
-  // Spectrum the waves come from (output of generateSea), or null when the waves were set by hand
+  // Spectrum the discrete waves come from (output of generateSea, method 'gerstner'), or null when they were set by hand
   sea = null;
+  // FFT sea (output of generateFFTSea, method 'fft'), or null
+  fftSea = null;
 
   // Values are divided by these before going to the GPU (the shader multiplies them back)
   WAVE_MAX = 10;
@@ -78,14 +90,26 @@ export class OceanParameters{
   // Sea state settings for the spectrum generator
   getSeaSettings = function(){
     const p = this.oceanParameters;
-    return { Hm0: p.Hm0, Tp: p.Tp, gamma: p.gamma, Mdir: p.Mdir, spread: p.Spr1, count: p.numComponents, seed: p.seed };
+    return { method: p.method, Hm0: p.Hm0, Tp: p.Tp, gamma: p.gamma, Mdir: p.Mdir, spread: p.Spr1,
+      count: p.numComponents, choppiness: p.choppiness, seed: p.seed };
   }
 
-  // Generate the discrete waves from the spectrum of the sea state
+  // Generate the sea from the spectrum of the sea state, with the current method
   generateDistributions = function(){
-    const sea = generateSea(this.getSeaSettings());
-    this.sea = sea;
-    this.setWaves(sea.waves);
+    const settings = this.getSeaSettings();
+    if (settings.method == 'gerstner') {
+      const sea = generateSea(settings);
+      this.sea = sea;
+      this.fftSea = null;
+      this.setWaves(sea.waves);
+      return;
+    }
+    // FFT or none: the generated Gerstner components (if any) go away, the hand-set waves stay
+    if (this.sea) {
+      this.sea = null;
+      this.setWaves([]);
+    }
+    this.fftSea = settings.method == 'fft' ? generateFFTSea(settings) : null;
   }
 
   // Waves: [{hm0, T, dir, phase}]
@@ -99,15 +123,18 @@ export class OceanParameters{
     this.waveSteepness = waves.map(w => 4 * Math.PI * Math.PI * Math.abs(w.hm0) * 0.5 / (w.T * w.T * 9.8));
   }
 
-  // Waves set one by one: they no longer come from a spectrum
+  // Waves set one by one, added to the FFT sea (at most MAX_DISCRETE_WAVES: the largest ones are kept)
   setDiscreteWaves = function(waves){
     this.sea = null;
+    if (waves.length > MAX_DISCRETE_WAVES)
+      waves = waves.slice().sort((a, b) => Math.abs(b.hm0) - Math.abs(a.hm0)).slice(0, MAX_DISCRETE_WAVES);
     this.setWaves(waves);
   }
 
-  // Sea state settings, e.g. {Hm0, Tp, gamma, Mdir, Spr1, numComponents, seed}. Regenerates the waves
-  setSeaSettings = function(settings){
-    Object.keys(settings).forEach(key => this.oceanParameters[key] = settings[key]);
+  // Sea state settings, e.g. {Hm0, Tp, gamma, Mdir, Spr1, choppiness, seed}. Regenerates the sea.
+  // The method is always the FFT (only the fallback for browsers without float render targets changes it)
+  setSeaSettings = function(settings, allowMethod = false){
+    Object.keys(settings).forEach(key => { if (key != 'method' || allowMethod) this.oceanParameters[key] = settings[key]; });
     this.generateDistributions();
     this.updateHTMLGidget();
   }

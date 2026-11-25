@@ -21,19 +21,66 @@ const DEG2RAD = Math.PI / 180;
 // 1. Buoy displacements
 // ---------------------------------------------------------------------------------------------
 // Returns heave (up +), north (+) and west (+) excursions from the mean position, as Datawell does.
-// ripples: surface ripples the buoy can follow (already filtered by buoyRipples()), or null
-export function simulateBuoy(waves, samplingRate, durationSeconds, x0 = 0, z0 = 0, ripples = null) {
+// waves: the discrete Gerstner waves, chained as in the shader.
+// restWaves: trochoidal components added at the rest position (FFT sea and surface ripples the buoy can follow,
+//   already filtered by buoyComponents()), or null
+export function simulateBuoy(waves, samplingRate, durationSeconds, x0 = 0, z0 = 0, restWaves = null) {
   const n = Math.max(2, Math.round(samplingRate * durationSeconds));
   const heave = new Float64Array(n), north = new Float64Array(n), west = new Float64Array(n);
+  const rest = restWaves && restWaves.length ? restLayerRecord(restWaves, samplingRate, n, x0, z0) : null;
   const p = [0, 0, 0];
   for (let i = 0; i < n; i++) {
-    Gerstner.getParticlePosition(p, waves, i / samplingRate, x0, z0, ripples);
+    Gerstner.getParticlePosition(p, waves, i / samplingRate, x0, z0);
+    if (rest) { p[0] += rest.x[i]; p[1] += rest.y[i]; p[2] += rest.z[i]; }
     heave[i] = p[1];
     north[i] = -(p[2] - z0); // north is -z
     west[i] = -(p[0] - x0);  // east is +x
   }
   removeMean(heave); removeMean(north); removeMean(west);
   return { samplingRate, duration: n / samplingRate, heave, north, west };
+}
+
+// Displacement over time of the particle at rest position (x0, z0) due to trochoidal components added at the rest
+// position: x = chop * dirX * a cos(f), y = a sin(f), z = chop * dirZ * a cos(f), f = k (dir . x0) - w t + phase
+// (same as Gerstner.getGerstnerDisplacement evaluated at the rest position).
+// An FFT sea has tens of thousands of components, but on a grid many share the same |k|, hence the same w: their
+// complex amplitudes are summed once, and each group is then advanced in time by one complex rotation per sample.
+export function restLayerRecord(components, samplingRate, n, x0 = 0, z0 = 0) {
+  const groups = new Map();
+  components.forEach(c => {
+    if (!(c.T > 0)) return;
+    const w = 2 * Math.PI / c.T;
+    const k = w * w / Gerstner.G;
+    const dirRad = (c.dir || 0) * DEG2RAD;
+    const dx = Math.sin(-dirRad), dz = Math.cos(-dirRad);
+    const a = c.hm0 / 2, chop = c.chop ?? 1;
+    const phase0 = k * (dx * x0 + dz * z0) + (c.phase || 0) * DEG2RAD;
+    const cr = a * Math.cos(phase0), ci = a * Math.sin(phase0);
+    const key = w.toPrecision(12);
+    let g = groups.get(key);
+    if (!g) { g = { w, yr: 0, yi: 0, xr: 0, xi: 0, zr: 0, zi: 0 }; groups.set(key, g); }
+    g.yr += cr; g.yi += ci;
+    g.xr += chop * dx * cr; g.xi += chop * dx * ci;
+    g.zr += chop * dz * cr; g.zi += chop * dz * ci;
+  });
+  const x = new Float64Array(n), y = new Float64Array(n), z = new Float64Array(n);
+  const dt = 1 / samplingRate;
+  for (const g of groups.values()) {
+    // e^{-i w t}, advanced by e^{-i w dt}; recomputed exactly every 256 samples (no drift)
+    const sr = Math.cos(g.w * dt), si = -Math.sin(g.w * dt);
+    let er = 1, ei = 0;
+    for (let i = 0; i < n; i++) {
+      if ((i & 255) == 0) { er = Math.cos(g.w * i * dt); ei = -Math.sin(g.w * i * dt); }
+      // A e^{-i w t}: height = Im(.), horizontal = Re(.)
+      y[i] += g.yr * ei + g.yi * er;
+      x[i] += g.xr * er - g.xi * ei;
+      z[i] += g.zr * er - g.zi * ei;
+      const nr = er * sr - ei * si;
+      ei = er * si + ei * sr;
+      er = nr;
+    }
+  }
+  return { x, y, z, numGroups: groups.size };
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -65,17 +112,33 @@ export function hullResponse(k, diameter = BUOY_DIAMETER) {
   return x < 1e-6 ? 1 : 2 * besselJ1(x) / x;
 }
 
-// Split the ripples into the ones the buoy records (scaled by the hull response) and the ones above its band
-export function buoyRipples(ripples, samplingRate, diameter = BUOY_DIAMETER, bandFraction = BUOY_BAND_FRACTION) {
+// Split components added at the rest position (ripples, FFT sea) into the ones the buoy records (scaled by the hull
+// response) and the ones above its band
+export function buoyComponents(components, samplingRate, diameter = BUOY_DIAMETER, bandFraction = BUOY_BAND_FRACTION) {
   const cutoff = bandFraction * samplingRate / 2;
   const inBand = [], aboveBand = [];
-  (ripples || []).forEach(r => {
-    const k = r.k || 4 * Math.PI * Math.PI / (r.T * r.T * Gerstner.G);
+  const responses = new Map(); // Many FFT components share |k|
+  (components || []).forEach(r => {
     if (1 / r.T > cutoff) { aboveBand.push(r); return; }
-    const response = hullResponse(k, diameter);
+    const k = r.k || 4 * Math.PI * Math.PI / (r.T * r.T * Gerstner.G);
+    const key = k.toPrecision(10);
+    if (!responses.has(key)) responses.set(key, hullResponse(k, diameter));
+    const response = responses.get(key);
     inBand.push({ hm0: r.hm0 * response, T: r.T, dir: r.dir, phase: r.phase, chop: r.chop, hullResponse: response });
   });
   return { cutoff, inBand, aboveBand };
+}
+export const buoyRipples = buoyComponents;
+
+// Variance density per layer on the frequency bins of a spectrum (m^2/Hz): each component adds (H/2)^2/2 to the bin
+// of its frequency
+export function layerDensity(components, spec) {
+  const out = new Float64Array(spec.freq.length);
+  (components || []).forEach(c => {
+    const k = Math.round((1 / c.T) / spec.df);
+    if (k >= 1 && k < out.length) out[k] += Math.pow(c.hm0 / 2, 2) / 2 / spec.df;
+  });
+  return out;
 }
 
 function removeMean(arr) {
@@ -450,18 +513,30 @@ export class OceanAnalysis {
     this.seconds = seconds || this.seconds;
   }
 
-  // waves: [{hm0, T, dir, phase}] as in the discrete waves panel / sceneManager.getDiscreteWaves()
-  // options.matchGPU: analyse the waves as encoded in the 8-bit parameter texture (what is rendered)
+  // waves: [{hm0, T, dir, phase}] the discrete Gerstner waves (discrete waves panel / sceneManager.getDiscreteWaves())
+  // options.matchGPU: analyse the waves as stored in the float32 texture sent to the GPU (what is rendered)
+  // options.fft: the FFT sea, as sceneManager.getFFTSea() (Assets/Ocean/SeaSpectrum.js generateFFTSea): its components
+  //   (the ones carrying 99.95% of its variance) are trochoids added at the rest position. options.includeFFT === false
+  //   leaves it out.
   // options.ripples: surface ripples, as sceneManager.getRipples() (Assets/Ocean/RippleSpectrum.js). They are sent to
   //   the GPU as floats, so they are never quantised. options.includeRipples === false leaves them out.
+  //
+  // The sea is made of layers, reported separately in `layers` (variance per layer, and its density on the bins of
+  // the spectrum): the discrete Gerstner waves (chained), the FFT sea and the ripples (both at the rest position).
+  // Every component of every layer is a trochoidal wave. A buoy follows the surface particle, so for each component it
+  // records a sinusoidal heave (the sharp crests of a trochoid are only seen at a fixed point): the measured spectrum
+  // is the sum of the variances of the components, plus the small interactions between the chained Gerstner waves.
   analyze(waves, options = {}) {
     const samplingRate = options.samplingRate || this.samplingRate;
     const seconds = options.seconds || this.seconds;
     const analysedWaves = options.matchGPU === false ? waves : Gerstner.toRenderedWaves(waves);
-    const rippleSet = options.includeRipples !== false && options.ripples && options.ripples.ripples.length ? options.ripples : null;
-    const band = buoyRipples(rippleSet ? rippleSet.ripples : [], samplingRate, this.buoyDiameter);
+    const fftSea = options.includeFFT !== false && options.fft && options.fft.components.length ? options.fft : null;
+    const rippleSet = options.includeRipples !== false && options.ripples && options.ripples.components && options.ripples.components.length ? options.ripples : null;
+    const fftBand = buoyComponents(fftSea ? fftSea.components : [], samplingRate, this.buoyDiameter);
+    const band = buoyComponents(rippleSet ? rippleSet.components : [], samplingRate, this.buoyDiameter);
+    const restInBand = fftBand.inBand.concat(band.inBand);
 
-    const buoy = simulateBuoy(analysedWaves, samplingRate, seconds, 0, 0, band.inBand);
+    const buoy = simulateBuoy(analysedWaves, samplingRate, seconds, 0, 0, restInBand);
     const east = buoy.west.map(v => -v);
     const spec = crossSpectra(buoy.heave, buoy.north, east, samplingRate, this.segmentSeconds);
     const dir = directionalMoments(spec);
@@ -471,42 +546,72 @@ export class OceanAnalysis {
 
     const nyquist = samplingRate / 2;
     const aliased = analysedWaves.filter(w => 1 / w.T > nyquist);
+    const hasLayers = !!(fftSea || rippleSet);
+    const gerstnerTheory = analysedWaves.length ? theoreticalParameters(analysedWaves) : null;
 
     return {
       settings: { samplingRate, seconds: buoy.duration, numSamples: buoy.heave.length,
         segmentLength: spec.segmentLength, numSegments: spec.numSegments, df: spec.df,
         degreesOfFreedom: spec.degreesOfFreedom, nyquist, matchGPU: options.matchGPU !== false,
-        includeRipples: !!rippleSet, buoyDiameter: this.buoyDiameter, buoyCutoff: band.cutoff },
+        includeFFT: !!fftSea, includeRipples: !!rippleSet, buoyDiameter: this.buoyDiameter, buoyCutoff: band.cutoff },
       waves: analysedWaves,
-      expected: { aliased, ripplesAboveBand: band.aboveBand },
-      // Theoretical: what the buoy can measure (waves + ripples in its band, with the hull response)
-      theoretical: theoreticalParameters(analysedWaves.concat(band.inBand)),
-      // Full surface: waves + all the ripples (what is rendered; a buoy cannot measure it)
-      theoreticalFull: rippleSet ? theoreticalParameters(analysedWaves.concat(rippleSet.ripples)) : null,
-      ripples: rippleSet ? this.rippleSummary(analysedWaves, rippleSet, band) : null,
+      expected: { aliased, ripplesAboveBand: band.aboveBand, fftAboveBand: fftBand.aboveBand.length },
+      // Theoretical: what the buoy can measure (all layers in its band, with the hull response)
+      theoretical: theoreticalParameters(analysedWaves.concat(restInBand)),
+      // Full surface: all the components of all the layers (what is rendered; a buoy cannot measure it all)
+      theoreticalFull: hasLayers ? theoreticalParameters(analysedWaves.concat(fftSea ? fftSea.components : [], rippleSet ? rippleSet.components : [])) : null,
+      // Discrete waves with exactly the same period interfere (their phases matter)
+      gerstnerInterferingLines: gerstnerTheory ? gerstnerTheory.interferingLines : 0,
+      layers: this.layerSummary(spec, analysedWaves, fftSea, fftBand, rippleSet, band),
+      ripples: rippleSet ? this.rippleSummary(analysedWaves.concat(fftSea ? fftSea.components : []), rippleSet, band) : null,
       buoy, spectrum: spec, directional: dir, bulk, zeroCrossing: zc, polar,
     };
   }
 
-  // Contribution of the ripples: variance (and Hm0) of the full surface and of what the buoy measures, slopes
+  // Contribution of each layer: variance of the full layer and of what the buoy measures of it, and the density of
+  // what the buoy measures on the bins of the spectrum
+  layerSummary(spec, waves, fftSea, fftBand, rippleSet, band) {
+    const variance = list => list.reduce((sum, w) => sum + Math.pow(w.hm0 / 2, 2) / 2, 0);
+    // Shared log-spaced frequency bands (0.02 - 20 Hz) for the density of the full layers (Ripples & slopes tab)
+    const logF = { f0: 0.02, f1: 20, n: 90 };
+    const logDensity = list => {
+      const out = new Float64Array(logF.n), r = Math.log(logF.f1 / logF.f0);
+      list.forEach(c => {
+        const b = Math.floor(logF.n * Math.log((1 / c.T) / logF.f0) / r);
+        if (b >= 0 && b < logF.n) out[b] += Math.pow(c.hm0 / 2, 2) / 2;
+      });
+      for (let b = 0; b < logF.n; b++) out[b] /= logF.f0 * (Math.exp(r * (b + 1) / logF.n) - Math.exp(r * b / logF.n));
+      return out;
+    };
+    const layer = (name, all, inBand, extra = {}) => ({ name, numComponents: all.length,
+      m0: variance(all), m0InBand: variance(inBand), density: layerDensity(inBand, spec),
+      logDensity: logDensity(all), logDensityInBand: logDensity(inBand), ...extra });
+    const out = { gerstner: layer('Discrete Gerstner waves', waves, waves, { method: 'chained' }),
+      logBands: Array.from({ length: logF.n }, (_, b) => logF.f0 * Math.exp(Math.log(logF.f1 / logF.f0) * (b + 0.5) / logF.n)) };
+    if (fftSea) out.fft = layer('FFT sea (Tessendorf)', fftSea.components, fftBand.inBand, {
+      method: 'rest position', gridComponents: fftSea.numComponents, L: fftSea.L, kCut: fftSea.kCut, fCut: fftSea.fCut,
+      choppiness: fftSea.settings.choppiness, settings: fftSea.settings });
+    if (rippleSet) out.ripples = layer('Surface ripples (FFT)', rippleSet.components, band.inBand, {
+      method: 'rest position', gridComponents: rippleSet.numComponents, L: rippleSet.L, kMin: rippleSet.kMin, kCut: rippleSet.kCut });
+    return out;
+  }
+
+  // Contribution of the ripples: variance (and Hm0) of the full surface and of what the buoy measures, slopes.
+  // waves: the components of the other layers (discrete waves and FFT sea)
   rippleSummary(waves, rippleSet, band) {
     const variance = list => list.reduce((sum, w) => sum + Math.pow(w.hm0 / 2, 2) / 2, 0);
     const m0Waves = variance(waves);
     const hm0 = m0 => 4 * Math.sqrt(m0);
-    const full = variance(rippleSet.ripples), inBand = variance(band.inBand);
+    const full = variance(rippleSet.components), inBand = variance(band.inBand);
     return {
       settings: rippleSet.settings, windSpeed: rippleSet.windSpeed, windDir: rippleSet.windDir,
-      numRipples: rippleSet.ripples.length, numInBand: band.inBand.length, numAboveBand: band.aboveBand.length,
+      numRipples: rippleSet.components.length, numInBand: band.inBand.length, numAboveBand: band.aboveBand.length,
+      gridComponents: rippleSet.numComponents, L: rippleSet.L, kMin: rippleSet.kMin, kCut: rippleSet.kCut,
       cutoff: band.cutoff, buoyDiameter: this.buoyDiameter,
       m0Waves,
       deltaM0: { full, inBand },
       deltaHm0: { full: hm0(m0Waves + full) - hm0(m0Waves), inBand: hm0(m0Waves + inBand) - hm0(m0Waves) },
       slopes: rippleSet.slopes, tailSigma2: rippleSet.tailSigma2,
-      ripples: rippleSet.ripples.map(r => {
-        const inBandRipple = band.inBand.find(b => b.T == r.T && b.dir == r.dir);
-        return { hm0: r.hm0, T: r.T, dir: r.dir, phase: r.phase, chop: r.chop, f: 1 / r.T, k: r.k, wavelength: r.wavelength,
-          inBand: !!inBandRipple, hullResponse: inBandRipple ? inBandRipple.hullResponse : null };
-      }),
     };
   }
 

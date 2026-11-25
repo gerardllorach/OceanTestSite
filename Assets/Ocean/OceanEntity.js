@@ -6,7 +6,9 @@ import { OceanGrid } from '/OceanTestSite/Assets/Ocean/OceanGrid.js';
 import {OceanProjectedGridVertShader, OceanProjectedGridFragShader} from '/OceanTestSite/Assets/Ocean/OceanProjectedGridShader.js';
 
 import { OceanParameters } from '/OceanTestSite/Assets/Ocean/OceanParams.js';
-import { MAX_RIPPLES, DEFAULT_RIPPLE_SETTINGS, generateRipples, writeRippleUniforms } from '/OceanTestSite/Assets/Ocean/RippleSpectrum.js';
+import { DEFAULT_RIPPLE_SETTINGS, RIPPLE_N, generateRipples, travelVector } from '/OceanTestSite/Assets/Ocean/RippleSpectrum.js';
+import { FFT_N } from '/OceanTestSite/Assets/Ocean/SeaSpectrum.js';
+import { FFTOcean } from '/OceanTestSite/Assets/Ocean/FFTOcean.js';
 
 class OceanEntity {
 
@@ -77,12 +79,15 @@ class OceanEntity {
         // u_direction: { value: new THREE.Vector2(1, 0) },
 
         // Surface ripples (Assets/Ocean/RippleSpectrum.js)
-        u_ripples: {value: Array.from({length: MAX_RIPPLES}, () => new THREE.Vector4())},
-        u_rippleInfo: {value: Array.from({length: MAX_RIPPLES}, () => new THREE.Vector4())},
-        u_rippleCount: {value: 0},
+        // Surface ripples: second FFT cascade (Assets/Ocean/RippleSpectrum.js), tile of u_rippleSize metres
+        u_rippleEnabled: {value: false},
+        u_rippleDisplacement: {value: null}, // (Dx, h, Dz)
+        u_rippleSlopes: {value: null},       // (hx, hz, Dxx, Dzz)
+        u_rippleExtra: {value: null},        // (Dxz, hx^2, hz^2, hx hz)
+        u_rippleSize: {value: 4},
+        u_rippleN: {value: RIPPLE_N},
         u_rippleTailSigma2: {value: new THREE.Vector2(0.003, 0.003)},
         u_windDirection: {value: new THREE.Vector2(0, 1)},
-        u_rippleChop: {value: 0}, // Horizontal displacement factor of the ripples (Gerstner choppiness)
         // Spacing of the grid vertices (mesh units, before the viewport scale): the vertex shader only displaces the
         // geometry with ripples that are at least ~4 vertices long
         u_gridStep: {value: this.gridEntity.gridStep.clone()},
@@ -92,6 +97,13 @@ class OceanEntity {
         // Sky reflection: the skybox rendered into a cube map (captureSky). Gradient until it is ready
         u_skyCube: {value: null},
         u_skyReady: {value: false},
+        // FFT sea (Assets/Ocean/FFTOcean.js): tile of u_fftSize metres, u_fftN texels, repeated
+        u_fftEnabled: {value: false},
+        u_fftDisplacement: {value: null}, // (Dx, h, Dz)
+        u_fftSlopes: {value: null},       // (hx, hz, Dxx, Dzz)
+        u_fftExtra: {value: null},        // (Dxz, hx^2, hz^2, hx hz)
+        u_fftSize: {value: 512},
+        u_fftN: {value: 512},
         // Debug views: 0 final, 1 Fresnel, 2 normal, 3 roughness, 4 ripple slopes
         u_debugView: {value: 0},
 
@@ -151,6 +163,45 @@ class OceanEntity {
   // Output of generateSea() (Assets/Ocean/SeaSpectrum.js) for the current waves, or null if they were set by hand
   getSea = function(){
     return this.oceanParams.sea;
+  }
+
+  // Output of generateFFTSea() (Assets/Ocean/SeaSpectrum.js) when the sea is an FFT sea, or null
+  getFFTSea = function(){
+    return this.fft ? this.oceanParams.fftSea : null;
+  }
+
+  // FFT SEA ON THE GPU (needs the renderer, see SceneManager)
+  setRenderer(renderer) {
+    this.renderer = renderer;
+    if (!FFTOcean.isSupported(renderer)) {
+      // No float render targets: render the spectrum with Gerstner components instead
+      console.warn('FFT sea not supported (WebGL2 float render targets): using Gerstner components');
+      if (this.oceanParams.oceanParameters.method == 'fft') this.oceanParams.setSeaSettings({ method: 'gerstner' }, true);
+      this.updateParamsTexture();
+      return;
+    }
+    // Two cascades: the sea and the ripples
+    this.fft = new FFTOcean(renderer, FFT_N);
+    this.rippleFFT = new FFTOcean(renderer, RIPPLE_N);
+    const u = this.oceanTile.material.uniforms;
+    u.u_fftDisplacement.value = this.fft.displacement.texture;
+    u.u_fftSlopes.value = this.fft.slopes.texture;
+    u.u_fftExtra.value = this.fft.extra.texture;
+    u.u_rippleDisplacement.value = this.rippleFFT.displacement.texture;
+    u.u_rippleSlopes.value = this.rippleFFT.slopes.texture;
+    u.u_rippleExtra.value = this.rippleFFT.extra.texture;
+    u.u_fftN.value = FFT_N;
+    this.updateParamsTexture();
+  }
+
+  updateFFT() {
+    if (!this.fft || !this.oceanTile) return;
+    const sea = this.oceanParams.fftSea;
+    this.fft.setSpectrum(sea);
+    const u = this.oceanTile.material.uniforms;
+    u.u_fftEnabled.value = !!sea;
+    if (sea) u.u_fftSize.value = sea.L;
+    if (sea) this.fft.update(this.time);
   }
 
 
@@ -219,6 +270,8 @@ class OceanEntity {
     this.oceanParams.getWaveParamsImageData(this.dataTextureSize, this.paramsTexture.image.data);
     this.paramsTexture.needsUpdate = true;
     this.oceanTile.material.uniforms.u_numWaves.value = this.numWaves;
+    // FFT sea
+    this.updateFFT();
     // The ripples depend on the waves (slope budget; wind in 'seaState' mode)
     this.updateRipples();
     // Listeners: panels that show the waves
@@ -249,7 +302,7 @@ class OceanEntity {
   rippleSettings = { ...DEFAULT_RIPPLE_SETTINGS };
   ripples = null; // Output of generateRipples(): the ripples sent to the GPU, also used by the sea state analysis
 
-  // partial: {mode: 'wind' | 'seaState', windSpeed (m/s), windDir (deg, from), count (0..MAX_RIPPLES)}
+  // partial: {mode: 'wind' | 'seaState', windSpeed (m/s), windDir (deg, from), enabled}
   setRippleSettings(partial) {
     Object.assign(this.rippleSettings, partial);
     this.updateRipples();
@@ -265,23 +318,22 @@ class OceanEntity {
   }
 
   updateRipples() {
-    this.ripples = generateRipples(this.getDiscreteWaves(), this.rippleSettings);
+    // Before the renderer is set, the FFT ripples cannot be drawn: generate them disabled (roughness only)
+    const settings = this.rippleFFT ? this.rippleSettings : { ...this.rippleSettings, enabled: false };
+    this.ripples = generateRipples(this.getDiscreteWaves(), settings, this.getFFTSea());
     if (this.oceanTile) {
       const u = this.oceanTile.material.uniforms;
-      u.u_rippleCount.value = this.ripples.ripples.length;
       u.u_rippleTailSigma2.value.set(this.ripples.tailSigma2.up, this.ripples.tailSigma2.cross);
-      u.u_rippleChop.value = this.ripples.chop;
-      this.writeRipplePhases();
+      const [ux, uz] = travelVector(this.ripples.windDir);
+      u.u_windDirection.value.set(ux, uz);
+      u.u_rippleEnabled.value = this.ripples.enabled;
+      u.u_rippleSize.value = this.ripples.L;
+      if (this.rippleFFT) {
+        this.rippleFFT.setSpectrum(this.ripples.enabled ? this.ripples : null);
+        if (this.ripples.enabled) this.rippleFFT.update(this.time);
+      }
     }
     if (window.eventBus) window.eventBus.emit('OceanEntity_ripplesChanged', this.ripples);
-  }
-
-  // Ripple phases at the current time (wrapped in double precision on the CPU)
-  writeRipplePhases() {
-    if (!this.oceanTile || !this.ripples) return;
-    const u = this.oceanTile.material.uniforms;
-    const { windDirection } = writeRippleUniforms(this.ripples, this.time, u.u_ripples.value, u.u_rippleInfo.value);
-    u.u_windDirection.value.set(windDirection[0], windDirection[1]);
   }
 
   // SUN
@@ -406,7 +458,9 @@ class OceanEntity {
     if (this.oceanTile != undefined) {
       let oceanTile = this.oceanTile;
       oceanTile.material.uniforms.u_time.value = this.time; // dt
-      this.writeRipplePhases();
+      // FFT cascades at this time (displacement and slope maps): sea and ripples
+      if (this.fft && this.fft.enabled) this.fft.update(this.time);
+      if (this.rippleFFT && this.rippleFFT.enabled) this.rippleFFT.update(this.time);
 
       this.gridEntity.update(oceanTile);
 

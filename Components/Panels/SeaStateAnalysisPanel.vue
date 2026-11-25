@@ -28,10 +28,12 @@
         </div>
       </div>
       <div class="container-horizontal">
-        <label class="checkbox-label" title="Include the surface ripples (Waves > Surface ripples) in the surface the buoy follows">
+        <label class="checkbox-label" title="Include the FFT sea (Sea State > Generation) in the surface the buoy follows">
+          <input type="checkbox" :checked="includeFFT" @change="includeFFT = $event.target.checked; update()"> Include FFT sea
+        </label>
+        <label class="checkbox-label" title="Include the surface ripples (Sea State > Generation) in the surface the buoy follows">
           <input type="checkbox" :checked="includeRipples" @change="includeRipples = $event.target.checked; update()"> Include surface ripples
         </label>
-        <div></div>
       </div>
     </div>
 
@@ -41,9 +43,9 @@
     </p>
     <p class="warning" v-for="w in warnings" :key="w">{{ w }}</p>
     <p v-if="hasResult && hasRipples" class="record-info">
-      Surface ripples: {{ rippleInfo.numInBand }} of {{ rippleInfo.numRipples }} are inside the buoy band
-      (below {{ fmt(rippleInfo.cutoff, 2) }} Hz, 0.9 × Nyquist) and are scaled by the response of a {{ rippleInfo.buoyDiameter }} m hull.
-      The other {{ rippleInfo.numAboveBand }} are removed, as the anti-alias filter of a buoy does, instead of being aliased.
+      Surface ripples (FFT): {{ rippleInfo.numInBand }} of the {{ rippleInfo.numRipples }} analysed components are inside
+      the buoy band (below {{ fmt(rippleInfo.cutoff, 2) }} Hz, 0.9 × Nyquist) and are scaled by the response of a
+      {{ rippleInfo.buoyDiameter }} m hull. The others are removed, as the anti-alias filter of a buoy does, instead of being aliased.
     </p>
     <p v-if="!hasResult && message">{{ message }}</p>
 
@@ -81,14 +83,46 @@
 
       <p class="footnote">
         <b>Analytical</b>: measured by the virtual buoy (spectrum and zero-crossing analysis of its displacements).
-        <b>Theoretical</b>: calculated directly from the discrete input waves with linear wave theory
-        ({{ matchGPU ? 'as encoded for the GPU' : 'exact values of the wave table' }}). Each wave is a sinusoid of
-        amplitude H/2, so it adds a variance of (H/2)²/2 at frequency 1/T, from its direction.
+        <b>Theoretical</b>: calculated directly from the components of the sea
+        ({{ matchGPU ? 'as sent to the GPU' : 'exact values of the wave table' }}). Every component is a trochoidal
+        (Gerstner) wave of amplitude H/2. The buoy follows its surface particle, which moves on a circle: its heave is a
+        sinusoid, so each component adds a variance of (H/2)²/2 at frequency 1/T, from its direction. (The sharp crests
+        of a trochoid only appear in the elevation at a fixed point.)
         Statistics of individual waves (zero-crossing) have no theoretical equivalent for a sum of a few waves (–).
         <template v-if="showFull">The theoretical column includes the surface ripples the buoy can follow (inside its band,
           scaled by the hull response). <b>Full surface</b>: with all the ripples, as rendered. A buoy cannot measure it:
           the short ripples mostly change the high-frequency moments (T<sub>m02</sub>, ε) and the slopes.</template>
       </p>
+
+      <!-- Contribution of each layer of the sea -->
+      <div class="param-group" v-if="layerRows.length">
+        <table class="param-table">
+          <thead>
+            <tr>
+              <th class="param-group-title">Contributions</th>
+              <th class="param-value">Components</th>
+              <th class="param-value">Variance m<sub>0</sub></th>
+              <th class="param-value">H<sub>m0</sub> alone</th>
+              <th class="param-value">Seen by the buoy</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="row in layerRows" :key="row.name" :class="{ 'row-total': row.total }">
+              <td class="param-desc">{{ row.name }}<div class="param-cf">{{ row.how }}</div></td>
+              <td class="param-value">{{ row.n }}</td>
+              <td class="param-value">{{ fmt(row.m0, 4) }} <small>m²</small> <small v-if="!row.total">({{ fmt(row.share, 0) }}%)</small></td>
+              <td class="param-value">{{ fmt(4 * Math.sqrt(row.m0), 2) }} <small>m</small></td>
+              <td class="param-value">{{ fmt(row.m0InBand, 4) }} <small>m²</small></td>
+            </tr>
+          </tbody>
+        </table>
+        <p class="footnote">Variances add: H<sub>m0</sub> of the sea = 4·√(sum of m<sub>0</sub>), not the sum of the
+          H<sub>m0</sub>. This holds over the whole sea; at one point (the buoy) the FFT components with the same |k|
+          share a frequency and interfere, so the theoretical values for the buoy can differ by a few percent. Seen by the buoy: the components inside its band ({{ fmt(info.buoyCutoff, 2) }} Hz), scaled by
+          the response of its {{ info.buoyDiameter }} m hull. The FFT sea and the ripples are added at the rest position
+          of the surface (linear superposition); the discrete Gerstner waves are chained, which adds small interactions
+          that the buoy measures but the theoretical values leave out.</p>
+      </div>
       <p v-if="theoryInterfering > 0" class="warning">{{ theoryInterfering }} group(s) of waves share exactly the same
         period. They interfere, so their
         combined height and direction depend on their phases. The theoretical values include this interference.</p>
@@ -180,8 +214,10 @@
       <div class="chart" ref="chart-spectrum"></div>
       <p class="chart-title">Mean direction per band (waves from)</p>
       <div class="chart" ref="chart-spectrum-dir"></div>
-      <p class="footnote">Dashed line: target spectrum, when the waves come from Waves &gt; Generate sea state. The measured
-        spectrum is spikier: each of the few dozen waves is a single frequency, narrower than the spectral bands.
+      <p class="footnote">Area: what the buoy measured. Lines and points: what the buoy can see of each layer of the sea
+        (theoretical: the variance of its components inside the buoy band, after the hull response, in the same bins):
+        the FFT sea, the discrete Gerstner waves (single frequencies, so single bins) and the ripples. Dashed line:
+        target spectrum of Sea State &gt; Generation. Discrete waves are spikier than the bands of the spectrum.
         The area under the curve is the variance m0, so Hs = 4·√m0. Click the y-axis to switch between
         m²/Hz against frequency and m²/s against period (S(T) = S(f)/T²).</p>
     </div>
@@ -280,12 +316,14 @@
           </tbody>
         </table>
       </div>
-      <p class="chart-title">Variance of each wave and ripple</p>
+      <p class="chart-title">Spectrum of each layer</p>
       <div class="chart" ref="chart-ripples"></div>
-      <p class="footnote">Each point is one sinusoid, with variance (H/2)²/2. Ripples follow the saturation range
-        F(k) ∝ k⁻³: with log-spaced wavenumbers each one has the same slope variance, so their height variance falls as
-        f⁻⁴. Their slopes are scaled so that waves + ripples + tail match the Cox &amp; Munk (1954) mean square slope for
-        the wind speed. The tail is only roughness in the shader (sun glitter and Fresnel), it has no height.</p>
+      <p class="footnote">Variance density of all the components of each layer (whole surface), in log-spaced bands.
+        The FFT sea stops where the ripple grid starts. The ripples follow the saturation range F(k) ∝ k⁻³ (the same
+        slope variance per octave), so their height variance falls as f⁻⁵. Their slopes are scaled so that the discrete
+        waves + FFT sea + ripples + tail match the Cox &amp; Munk (1954) mean square slope for the wind speed. The tail
+        (finer than the ripple grid) is only roughness in the shader (sun glitter and Fresnel), it has no height.
+        Dashed: the part of the ripples a buoy follows (inside its band, after the hull response).</p>
     </div>
 
   </div>
@@ -331,6 +369,8 @@ export default {
       samplingRate: 3,
       matchGPU: true,
       includeRipples: true,
+      includeFFT: true,
+      layerRows: [],
       hasRipples: false,
       showFull: false,
       rippleInfo: {},
@@ -414,7 +454,8 @@ export default {
         waves = window.sceneManager.getDiscreteWaves();
       }
       waves = waves.filter(w => w && w.hm0 > 0 && w.T > 0);
-      if (waves.length == 0) {
+      const fftSea = window.sceneManager ? window.sceneManager.getFFTSea() : null;
+      if (waves.length == 0 && !(fftSea && this.includeFFT)) {
         this.hasResult = false;
         this.message = 'There are no waves to analyse.';
         return;
@@ -423,7 +464,7 @@ export default {
       const ripples = window.sceneManager ? window.sceneManager.getRipples() : null;
       const r = this.oceanAnalysis.analyze(waves, {
         samplingRate: this.samplingRate, seconds: this.duration * 60, matchGPU: this.matchGPU,
-        ripples, includeRipples: this.includeRipples });
+        ripples, includeRipples: this.includeRipples, fft: fftSea, includeFFT: this.includeFFT });
       this.result = r;
       this.updateRippleInfo(r);
 
@@ -447,7 +488,8 @@ export default {
       this.updatePolarInfo();
 
       this.paramGroups = this.buildParamGroups(r);
-      this.theoryInterfering = r.theoretical ? r.theoretical.interferingLines : 0;
+      this.theoryInterfering = r.gerstnerInterferingLines || 0;
+      this.layerRows = this.buildLayerRows(r);
       this.dispStart = Math.min(this.dispStart, Math.max(0, Math.floor(s.seconds - this.dispWindow)));
       this.hasResult = true;
       this.$nextTick(() => this.drawActiveTab());
@@ -473,12 +515,29 @@ export default {
       };
       const sl = s.slopes;
       this.rippleSlopeRows = [
-        { name: 'Waves (Gerstner)', v: sl.gerstner },
-        { name: 'Ripples (drawn when resolved, measured in band)', v: sl.ripples },
+        { name: 'Discrete Gerstner waves', v: sl.gerstner },
+        ...(sl.fft && (sl.fft.up + sl.fft.cross) > 0 ? [{ name: 'FFT sea', v: sl.fft }] : []),
+        { name: 'Ripples (FFT grid)', v: sl.ripples },
         { name: 'Tail (roughness only)', v: sl.tail },
         { name: 'Total', v: sl.total, total: true },
         { name: 'Cox & Munk (1954) target', v: sl.coxMunk },
       ];
+    },
+
+    // Contribution of each layer (discrete Gerstner waves, FFT sea, ripples)
+    buildLayerRows: function (r) {
+      const L = r.layers;
+      if (!L || (!L.fft && !L.ripples)) return [];
+      const rows = [];
+      if (L.gerstner.numComponents) rows.push({ name: L.gerstner.name, how: 'chained (vertex shader)', n: L.gerstner.numComponents, m0: L.gerstner.m0, m0InBand: L.gerstner.m0InBand });
+      if (L.fft) rows.push({ name: L.fft.name, how: `${L.fft.L.toFixed(0)} m tile, choppiness ${L.fft.choppiness.toFixed(2)}, at the rest position`,
+        n: L.fft.gridComponents + (L.fft.numComponents < L.fft.gridComponents ? ` (${L.fft.numComponents} analysed)` : ''), m0: L.fft.m0, m0InBand: L.fft.m0InBand });
+      if (L.ripples) rows.push({ name: L.ripples.name, how: `${L.ripples.L.toFixed(1)} m tile, ${(2 * Math.PI / L.ripples.kMin).toFixed(1)} m to ${(200 * Math.PI / L.ripples.kCut).toFixed(1)} cm, at the rest position`,
+        n: L.ripples.gridComponents + (L.ripples.numComponents < L.ripples.gridComponents ? ` (${L.ripples.numComponents} analysed)` : ''), m0: L.ripples.m0, m0InBand: L.ripples.m0InBand });
+      const total = rows.reduce((t, row) => ({ m0: t.m0 + row.m0, m0InBand: t.m0InBand + row.m0InBand }), { m0: 0, m0InBand: 0 });
+      rows.forEach(row => row.share = 100 * row.m0 / total.m0);
+      rows.push({ name: 'Total', how: '', n: '', m0: total.m0, m0InBand: total.m0InBand, total: true });
+      return rows;
     },
 
     // Parameter table: analytical (measured by the buoy) and theoretical (from the input waves) columns
@@ -551,29 +610,26 @@ export default {
     },
 
     // Variance of each sinusoid against its frequency (log-log): waves, ripples in and above the buoy band
+    // Variance density of each layer of the sea (all its components), in log-spaced frequency bands
     drawRipples: function () {
       const r = this.result;
-      if (!r || !r.ripples || this.tab != 'ripples') return;
-      const C = window.AnalysisCharts.COLORS;
-      const variance = w => Math.pow(w.hm0 / 2, 2) / 2;
-      const waves = r.waves.filter(w => w.T > 0 && w.hm0 > 0);
-      const inBand = r.ripples.ripples.filter(w => w.inBand), above = r.ripples.ripples.filter(w => !w.inBand);
-      const all = waves.concat(r.ripples.ripples);
-      const fMin = Math.min(...all.map(w => 1 / w.T)), fMax = Math.max(...all.map(w => 1 / w.T));
-      const series = (list, name, color) => ({ name, color, type: 'points', radius: 4, unit: 'm²', digits: 6,
-        x: list.map(w => 1 / w.T), y: list.map(variance) });
+      if (!r || !r.layers || this.tab != 'ripples') return;
+      const C = window.AnalysisCharts.COLORS, L = r.layers, f = L.logBands;
+      const positive = arr => Array.from(arr, v => v > 0 ? v : NaN);
+      const series = [];
+      if (L.gerstner.numComponents) series.push({ name: 'Discrete Gerstner waves', x: f, y: positive(L.gerstner.logDensity), color: C.series[2], type: 'points', unit: 'm²/Hz', digits: 6 });
+      if (L.fft) series.push({ name: 'FFT sea', x: f, y: positive(L.fft.logDensity), color: C.series[1], unit: 'm²/Hz', digits: 6, width: 2 });
+      if (L.ripples) {
+        series.push({ name: 'Ripples (FFT)', x: f, y: positive(L.ripples.logDensity), color: C.series[3], unit: 'm²/Hz', digits: 6, width: 2 });
+        series.push({ name: 'Ripples seen by the buoy', x: f, y: positive(L.ripples.logDensityInBand), color: C.series[0], unit: 'm²/Hz', digits: 6, width: 1.5, dashed: true });
+      }
       window.AnalysisCharts.lineChart(this.$refs['chart-ripples'], {
         height: 260,
-        x: { label: 'Frequency (Hz)', type: 'log', domain: [fMin / 1.3, fMax * 1.3],
-          tickValues: [0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10, 20].filter(v => v >= fMin / 1.3 && v <= fMax * 1.3),
-          tickFormat: v => String(v) },
-        y: { label: 'Variance (m²)', type: 'log' },
-        series: [
-          series(waves, 'Waves', C.series[0]),
-          series(inBand, 'Ripples in the buoy band', C.series[2]),
-          series(above, 'Ripples above the band', C.series[1]),
-        ].filter(s => s.x.length),
-        markers: [{ x: r.ripples.cutoff, label: 'Buoy band' }, { x: r.settings.nyquist, label: 'Nyquist' }],
+        x: { label: 'Frequency (Hz)', type: 'log', domain: [f[0], f[f.length - 1]],
+          tickValues: [0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10, 20], tickFormat: v => String(v) },
+        y: { label: 'Energy density (m²/Hz)', type: 'log' },
+        series,
+        markers: [{ x: r.ripples ? r.ripples.cutoff : r.settings.buoyCutoff, label: 'Buoy band' }, { x: r.settings.nyquist, label: 'Nyquist' }],
         directLabels: false,
         tooltipX: v => `${v.toFixed(3)} Hz (${(1 / v).toFixed(2)} s)`,
       });
@@ -684,8 +740,17 @@ export default {
       const C = window.AnalysisCharts.COLORS;
       const a = this.spectrumAxis();
       const peakX = this.spectrumUnits == 'Hz' ? r.bulk.fp : r.bulk.Tp;
-      const series = [{ name: 'Energy density', x: a.x, y: a.density, color: C.series[0], type: 'area', unit: a.unit, digits: 4 }];
-      // Target spectrum of the generated sea (Waves > Generate sea state), when the waves come from one
+      const series = [{ name: 'Measured (buoy)', x: a.x, y: a.density, color: C.series[0], type: 'area', unit: a.unit, digits: 4 }];
+      // What the buoy can see of each layer (theoretical), in the same bins and units
+      const toUnits = (arr) => a.ks.map((k, i) => { const v = arr[k]; return this.spectrumUnits == 'Hz' ? v : v * r.spectrum.freq[k] * r.spectrum.freq[k]; });
+      const L = r.layers;
+      if (L && (L.fft || L.ripples)) {
+        if (L.fft) series.push({ name: 'FFT sea', x: a.x, y: toUnits(L.fft.density), color: C.series[1], width: 1.5, unit: a.unit, digits: 4 });
+        if (L.gerstner.numComponents) series.push({ name: 'Discrete Gerstner waves', x: a.x, y: toUnits(L.gerstner.density).map(v => v > 0 ? v : NaN),
+          color: C.series[2], type: 'points', unit: a.unit, digits: 4 });
+        if (L.ripples) series.push({ name: 'Ripples', x: a.x, y: toUnits(L.ripples.density), color: C.series[3], width: 1.5, unit: a.unit, digits: 4 });
+      }
+      // Target spectrum of the generated sea (Sea State > Generation), when the waves come from one
       const freqs = a.ks.map(k => r.spectrum.freq[k]);
       const target = window.sceneManager ? window.sceneManager.getSeaSpectralDensity(freqs) : null;
       if (target)
@@ -795,6 +860,8 @@ export default {
         bulk: r.bulk,
         theoretical: r.theoretical,
         theoreticalFull: r.theoreticalFull,
+        layers: Object.fromEntries(Object.entries(r.layers || {}).filter(([key, l]) => l && l.name)
+          .map(([key, l]) => [key, { ...l, density: undefined, logDensity: undefined, logDensityInBand: undefined }])),
         ripples: r.ripples,
         zeroCrossing: { ...this.zc, waves: r.zeroCrossing.waves },
         spectrum: {
