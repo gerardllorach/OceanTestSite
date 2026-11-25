@@ -14,7 +14,7 @@
     <div class="container-vertical options">
       <div class="container-horizontal">
         <span>H<sub>m0</sub></span>
-        <div><input type="range" min="0.1" max="8" step="0.05" :value="s.Hm0" @input="change({ Hm0: Number($event.target.value) })"><span>{{ fmt(s.Hm0, 2) }} m</span></div>
+        <div><input type="range" min="0" max="1" step="0.001" :value="hm0ToSlider(s.Hm0)" @input="change({ Hm0: sliderToHm0(Number($event.target.value)) })"><span>{{ fmt(s.Hm0, 2) }} m</span></div>
       </div>
       <div class="container-horizontal">
         <span>Peak period T<sub>p</sub></span>
@@ -98,6 +98,8 @@
 
 import Knob from '../Knob.vue';
 
+const HM0_MIN = 0.01, HM0_MAX = 8; // m. The sea model floors Hm0 at 0.01 m
+
 export default {
   name: "SeaStatePanel",
   // embedded: inside the Generation page (no introduction, no chart: the page shows the spectra of all the layers)
@@ -128,6 +130,13 @@ export default {
     resolvedTp() { return this.sea ? this.sea.settings.Tp : this.fft ? this.fft.Tp : NaN; },
   },
   methods: {
+    // Hm0 slider: square-law scale from 0.01 to 8 m, so the calm seas below 0.1 m get room (0.1 m at 11%, 1 m at 35%)
+    hm0ToSlider: function (Hm0) { return Math.sqrt(Math.max(0, Hm0 - HM0_MIN) / (HM0_MAX - HM0_MIN)); },
+    sliderToHm0: function (pos) {
+      const h = HM0_MIN + (HM0_MAX - HM0_MIN) * pos * pos;
+      const step = h < 1 ? 0.01 : 0.05;
+      return Number((Math.round(h / step) * step).toFixed(3));
+    },
     onWavesChanged: function () {
       if (!window.sceneManager) return;
       const p = window.sceneManager.ocean.oceanParams.oceanParameters;
