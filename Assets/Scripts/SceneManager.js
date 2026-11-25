@@ -62,8 +62,8 @@ class SceneManager{
     document.body.appendChild(stats.dom);
     stats.dom.style.right = null;
     stats.dom.style.left = '0px';
-    stats.isVisible = false;
-    stats.showPanel(false);
+    stats.isVisible = true;
+    stats.showPanel(0); // 0 = the fps panel. showPanel(true) matched no panel index and hid them all
     
     
 
