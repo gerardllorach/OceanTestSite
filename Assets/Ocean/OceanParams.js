@@ -27,7 +27,7 @@ MeanDir_ADCPWaves : Direction (from) mean of waves {mean wave direction} on the 
 Unidir_Ind_ADCP_Waves : Unidirectivity index of waves on the water body by acoustic doppler wave array and computation using protocol of Barstow et al. (1991)
 */
 
-import { generateSea, generateFFTSea, DEFAULT_SEA_SETTINGS } from '/OceanTestSite/Assets/Ocean/SeaSpectrum.js';
+import { generateSea, generateFFTSea, DEFAULT_SEA_SETTINGS, FFT_N } from '/OceanTestSite/Assets/Ocean/SeaSpectrum.js';
 
 // The sea is made of layers:
 //  - FFT sea: the spectrum of the sea state (JONSWAP / Pierson-Moskowitz from the sea state parameters, Assets/Ocean/
@@ -69,12 +69,15 @@ export class OceanParameters{
   sea = null;
   // FFT sea (output of generateFFTSea, method 'fft'), or null
   fftSea = null;
+  // Grid of the FFT sea (rendering quality, see Assets/Ocean/Quality.js)
+  fftN = FFT_N;
 
   // Values are divided by these before going to the GPU (the shader multiplies them back)
   WAVE_MAX = 10;
   PERIOD_MAX = 20;
 
-  constructor(oceanParameters, numWaves){
+  constructor(oceanParameters, numWaves, fftN = FFT_N){
+    this.fftN = fftN;
     // Assign given ocean parameters (if any)
     let keys = Object.keys(oceanParameters);
     keys.forEach(kk => this.oceanParameters[kk] = oceanParameters[kk]);
@@ -109,7 +112,7 @@ export class OceanParameters{
       this.sea = null;
       this.setWaves([]);
     }
-    this.fftSea = settings.method == 'fft' ? generateFFTSea(settings) : null;
+    this.fftSea = settings.method == 'fft' ? generateFFTSea(settings, this.fftN) : null;
   }
 
   // Waves: [{hm0, T, dir, phase}]

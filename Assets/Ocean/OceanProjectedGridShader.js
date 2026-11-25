@@ -43,6 +43,13 @@
 // (Assets/Ocean/FFTOcean.js, spectra in SeaSpectrum.js and RippleSpectrum.js); the discrete waves are Gerstner waves.
 
 
+// SIMPLE_SHADING (define set by OceanEntity for the 'low' quality, Assets/Ocean/Quality.js): the cheap pipeline
+// of the first version, for phones. Gerstner waves only (no FFT cascades, no strain, no mesh footprint), and a
+// Phong-like shading: Schlick Fresnel against a sky gradient, a sun highlight. Options (Scene > Quality), each a define:
+//   SKY_CUBEMAP     reflect the sky cube map (the skybox) instead of the gradient; blurred by the roughness if any
+//   ROUGH_FRESNEL   Fresnel averaged over the slopes finer than the mesh (Bruneton et al. 2010): the ripple slope
+//                   budget, u_rippleTailSigma2, as roughness. Less mirror-like at grazing angles
+
 // Use VS plugin "Comment tagged templates" and add /* glsl */
 export const OceanProjectedGridVertShader = /* glsl */ `
 
@@ -133,7 +140,9 @@ export const OceanProjectedGridVertShader = /* glsl */ `
 
     // Strain: derivatives of the horizontal displacement (the same terms as in the tangent and binormal, which are
     // normalised and lose them). 1 - steepness at the crest (squeezed), 1 + steepness in the trough (stretched)
+    #ifndef SIMPLE_SHADING
     strain += -steepness * sin(f) * vec3(direction.x * direction.x, direction.y * direction.y, direction.x * direction.y);
+    #endif
 
     return vec3(
       direction.x * (amplitude * cos(f)),
@@ -194,8 +203,11 @@ export const OceanProjectedGridVertShader = /* glsl */ `
     vec3 intersectionPoint = gridToPlane(position);
     // Distance between this vertex and its neighbours on the sea plane: the size of the mesh here (adaptive:
     // centimetres near the camera, metres far away). Ripples shorter than ~3 vertices are not put on the geometry
+    // Only the FFT cascades need it (two more projections per vertex): not in SIMPLE_SHADING
+    #ifndef SIMPLE_SHADING
     float footprint = max(distance(gridToPlane(position + vec3(u_gridStep.x, 0.0, 0.0)), intersectionPoint),
                           distance(gridToPlane(position + vec3(0.0, u_gridStep.y, 0.0)), intersectionPoint));
+    #endif
 
     // ******************************** //
 
@@ -261,10 +273,12 @@ export const OceanProjectedGridVertShader = /* glsl */ `
 
     // FFT cascades (sea and ripples): displacement at the rest position (Tessendorf: linear superposition of
     // trochoidal components), added after the discrete waves, like in the analysis
+    #ifndef SIMPLE_SHADING
     if (u_fftEnabled)
       modPos += cascadeDisplacement(u_fftDisplacement, u_fftSize, u_fftN, intersectionPoint.xz, footprint);
     if (u_rippleEnabled)
       modPos += cascadeDisplacement(u_rippleDisplacement, u_rippleSize, u_rippleN, intersectionPoint.xz, footprint);
+    #endif
 
     // World position
     //vec4 worldPosition = modelMatrix * vec4(modPos, 1.0);
@@ -293,11 +307,17 @@ export const OceanProjectedGridVertShader = /* glsl */ `
 export const OceanProjectedGridFragShader = /* glsl */`
 
   #define PI 3.141592653589793
+  // SIMPLE_SHADING: mediump is enough for colours and normals (half the register cost on mobile GPUs). The positions
+  // come from the vertex shader in highp; only the fog distance uses them here
+  #ifdef SIMPLE_SHADING
+  precision mediump float;
+  #else
   precision highp float;
+  #endif
 
-  varying vec3 v_WorldPosition; // Rest position of the surface point (projected grid on the plane y = 0)
+  varying highp vec3 v_WorldPosition; // Rest position of the surface point (projected grid on the plane y = 0)
   varying vec3 v_Normal;        // Normal of the Gerstner surface
-  varying vec3 v_wavePosition;  // Position displaced by the Gerstner waves and the FFT cascades
+  varying highp vec3 v_wavePosition;  // Position displaced by the Gerstner waves and the FFT cascades
   varying vec3 v_gerstnerStrain; // Strain of the Gerstner waves (dDx/dx, dDz/dz, dDx/dz)
 
   uniform vec2 u_rippleTailSigma2;        // Slope variance finer than the ripple grid (upwind, crosswind)
@@ -467,6 +487,29 @@ export const OceanProjectedGridFragShader = /* glsl */`
     return i2 * mat2(1.0) + (i1 - i2) * P1;
   }
 
+  // RIPPLE FIELD LOOP (Assets/Ocean/RippleLoop.js), 'low' quality (SIMPLE_SHADING): the ripples precomputed as a looping
+  // animation in a texture array, two frames blended. Texels (su, sc, su^2, sc^2) in the wind frame, slopes mapped to
+  // [0, 1] by u_rippleLoopScale; their mipmaps keep the slope variance finer than the pixel (LEAN)
+  #ifdef RIPPLE_LOOP
+  uniform mediump sampler2DArray u_rippleLoop;
+  uniform bool u_rippleLoopEnabled;
+  uniform vec3 u_rippleLoopFrames; // (frame a, frame b, weight of b), computed on the CPU (no u_time in mediump)
+  uniform float u_rippleLoopScale;
+
+  // slope: (dh/dx, dh/dz) of the ripples at the rest position xz. variance: slope variance finer than the pixel
+  // (upwind, crosswind), like the roughness
+  void sampleRippleLoop(highp vec2 xz, out vec2 slope, out vec2 variance) {
+    highp vec2 uv = xz / u_rippleSize; // highp: xz reaches ~1e4 m
+    vec4 t = mix(texture(u_rippleLoop, vec3(uv, u_rippleLoopFrames.x)),
+                 texture(u_rippleLoop, vec3(uv, u_rippleLoopFrames.y)), u_rippleLoopFrames.z);
+    vec2 s = (t.xy * 2.0 - 1.0) * u_rippleLoopScale; // (along, across) the ripple direction
+    vec2 m2 = t.zw * (u_rippleLoopScale * u_rippleLoopScale);
+    variance = max(vec2(0.0), m2 - s * s);
+    vec2 w = u_windDirection;
+    slope = vec2(w.x * s.x - w.y * s.y, w.y * s.x + w.x * s.y);
+  }
+  #endif
+
   // T V T^t for a symmetric tensor v = (xx, zz, xz)
   vec3 transformTensor(mat2 T, vec3 v) {
     mat2 R = T * mat2(v.x, v.z, v.z, v.y) * mat2(T[0][0], T[1][0], T[0][1], T[1][1]);
@@ -475,6 +518,58 @@ export const OceanProjectedGridFragShader = /* glsl */`
 
 
   void main(){
+
+    #ifdef SIMPLE_SHADING
+    // ******************************** //
+    // SIMPLE SHADING: geometric (Gerstner) normal only
+    if (u_paintWaveHeight){
+      float value = (v_wavePosition.y + u_maxWaveHeight) / (u_maxWaveHeight * 2.0);
+      gl_FragColor = vec4(value, value, value, 1.0);
+      return;
+    }
+    vec3 V = normalize(cameraPosition - v_wavePosition);
+    bool underwater = cameraPosition.y < v_wavePosition.y;
+    vec3 N = normalize(v_Normal);
+    vec2 rippleVariance = vec2(0.0);
+    #ifdef RIPPLE_LOOP
+    if (u_rippleLoopEnabled) {
+      vec2 rippleSlope;
+      sampleRippleLoop(v_WorldPosition.xz, rippleSlope, rippleVariance);
+      vec2 slope = -N.xz / max(N.y, 0.05) + rippleSlope;
+      N = normalize(vec3(-slope.x, 1.0, -slope.y));
+    }
+    #endif
+    if (underwater) N = -N;
+    float cosV = clamp(dot(V, N), 0.0, 1.0);
+    #ifdef ROUGH_FRESNEL
+    // Slope variance finer than the mesh, along the view direction (frame along / across the wind): the tail and the
+    // ripples of the loop finer than the pixel
+    vec2 sigmaSq = u_rippleTailSigma2 + rippleVariance + vec2(2e-4);
+    vec3 wind3 = vec3(u_windDirection.x, 0.0, u_windDirection.y);
+    vec3 Tu = normalize(wind3 - N * dot(N, wind3));
+    vec3 Tc = cross(N, Tu);
+    float sigmaV = sqrt(slopeVarianceAlong(V, Tu, Tc, sigmaSq));
+    float fresnel = 0.02 + 0.98 * meanFresnel(cosV, sigmaV);
+    #else
+    float sigmaV = 0.0;
+    float fresnel = 0.02 + 0.98 * pow(1.0 - cosV, 5.0); // Schlick
+    #endif
+    vec3 R = reflect(-V, N);
+    #ifdef SKY_CUBEMAP
+    vec3 sky = skyReflection(R, 2.0 * sigmaV);
+    #else
+    vec3 sky = skyRadiance(R.y);
+    #endif
+    vec3 L = normalize(u_sunDirection);
+    float sunUp = L.y > 0.0 && !underwater ? 1.0 : 0.0;
+    // Sun highlight (Phong, as in the first version: no roughness, so a single sharp reflection)
+    vec3 sun = sunUp * 5.0 * pow(max(0.0, dot(R, L)), 80.0) * u_sunColor;
+    float diffuse = sunUp * max(0.0, dot(N, L));
+    vec3 water = OCEAN_COLOR * (2.0 + diffuse * u_sunColor);
+    vec3 color = fresnel * sky + (1.0 - fresnel) * water + sun;
+    if (u_debugView == 1) { gl_FragColor = vec4(vec3(fresnel), 1.0); return; }
+    if (u_debugView == 2) { gl_FragColor = vec4(N.x * 0.5 + 0.5, N.y, N.z * 0.5 + 0.5, 1.0); return; }
+    #else
 
     vec3 V = normalize(cameraPosition - v_wavePosition); // Towards the camera, from the displaced surface
     bool underwater = cameraPosition.y < v_wavePosition.y;
@@ -576,14 +671,18 @@ export const OceanProjectedGridFragShader = /* glsl */`
       return;
     }
 
+    #endif
+
     color = hdr(color, 0.99); // From David Li https://github.com/dli/waves/blob/master/simulation.js
 
     // Underwater factor (if camera is above or below water)
     float underwaterFactor = (abs(cameraPosition.y)/cameraPosition.y)*0.5 + 0.5;
     // Fog underwater (Fog exp 2)
-    float fogDepth = distance(v_WorldPosition, cameraPosition);
+    // highp: the squared distances overflow mediump (half float) beyond ~256 m
+    highp float fogDepth = distance(v_WorldPosition, cameraPosition);
     float fogDensity = u_fogDensity - u_fogDensity * 0.5 * underwaterFactor;
-    float fogFactor = 1.0 - exp( - fogDensity * fogDensity * fogDepth * fogDepth );
+    highp float fogOpticalDepth = fogDensity * fogDepth;
+    float fogFactor = 1.0 - exp(-fogOpticalDepth * fogOpticalDepth);
     vec3 fogAirColor = vec3(0.8, 0.93, 1.0);
     vec3 fogColor = mix(u_fogUnderwaterColor, fogAirColor, underwaterFactor) ;
     color = mix( color, fogColor, fogFactor );

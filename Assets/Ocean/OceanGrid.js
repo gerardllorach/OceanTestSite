@@ -42,6 +42,13 @@ export class OceanGrid {
 
 
 
+  // Rebuild the grid with another number of vertices (rendering quality). Returns the new geometry
+  setNumVertices = function(numVertices){
+    if (this.gridGeom) this.gridGeom.dispose();
+    this.gridGeom = this.createPlaneGeometry(numVertices, 4);
+    return this.gridGeom;
+  }
+
   createPlaneGeometry = function(numVertices, extraYFactor){
 
     // Calculate X and Y according to number of vertices

@@ -77,7 +77,7 @@
       <!-- STRAIN BY THE LONG WAVES -->
       <div class="container-horizontal">
         <span title="The long waves squeeze the surface on their crests and stretch it in their troughs, and the ripples with it: steeper and shorter on the crests, longer and smoother in the troughs, only across the long-wave crests (Longuet-Higgins & Stewart 1960). ×0: off, ×1: physical, above: exaggerated">Strained by the waves</span>
-        <div><input type="range" min="0" max="10" step="0.5" :value="settings.strain ?? 1"
+        <div><input type="range" min="0" max="10" step="0.5" :value="settings.strain ?? 1" :disabled="!rippleFFT"
             @input="change({ strain: Number($event.target.value) })"><span>×{{ (settings.strain ?? 1).toFixed(1) }}</span></div>
       </div>
 
@@ -85,10 +85,14 @@
       <div class="container-horizontal">
         <span title="Off: no ripple grid; their slopes remain as roughness (sun glitter, Fresnel)">Ripple grid</span>
         <div>
-          <label class="checkbox-label"><input type="checkbox" :checked="settings.enabled !== false"
+          <label class="checkbox-label"><input type="checkbox" :checked="settings.enabled !== false" :disabled="!rippleGrid"
               @change="change({ enabled: $event.target.checked })"> Drawn</label>
         </div>
       </div>
+      <p v-if="rippleLoop" class="hint-low">Low quality (Scene &gt; Quality): the ripples are a precomputed
+        loop ({{ loopFrames }} frames, {{ loopPeriod }} s, {{ ripples ? ripples.N : '' }}² grid), rebuilt when they
+        change. They are not strained by the waves.</p>
+      <p v-else-if="!rippleGrid" class="hint-low">No ripple grid at this quality: the ripples are roughness only.</p>
 
       <!-- DEBUG VIEW -->
       <div class="container-horizontal">
@@ -146,7 +150,9 @@ export default {
   props: { embedded: Boolean },
   mounted() {
     window.eventBus.on('OceanEntity_ripplesChanged', this.onRipplesChanged);
+    window.eventBus.on('OceanEntity_qualityChanged', this.onQualityChanged);
     if (window.sceneManager) {
+      this.onQualityChanged(window.sceneManager.getQuality());
       this.settings = window.sceneManager.getRippleSettings();
       this.ripples = window.sceneManager.getRipples();
       this.debugView = window.sceneManager.ocean.oceanTile.material.uniforms.u_debugView.value;
@@ -154,11 +160,17 @@ export default {
   },
   unmounted() {
     window.eventBus.off('OceanEntity_ripplesChanged', this.onRipplesChanged);
+    window.eventBus.off('OceanEntity_qualityChanged', this.onQualityChanged);
   },
   data() {
     return {
       settings: { mode: 'seaState', windSpeed: 7, windDir: 0, enabled: true, directionMode: 'wind', direction: 0, spreadMode: 'auto', spread: 30, strength: 1, strain: 1 },
       ripples: null,
+      rippleGrid: true,  // Ripples drawn (FFT or loop)
+      rippleFFT: true,   // Ripple FFT (the strain needs it)
+      rippleLoop: false, // Precomputed loop (qualities without FFT)
+      loopFrames: 64,
+      loopPeriod: 4,
       debugView: 0,
       debugViews: [
         { id: 0, title: 'Final image' },
@@ -201,6 +213,13 @@ export default {
     minT() { return 2 * Math.PI / Math.sqrt(9.8 * this.ripples.kCut); },
   },
   methods: {
+    onQualityChanged(quality) {
+      this.rippleFFT = quality.fft;
+      this.rippleLoop = quality.rippleLoop;
+      this.rippleGrid = quality.fft || quality.rippleLoop;
+      this.loopFrames = quality.rippleLoopFrames;
+      this.loopPeriod = quality.rippleLoopPeriod;
+    },
     onRipplesChanged: function (ripples) {
       this.ripples = ripples;
       this.settings = { ...ripples.settings };
@@ -374,5 +393,10 @@ select {
   color: #3d3c39;
   font-size: x-small;
   margin-top: 8px;
+}
+.hint-low {
+  margin: 0;
+  font-size: x-small;
+  color: #3d3c39;
 }
 </style>

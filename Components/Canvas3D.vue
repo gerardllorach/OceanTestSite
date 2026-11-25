@@ -64,6 +64,13 @@ export default {
     window.eventBus.on('SurfaceRipplesPanel_debugViewChanged', (view) => {
       this.sceneManager.setDebugView(view);
     });
+    // ***** QUALITY PANEL *****
+    window.eventBus.on('QualityPanel_changed', (name) => {
+      this.sceneManager.setQuality(name);
+    });
+    window.eventBus.on('QualityPanel_shadingOptionsChanged', (options) => {
+      this.sceneManager.setShadingOptions(options);
+    });
     // ***** ENVIRONMENT PANEL *****
     window.eventBus.on('EnvironmentPanel_sunChanged', (sun) => {
       this.sceneManager.setSun(sun);

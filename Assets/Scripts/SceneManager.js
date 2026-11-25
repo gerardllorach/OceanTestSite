@@ -8,6 +8,7 @@ import * as FogShader from '/OceanTestSite/Assets/Terrain/FogShader.js'
 import { OceanEntity } from '/OceanTestSite/Assets/Ocean/OceanEntity.js';
 import { spectralDensity } from '/OceanTestSite/Assets/Ocean/SeaSpectrum.js';
 import * as InputSpectrum from '/OceanTestSite/Assets/Ocean/InputSpectrum.js';
+import * as Quality from '/OceanTestSite/Assets/Ocean/Quality.js';
 
 import { TextMeshEntity } from '/OceanTestSite/Assets/TextMesh/TextMeshEntity.js';
 
@@ -47,9 +48,9 @@ class SceneManager{
     this.controls = controls;
     // TODO: limit orbit controls
     // Surface
-    //camera.position.set(10, 7.5, 10);
-    camera.position.set(-32, 62, 32)
-    controls.target.set(0, 1, -30);
+    // Start close to the centre of the scene (0,0), as in boiasomorrostro
+    camera.position.set(5, 3, 5);
+    controls.target.set(0, 1, 0);
 
 
     controls.update();
@@ -255,6 +256,25 @@ class SceneManager{
     return InputSpectrum.layerVariances(this.getInputSpectrumState());
   }
 
+
+  // RENDERING QUALITY: 'low', 'medium' or 'high' (see Assets/Ocean/Quality.js), remembered in this browser
+  setQuality = function(name){
+    this.ocean.setQuality(name);
+    Quality.saveQuality(name);
+  }
+  getQuality = function(){
+    return this.ocean.getQuality();
+  }
+  // {presets (Quality.QUALITY_PRESETS), shadingOptions (Quality.SHADING_OPTIONS), deviceDefault: the quality this
+  // device starts with}
+  getQualityPresets = function(){
+    return { presets: Quality.QUALITY_PRESETS, shadingOptions: Quality.SHADING_OPTIONS, deviceDefault: Quality.defaultQuality() };
+  }
+  // Options of the simple shading ('low'), e.g. {skyCube: true}, remembered in this browser
+  setShadingOptions = function(options){
+    this.ocean.setShadingOptions(options);
+    Quality.saveShadingOptions(this.ocean.getQuality().shadingOptions);
+  }
 
   // SURFACE RIPPLES (see Assets/Ocean/RippleSpectrum.js)
   setRippleSettings = function(settings){

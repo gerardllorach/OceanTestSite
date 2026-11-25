@@ -9,6 +9,8 @@ import { OceanParameters } from '/OceanTestSite/Assets/Ocean/OceanParams.js';
 import { DEFAULT_RIPPLE_SETTINGS, RIPPLE_N, generateRipples, travelVector } from '/OceanTestSite/Assets/Ocean/RippleSpectrum.js';
 import { FFT_N } from '/OceanTestSite/Assets/Ocean/SeaSpectrum.js';
 import { FFTOcean } from '/OceanTestSite/Assets/Ocean/FFTOcean.js';
+import { RippleLoop, RIPPLE_LOOP_N, RIPPLE_LOOP_FRAMES, RIPPLE_LOOP_PERIOD } from '/OceanTestSite/Assets/Ocean/RippleLoop.js';
+import { QUALITY_PRESETS, SHADING_OPTIONS, initialQuality, loadShadingOptions } from '/OceanTestSite/Assets/Ocean/Quality.js';
 
 class OceanEntity {
 
@@ -36,10 +38,17 @@ class OceanEntity {
   // Constructor
   constructor(scene){
 
+    // Rendering quality (Assets/Ocean/Quality.js): grid size, FFT or Gerstner sea, FFT grids
+    this.qualityName = initialQuality();
+    this.quality = QUALITY_PRESETS[this.qualityName];
+    this.shadingOptions = loadShadingOptions(); // Options of the simple shading ('low')
+
     // Creates a float texture with the parameters of the waves (period, height, direction, phase), one texel per wave.
     // The waves are a realisation of a wave spectrum (JONSWAP / Pierson-Moskowitz, Assets/Ocean/SeaSpectrum.js)
     this.dataTextureSize = 32;
-    this.oceanParams = new OceanParameters({});
+    // Without FFT ('low'), the sea spectrum is drawn with Gerstner components from the start
+    this.oceanParams = new OceanParameters(this.quality.fft ? {} : { method: 'gerstner', numComponents: this.quality.gerstnerCount },
+      undefined, this.quality.seaN || FFT_N);
     let numWaves = this.oceanParams.numWaves;
     this.numWaves = numWaves;
     let paramsData = this.oceanParams.getWaveParamsImageData(this.dataTextureSize);
@@ -56,7 +65,7 @@ class OceanEntity {
 
 
     // Create geometry
-    this.gridEntity = new OceanGrid(scene.camera, 1 * 10e5);
+    this.gridEntity = new OceanGrid(scene.camera, this.quality.gridVertices);
     
 
     // Create ocean material
@@ -88,6 +97,11 @@ class OceanEntity {
         u_rippleN: {value: RIPPLE_N},
         u_rippleTailSigma2: {value: new THREE.Vector2(0.003, 0.003)},
         u_rippleStrain: {value: DEFAULT_RIPPLE_SETTINGS.strain}, // Ripples strained by the long waves (0: off)
+        // Ripple field loop (Assets/Ocean/RippleLoop.js), qualities without FFT. Tile of u_rippleSize metres
+        u_rippleLoop: {value: null},
+        u_rippleLoopEnabled: {value: false},
+        u_rippleLoopFrames: {value: new THREE.Vector3(0, 1, 0)},
+        u_rippleLoopScale: {value: 1},
         u_windDirection: {value: new THREE.Vector2(0, 1)},
         // Spacing of the grid vertices (mesh units, before the viewport scale): the vertex shader only displaces the
         // geometry with ripples that are at least ~4 vertices long
@@ -120,9 +134,11 @@ class OceanEntity {
       },
       vertexShader: OceanProjectedGridVertShader,
       fragmentShader: OceanProjectedGridFragShader,
+      defines: this.shaderDefines(),
     });
 
     oceanProjectedGridMaterial.side = THREE.DoubleSide;
+    this.oceanMaterialMode(oceanProjectedGridMaterial); // Opaque and front faces only in 'low'
 
     // Create mesh
     this.oceanTile = new THREE.Mesh( this.gridEntity.gridGeom, oceanProjectedGridMaterial );
@@ -174,25 +190,121 @@ class OceanEntity {
   // FFT SEA ON THE GPU (needs the renderer, see SceneManager)
   setRenderer(renderer) {
     this.renderer = renderer;
-    if (!FFTOcean.isSupported(renderer)) {
-      // No float render targets: render the spectrum with Gerstner components instead
-      console.warn('FFT sea not supported (WebGL2 float render targets): using Gerstner components');
-      if (this.oceanParams.oceanParameters.method == 'fft') this.oceanParams.setSeaSettings({ method: 'gerstner' }, true);
-      this.updateParamsTexture();
+    this.setupFFT();
+    this.updateParamsTexture();
+  }
+
+  // FFT cascades (sea and ripples) for the current quality. None in 'low', or when the browser cannot render to float
+  // textures: then the sea spectrum is drawn with Gerstner components and the ripples are roughness only.
+  // Regenerates the sea (the FFT grid size depends on the quality); the caller updates the textures
+  setupFFT() {
+    const u = this.oceanTile.material.uniforms;
+    [this.fft, this.rippleFFT].forEach(f => f && f.dispose());
+    this.fft = this.rippleFFT = null;
+    u.u_fftEnabled.value = u.u_rippleEnabled.value = false;
+    ['u_fftDisplacement', 'u_fftSlopes', 'u_fftExtra', 'u_rippleDisplacement', 'u_rippleSlopes', 'u_rippleExtra']
+      .forEach(name => u[name].value = null);
+
+    const q = this.quality, renderer = this.renderer, params = this.oceanParams;
+    // Half float when the preset asks for it, or when the device can only render to half float
+    const halfFloat = q.halfFloat || !FFTOcean.isSupported(renderer, false);
+    const useFFT = q.fft && FFTOcean.isSupported(renderer, halfFloat);
+    if (q.fft && !useFFT) console.warn('FFT sea not supported (WebGL2 float render targets): using Gerstner components');
+
+    if (!useFFT) {
+      // Gerstner sea, with the number of components of the preset (a device without float targets keeps the count)
+      const update = {};
+      if (params.oceanParameters.method == 'fft') {
+        // The Gerstner sea replaces the discrete waves: keep them for when the FFT comes back
+        this.savedDiscreteWaves = params.sea ? null : this.getDiscreteWaves();
+        update.method = 'gerstner';
+      }
+      if (q.gerstnerCount && q.gerstnerCount != params.oceanParameters.numComponents) update.numComponents = q.gerstnerCount;
+      if (Object.keys(update).length) params.setSeaSettings(update, true);
       return;
     }
-    // Two cascades: the sea and the ripples
-    this.fft = new FFTOcean(renderer, FFT_N);
-    this.rippleFFT = new FFTOcean(renderer, RIPPLE_N);
-    const u = this.oceanTile.material.uniforms;
+
+    params.fftN = q.seaN;
+    this.fft = new FFTOcean(renderer, q.seaN, { halfFloat });
+    this.rippleFFT = new FFTOcean(renderer, q.rippleN, { halfFloat });
     u.u_fftDisplacement.value = this.fft.displacementTexture;
     u.u_fftSlopes.value = this.fft.slopesTexture;
     u.u_fftExtra.value = this.fft.extraTexture;
     u.u_rippleDisplacement.value = this.rippleFFT.displacementTexture;
     u.u_rippleSlopes.value = this.rippleFFT.slopesTexture;
     u.u_rippleExtra.value = this.rippleFFT.extraTexture;
-    u.u_fftN.value = FFT_N;
+    u.u_fftN.value = q.seaN;
+    u.u_rippleN.value = q.rippleN;
+
+    if (params.oceanParameters.method == 'gerstner') {
+      params.setSeaSettings({ method: 'fft' }, true);
+      if (this.savedDiscreteWaves && this.savedDiscreteWaves.length) params.setDiscreteWaves(this.savedDiscreteWaves);
+      this.savedDiscreteWaves = null;
+    } else {
+      params.generateDistributions(); // Same method, FFT grid of this quality
+    }
+  }
+
+  // RENDERING QUALITY: 'low', 'medium' or 'high' (Assets/Ocean/Quality.js)
+  setQuality(name) {
+    if (!QUALITY_PRESETS[name] || name == this.qualityName) return;
+    const previous = this.quality;
+    this.qualityName = name;
+    this.quality = QUALITY_PRESETS[name];
+    if (this.quality.gridVertices != previous.gridVertices) {
+      this.oceanTile.geometry = this.gridEntity.setNumVertices(this.quality.gridVertices);
+      this.oceanTile.material.uniforms.u_gridStep.value.copy(this.gridEntity.gridStep);
+    }
+    // Shader variant (SIMPLE_SHADING and its options): recompiled when the defines change
+    this.updateShaderDefines();
+    this.oceanMaterialMode(this.oceanTile.material);
+    if (this.renderer) this.setupFFT();
     this.updateParamsTexture();
+    if (window.eventBus) window.eventBus.emit('OceanEntity_qualityChanged', this.getQuality());
+  }
+
+  // {name, fft (FFT cascades running), halfFloat, seaN, rippleN, gridVertices, simpleShading, shadingOptions, numWaves}
+  getQuality() {
+    return { name: this.qualityName, fft: !!this.fft, halfFloat: this.fft ? this.fft.halfFloat : false,
+      seaN: this.fft ? this.fft.N : null, rippleN: this.rippleFFT ? this.rippleFFT.N : null,
+      gridVertices: this.quality.gridVertices, simpleShading: !!this.quality.simpleShading,
+      rippleLoop: this.rippleLoopActive(), rippleLoopFrames: RIPPLE_LOOP_FRAMES, rippleLoopPeriod: RIPPLE_LOOP_PERIOD,
+      shadingOptions: { ...this.shadingOptions }, numWaves: this.numWaves };
+  }
+
+  // Options of the simple shading, e.g. {skyCube: true} (see SHADING_OPTIONS). Recompiles the shader
+  setShadingOptions(partial) {
+    Object.keys(partial).forEach(key => { if (key in SHADING_OPTIONS) this.shadingOptions[key] = !!partial[key]; });
+    this.updateShaderDefines();
+    if (window.eventBus) window.eventBus.emit('OceanEntity_qualityChanged', this.getQuality());
+  }
+
+  // Opaque, front faces only (quality 'opaque', see Quality.js), or transparent and double sided
+  oceanMaterialMode(material) {
+    const opaque = !!this.quality.opaque;
+    const side = opaque ? THREE.FrontSide : THREE.DoubleSide;
+    if (material.transparent == !opaque && material.side == side) return;
+    material.transparent = !opaque;
+    material.side = side;
+    material.needsUpdate = true;
+  }
+
+  // Shader defines of the current quality: SIMPLE_SHADING and its options
+  shaderDefines() {
+    const defines = {};
+    if (this.quality.rippleLoop) defines.RIPPLE_LOOP = '';
+    if (!this.quality.simpleShading) return defines;
+    defines.SIMPLE_SHADING = '';
+    Object.keys(SHADING_OPTIONS).forEach(key => { if (this.shadingOptions[key]) defines[SHADING_OPTIONS[key].define] = ''; });
+    return defines;
+  }
+
+  // Recompile the ocean shader if its defines changed
+  updateShaderDefines() {
+    const material = this.oceanTile.material, defines = this.shaderDefines();
+    if (JSON.stringify(defines) == JSON.stringify(material.defines)) return;
+    material.defines = defines;
+    material.needsUpdate = true;
   }
 
   updateFFT() {
@@ -311,8 +423,10 @@ class OceanEntity {
     else this.updateRipples();
   }
 
+  // Off without the ripple FFT: the strain would only bend the roughness, at the cost of the shader
   updateRippleStrain() {
-    if (this.oceanTile) this.oceanTile.material.uniforms.u_rippleStrain.value = this.rippleSettings.strain ?? 1;
+    if (this.oceanTile)
+      this.oceanTile.material.uniforms.u_rippleStrain.value = this.rippleFFT ? (this.rippleSettings.strain ?? 1) : 0;
   }
 
   getRippleSettings() {
@@ -325,23 +439,58 @@ class OceanEntity {
   }
 
   updateRipples() {
-    // Before the renderer is set, the FFT ripples cannot be drawn: generate them disabled (roughness only)
-    const settings = this.rippleFFT ? this.rippleSettings : { ...this.rippleSettings, enabled: false };
-    this.ripples = generateRipples(this.getDiscreteWaves(), settings, this.getFFTSea());
+    // Drawn with the ripple FFT, or with the ripple field loop (qualities without FFT). Otherwise (e.g. before the
+    // renderer is set with an FFT quality) generated disabled: roughness only
+    const loop = this.rippleLoopActive();
+    const settings = this.rippleFFT || loop ? this.rippleSettings : { ...this.rippleSettings, enabled: false };
+    const N = this.rippleFFT ? this.rippleFFT.N : loop ? RIPPLE_LOOP_N : RIPPLE_N;
+    this.ripples = generateRipples(this.getDiscreteWaves(), settings, this.getFFTSea(), N);
     if (this.oceanTile) {
       const u = this.oceanTile.material.uniforms;
       u.u_rippleTailSigma2.value.set(this.ripples.tailSigma2.up, this.ripples.tailSigma2.cross);
       const [ux, uz] = travelVector(this.ripples.windDir);
       u.u_windDirection.value.set(ux, uz);
-      u.u_rippleEnabled.value = this.ripples.enabled;
+      u.u_rippleEnabled.value = this.ripples.enabled && !!this.rippleFFT; // FFT ripple textures
       u.u_rippleSize.value = this.ripples.L;
       this.updateRippleStrain();
       if (this.rippleFFT) {
         this.rippleFFT.setSpectrum(this.ripples.enabled ? this.ripples : null);
         if (this.ripples.enabled) this.rippleFFT.update(this.time);
       }
+      this.updateRippleLoop();
     }
     if (window.eventBus) window.eventBus.emit('OceanEntity_ripplesChanged', this.ripples);
+  }
+
+  // RIPPLE FIELD LOOP (Assets/Ocean/RippleLoop.js): the ripples of the qualities without FFT
+  rippleLoopActive() {
+    return !!this.quality.rippleLoop && !this.rippleFFT;
+  }
+
+  // Rebuild the loop for the current ripples: at once the first time, then 150 ms after the last change (sliders
+  // send many changes; each build is a few hundred ms on a phone). Skipped when the ripples did not change
+  updateRippleLoop() {
+    const u = this.oceanTile.material.uniforms;
+    clearTimeout(this.rippleLoopTimer);
+    if (!this.rippleLoopActive() || !this.ripples.enabled) {
+      u.u_rippleLoopEnabled.value = false;
+      if (!this.rippleLoopActive() && this.rippleLoop) { this.rippleLoop.dispose(); this.rippleLoop = null; this.rippleLoopKey = null; }
+      return;
+    }
+    const r = this.ripples;
+    const key = JSON.stringify([r.settings, r.windDir, r.L, r.N, r.kCut, r.heightVariance]);
+    if (key == this.rippleLoopKey && this.rippleLoop) { u.u_rippleLoopEnabled.value = true; return; }
+    const build = () => {
+      if (!this.rippleLoopActive() || this.ripples !== r) return; // Superseded
+      if (!this.rippleLoop) this.rippleLoop = new RippleLoop();
+      this.rippleLoop.build(r, travelVector(r.windDir));
+      this.rippleLoopKey = key;
+      u.u_rippleLoop.value = this.rippleLoop.texture;
+      u.u_rippleLoopScale.value = this.rippleLoop.scale;
+      u.u_rippleLoopEnabled.value = true;
+    };
+    if (!this.rippleLoop) build();
+    else this.rippleLoopTimer = setTimeout(build, 150);
   }
 
   // SUN
@@ -469,6 +618,9 @@ class OceanEntity {
       // FFT cascades at this time (displacement and slope maps): sea and ripples
       if (this.fft && this.fft.enabled) this.fft.update(this.time);
       if (this.rippleFFT && this.rippleFFT.enabled) this.rippleFFT.update(this.time);
+      // Ripple field loop: the two frames to blend at this time
+      if (this.rippleLoop && oceanTile.material.uniforms.u_rippleLoopEnabled.value)
+        oceanTile.material.uniforms.u_rippleLoopFrames.value.fromArray(this.rippleLoop.framesAt(this.time));
 
       this.gridEntity.update(oceanTile);
 

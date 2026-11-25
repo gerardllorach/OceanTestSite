@@ -138,15 +138,18 @@ const EPOCH = 600; // s
 
 export class FFTOcean {
 
-  constructor(renderer, N) {
+  // options.halfFloat: half-float spectrum and FFT buffers (half the memory traffic, for mobile GPUs). The maps are
+  // half float either way
+  constructor(renderer, N, { halfFloat = false } = {}) {
     this.renderer = renderer;
     this.N = N;
+    this.halfFloat = halfFloat;
     this.L = 512;
     this.enabled = false;
 
     // Spectrum and FFT ping-pong: two float textures each (A, B)
     const floatTarget = () => new THREE.WebGLMultipleRenderTargets(N, N, 2, {
-      type: THREE.FloatType, format: THREE.RGBAFormat, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter,
+      type: halfFloat ? THREE.HalfFloatType : THREE.FloatType, format: THREE.RGBAFormat, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter,
       depthBuffer: false, stencilBuffer: false, generateMipmaps: false });
     this.spectrum = floatTarget();
     this.ping = floatTarget(); this.pong = floatTarget();
@@ -180,9 +183,11 @@ export class FFTOcean {
     this.camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
   }
 
-  // WebGL2 with float render targets is needed
-  static isSupported(renderer) {
-    return renderer.capabilities.isWebGL2 && renderer.extensions.has('EXT_color_buffer_float');
+  // WebGL2 with float render targets (float32, or half float only when halfFloat) is needed
+  static isSupported(renderer, halfFloat = false) {
+    if (!renderer.capabilities.isWebGL2) return false;
+    if (renderer.extensions.has('EXT_color_buffer_float')) return true; // Covers half float too
+    return halfFloat && renderer.extensions.has('EXT_color_buffer_half_float');
   }
 
   // spectrum: {L, choppiness, amp, phase, omega} (Float64Arrays of N * N, texel (n, m) at m * N + n, see

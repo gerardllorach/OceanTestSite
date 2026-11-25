@@ -75,6 +75,7 @@ import SeaStateAnalysisPanel from './Panels/SeaStateAnalysisPanel.vue';
 import RenderStereoPanel from './Panels/RenderStereoPanel.vue';
 import RenderHeightPanel from './Panels/RenderHeightPanel.vue';
 import EnvironmentPanel from './Panels/EnvironmentPanel.vue';
+import QualityPanel from './Panels/QualityPanel.vue';
 import SeaStateGenerationPanel from './Panels/SeaStateGenerationPanel.vue';
 
 // Options of a section hide again if none is clicked within this time
@@ -127,6 +128,7 @@ export default {
             { title: 'Add/Remove objects', unavailable: true },
             { title: 'Colors', unavailable: true },
             { title: 'Environment', component: 'environment' },
+            { title: 'Quality', icon: '\uf625', component: 'quality' },
           ]
         },
       ],
@@ -289,6 +291,7 @@ export default {
     'render-heights': RenderHeightPanel,
     'render-stereo': RenderStereoPanel,
     'environment': EnvironmentPanel,
+    'quality': QualityPanel,
     'sea-state-generation': SeaStateGenerationPanel,
   }
 }
