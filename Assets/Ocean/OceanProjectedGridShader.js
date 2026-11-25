@@ -446,24 +446,25 @@ export const OceanProjectedGridFragShader = /* glsl */`
   // of the squeeze: their wavenumber and their amplitude both scale by 1 / J, so their slope by 1 / J^2. Steeper and
   // shorter on the crests, longer and smoother in the troughs; ripples whose crests lie along the stretch do not change.
   //
-  // Principal stretches of the symmetric matrix I + e, e = (xx, zz, xz): (largest, smallest, angle of the largest)
-  vec3 principalStretch(vec3 e) {
-    float a = 1.0 + e.x, d = 1.0 + e.y;
-    float m = 0.5 * (a + d);
-    float r = sqrt(0.25 * (a - d) * (a - d) + e.z * e.z);
-    float theta = r > 1e-6 ? 0.5 * atan(2.0 * e.z, a - d) : 0.0;
-    return vec3(m + r, m - r, theta);
+  // Principal stretches of the symmetric matrix I + e, e = (xx, zz, xz): (largest, smallest)
+  vec2 principalStretch(vec3 e) {
+    float m = 1.0 + 0.5 * (e.x + e.y);
+    float r = sqrt(0.25 * (e.x - e.y) * (e.x - e.y) + e.z * e.z);
+    return vec2(m + r, m - r);
   }
 
   // Inverse of I + e, with the principal stretches clamped to >= 0.6. Where the long waves squeeze the surface to
   // nothing (the crest of a Gerstner wave about to loop) the ripples would grow without limit; in the sea they break
   // (micro-breaking). 0.6 caps the ripple slope gain at ~2.8 (1 / 0.6^2)
+  // Spectral decomposition without angles: with P1 = (M - l2 I) / (l1 - l2) the projector on the largest stretch,
+  // f(M) = f(l1) P1 + f(l2) (I - P1)
   mat2 inverseStretch(vec3 e) {
-    vec3 p = principalStretch(e);
+    vec2 p = principalStretch(e);
     float i1 = 1.0 / max(p.x, 0.6), i2 = 1.0 / max(p.y, 0.6);
-    float c = cos(p.z), s = sin(p.z);
-    float xz = c * s * (i1 - i2);
-    return mat2(c * c * i1 + s * s * i2, xz, xz, s * s * i1 + c * c * i2);
+    float gap = p.x - p.y;
+    if (gap < 1e-6) return mat2(i1); // Isotropic
+    mat2 P1 = (mat2(1.0 + e.x, e.z, e.z, 1.0 + e.y) - mat2(p.y)) / gap;
+    return i2 * mat2(1.0) + (i1 - i2) * P1;
   }
 
   // T V T^t for a symmetric tensor v = (xx, zz, xz)
@@ -499,7 +500,10 @@ export const OceanProjectedGridFragShader = /* glsl */`
     // u_rippleStrain scales the strain (0: off, as before; > 1: exaggerated)
     vec3 gStrain = v_gerstnerStrain;
     vec3 longStrain = gStrain + vec3(cs.z, cs.w, cDxz); // Gerstner + FFT sea (the ripples are not added yet)
-    mat2 rippleT = inverseStretch(u_rippleStrain * gStrain) * inverseStretch(u_rippleStrain * longStrain);
+    // Off (x0): identity, skip the two inverses (uniform branch: the same for every pixel)
+    mat2 rippleT = mat2(1.0);
+    if (u_rippleStrain > 0.0)
+      rippleT = inverseStretch(u_rippleStrain * gStrain) * inverseStretch(u_rippleStrain * longStrain);
     vec3 rippleTensor = fromWindFrame(u_rippleTailSigma2, windU); // Tail: strained like the ripples
 
     vec4 rippleS = vec4(0.0); float rippleDxz = 0.0;
@@ -567,7 +571,7 @@ export const OceanProjectedGridFragShader = /* glsl */`
     if (u_debugView == 3) { gl_FragColor = vec4(sqrt(sigmaSq) * 4.0, 0.0, 1.0); return; }
     if (u_debugView == 4) { gl_FragColor = vec4(rippleSlope * 2.0 + 0.5, 0.5, 1.0); return; }
     if (u_debugView == 5) {
-      vec3 p = principalStretch(longStrain);
+      vec2 p = principalStretch(longStrain);
       gl_FragColor = vec4(0.1 + 3.0 * max(0.0, 1.0 - p.y), 0.1, 0.1 + 3.0 * max(0.0, p.x - 1.0), 1.0);
       return;
     }

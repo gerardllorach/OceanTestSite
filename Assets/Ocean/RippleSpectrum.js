@@ -20,7 +20,9 @@ const RAD2DEG = 180 / Math.PI;
 const TWO_PI = 2 * Math.PI;
 
 export const RIPPLE_K_MIN = 1.5; // rad/m (wavelength ~4.2 m): where the ripples start without an FFT sea
-export const RIPPLE_N = 512;     // Grid of the ripple cascade
+// Grid of the ripple cascade. 256: ripples down to ~9 cm, the shorter ones go to the tail (roughness). 512 resolves
+// them down to ~4.5 cm but costs ~4x the GPU time (the FFT runs every frame), only visible very close to the surface
+export const RIPPLE_N = 256;
 // Components up to this fraction of the Nyquist wavenumber (~2.9 texels per wavelength or more). A bit closer to the
 // limit than the sea (0.5): the shortest ripples only show in the normals, where the interpolation matters less
 export const RIPPLE_K_FRACTION = 0.7;
@@ -162,7 +164,7 @@ export function generateRipples(waves, settings = {}, fft = null, N = RIPPLE_N) 
   // Grid: the ripples start just above the shortest wave of the other layers (where the FFT grid ends, or
   // RIPPLE_K_MIN, or 1.2 x the shortest discrete wave). The grid spacing is kMin / 2, so that there are wavevectors
   // from kMin on in every direction (kMin, 1.12 kMin, 1.41 kMin, 1.5 kMin...); it then covers a factor
-  // RIPPLE_K_FRACTION * N / 4 in wavenumber (~4 m down to ~4.5 cm).
+  // RIPPLE_K_FRACTION * N / 4 in wavenumber (~4 m down to ~9 cm with N = 256).
   const kMaxGerstner = waves.reduce((m, w) => Math.max(m, wavenumber(w.T)), 0);
   const kStart = fft ? fft.kCut : RIPPLE_K_MIN;
   const kMin = Math.max(kStart, 1.2 * kMaxGerstner);
