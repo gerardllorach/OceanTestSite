@@ -96,7 +96,7 @@ class SceneManager{
       reflectedLight.directSpecular *= ambientOcclusion;
       reflectedLight.indirectSpecular *= ambientOcclusion;
       #if defined( USE_ENVMAP ) && defined( STANDARD )
-        float dotNV = saturate( dot( geometry.normal, geometry.viewDir ) );
+        float dotNV = saturate( dot( geometryNormal, geometryViewDir ) );
         reflectedLight.indirectSpecular *= computeSpecularOcclusion( dotNV, ambientOcclusion, material.roughness );
       #endif
     #endif`
@@ -140,17 +140,18 @@ class SceneManager{
 
 
 
+    // Light intensities are physical since three.js r155 (the legacy mode scaled them by PI): times PI keeps the old look
     { // LIGHT
       const skyColor = 0xB1E1FF;  // light blue
       const groundColor = 0x2090b9;  // blue
-      const intensity = 0.6;
+      const intensity = 0.6 * Math.PI;
       const light = new THREE.HemisphereLight(skyColor, groundColor, intensity);
       scene.add(light);
     }
 
     { // LIGHT (sun): its direction is set by setSun()
       const color = 0xFFFFFF;
-      const intensity = 0.8;
+      const intensity = 0.8 * Math.PI;
       const light = new THREE.DirectionalLight(color, intensity);
       light.position.set(0, 10, 0);
       light.target.position.set(0, 0, 0);
@@ -194,7 +195,7 @@ class SceneManager{
     if (this.sunLight) {
       this.sunLight.position.copy(this.sunDirection).multiplyScalar(10);
       this.sunLight.color.copy(this.sunColor);
-      this.sunLight.intensity = 0.8;
+      this.sunLight.intensity = 0.8 * Math.PI;
     }
     // Listeners: EnvironmentPanel (keeps its controls in sync when the sun is moved from elsewhere)
     if (window.eventBus) window.eventBus.emit('SceneManager_sunChanged', this.getSunSettings());

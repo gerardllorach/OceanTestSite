@@ -148,19 +148,19 @@ export class FFTOcean {
     this.enabled = false;
 
     // Spectrum and FFT ping-pong: two float textures each (A, B)
-    const floatTarget = () => new THREE.WebGLMultipleRenderTargets(N, N, 2, {
+    const floatTarget = () => new THREE.WebGLRenderTarget(N, N, { count: 2,
       type: halfFloat ? THREE.HalfFloatType : THREE.FloatType, format: THREE.RGBAFormat, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter,
       depthBuffer: false, stencilBuffer: false, generateMipmaps: false });
     this.spectrum = floatTarget();
     this.ping = floatTarget(); this.pong = floatTarget();
     // Maps, written in one pass: half float, mipmapped, repeated
-    this.maps = new THREE.WebGLMultipleRenderTargets(N, N, 3, {
+    this.maps = new THREE.WebGLRenderTarget(N, N, { count: 3,
       type: THREE.HalfFloatType, format: THREE.RGBAFormat, minFilter: THREE.LinearMipmapLinearFilter,
       magFilter: THREE.LinearFilter, wrapS: THREE.RepeatWrapping, wrapT: THREE.RepeatWrapping,
       depthBuffer: false, stencilBuffer: false, generateMipmaps: true });
-    this.displacementTexture = this.maps.texture[0]; // (Dx, h, Dz, 1)
-    this.slopesTexture = this.maps.texture[1];       // (hx, hz, Dxx, Dzz)
-    this.extraTexture = this.maps.texture[2];        // (Dxz, hx^2, hz^2, hx hz)
+    this.displacementTexture = this.maps.textures[0]; // (Dx, h, Dz, 1)
+    this.slopesTexture = this.maps.textures[1];       // (hx, hz, Dxx, Dzz)
+    this.extraTexture = this.maps.textures[2];        // (Dxz, hx^2, hz^2, hx hz)
 
     this.h0Texture = new THREE.DataTexture(new Float32Array(N * N * 4), N, N, THREE.RGBAFormat, THREE.FloatType);
     this.h0Texture.minFilter = this.h0Texture.magFilter = THREE.NearestFilter;
@@ -231,8 +231,8 @@ export class FFTOcean {
     let source = input, target = this.ping;
     for (const horizontal of [true, false]) {
       for (let sub = 2; sub <= this.N; sub *= 2) {
-        u.u_inputA.value = source.texture[0];
-        u.u_inputB.value = source.texture[1];
+        u.u_inputA.value = source.textures[0];
+        u.u_inputB.value = source.textures[1];
         u.u_subSize.value = sub;
         u.u_horizontal.value = horizontal;
         this.pass(this.fftMaterial, target);
@@ -259,8 +259,8 @@ export class FFTOcean {
     const fields = this.inverseFFT(this.spectrum); // A = (h, Dx, Dz, hx), B = (hz, Dxx, Dzz, Dxz)
 
     const mu = this.mapMaterial.uniforms;
-    mu.u_A.value = fields.texture[0];
-    mu.u_B.value = fields.texture[1];
+    mu.u_A.value = fields.textures[0];
+    mu.u_B.value = fields.textures[1];
     this.pass(this.mapMaterial, this.maps);
 
     renderer.autoClear = previousAutoClear;

@@ -49,7 +49,7 @@ class TextMeshEntity {
       let geometry = new TextGeometry(inputText, {
         font: this.font,
         size: inputSize,
-        height: inputSize/10,
+        depth: inputSize/10,
         curveSegments: 4,
         bevelEnabled: true,
         bevelSize: inputSize/30,
