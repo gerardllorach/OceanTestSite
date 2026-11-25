@@ -67,6 +67,12 @@
           <span v-else-if="ripples" class="derived-value">{{ fmt(ripples.spread, 0) }}°, broader for shorter ripples</span>
         </div>
       </div>
+      <!-- Strength: only without Auto (Cox-Munk); Auto keeps the full Cox-Munk slope -->
+      <div class="container-horizontal" v-if="settings.spreadMode == 'custom'">
+        <span title="Fraction of the Cox & Munk slope left for the ripples (and the tail) that they get. Lower: smaller ripples and a glassier surface, as in calm water or a slick, where surface films damp the ripples">Ripple strength</span>
+        <div><input type="range" min="0" max="100" step="5" :value="Math.round((settings.strength ?? 1) * 100)"
+            @input="change({ strength: Number($event.target.value) / 100 })"><span>{{ Math.round((settings.strength ?? 1) * 100) }}%</span></div>
+      </div>
 
       <!-- RIPPLE GRID ON / OFF -->
       <div class="container-horizontal">
@@ -87,6 +93,14 @@
         </div>
       </div>
     </div>
+
+    <!-- NO SLOPE LEFT FOR THE RIPPLES (see generateRipples: they get Cox-Munk minus the slopes of the waves) -->
+    <p v-if="noBudget" class="warning" role="status">
+      No ripples: the FFT sea and the swell are already as steep as the sea surface of Cox &amp; Munk for a
+      {{ fmt(ripples.windSpeed, 1) }} m/s wind (mean square slope {{ fmt(waveSlope, 4) }}, target {{ fmt(coxMunkSlope, 4) }}),
+      so nothing is left for the ripples. Raise the wind speed, or make the sea less steep (lower H<sub>m0</sub> or longer
+      peak period).
+    </p>
 
     <!-- SLOPES -->
     <table class="slope-table" v-if="ripples">
@@ -136,7 +150,7 @@ export default {
   },
   data() {
     return {
-      settings: { mode: 'seaState', windSpeed: 7, windDir: 0, enabled: true, directionMode: 'wind', direction: 0, spreadMode: 'auto', spread: 30 },
+      settings: { mode: 'seaState', windSpeed: 7, windDir: 0, enabled: true, directionMode: 'wind', direction: 0, spreadMode: 'auto', spread: 30, strength: 1 },
       ripples: null,
       debugView: 0,
       debugViews: [
@@ -159,6 +173,19 @@ export default {
         { name: 'Total', v: s.total, total: true },
         { name: 'Cox & Munk target', v: s.coxMunk },
       ];
+    },
+    // Slope of the waves (FFT sea + swell) against the Cox-Munk target, upwind + crosswind
+    waveSlope() {
+      const s = this.ripples.slopes, fft = s.fft || { up: 0, cross: 0 };
+      return s.gerstner.up + s.gerstner.cross + fft.up + fft.cross;
+    },
+    coxMunkSlope() { return this.ripples.slopes.coxMunk.up + this.ripples.slopes.coxMunk.cross; },
+    // The waves use (almost) the whole Cox-Munk budget: under 2% of it is left for the ripples and the tail
+    noBudget() {
+      if (!this.ripples) return false;
+      const s = this.ripples.slopes, fft = s.fft || { up: 0, cross: 0 };
+      const left = Math.max(0, s.coxMunk.up - s.gerstner.up - fft.up) + Math.max(0, s.coxMunk.cross - s.gerstner.cross - fft.cross);
+      return left < 0.02 * (s.coxMunk.up + s.coxMunk.cross);
     },
     longest() { return 2 * Math.PI / this.ripples.kMin; },
     shortest() { return 2 * Math.PI / this.ripples.kCut; },
@@ -297,6 +324,13 @@ export default {
 select {
   border-radius: 5px;
   font-size: small;
+}
+
+.warning {
+  background: var(--red);
+  border-radius: 10px;
+  padding: 6px 12px;
+  margin: 0 0 12px;
 }
 
 .slope-table {

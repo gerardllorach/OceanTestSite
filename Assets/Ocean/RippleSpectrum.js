@@ -38,6 +38,7 @@ export const DEFAULT_RIPPLE_SETTINGS = {
   direction: 0,          // Custom direction the ripples come FROM (deg clockwise from north)
   spreadMode: 'auto',    // 'auto': spread from the Cox-Munk cross/up slope ratio, broader for shorter ripples. 'custom'
   spread: 30,            // Custom directional spread (deg, width of the wrapped normal distribution), the same for all
+  strength: 1,           // Custom only: fraction of the slope budget given to the ripples and the tail (0: glassy surface)
 };
 
 
@@ -145,12 +146,15 @@ export function generateRipples(waves, settings = {}, fft = null, N = RIPPLE_N) 
   // along this direction (Cox-Munk, the shader's roughness frame)
   const windDir = s.directionMode == 'custom' ? wrap360(Number(s.direction) || 0) : sourceWindDir;
 
-  // Slope budget: Cox-Munk minus what the Gerstner waves and the FFT sea already carry
+  // Slope budget: Cox-Munk minus what the Gerstner waves and the FFT sea already carry.
+  // Without Auto (spreadMode 'custom'), the strength scales it (ripples and tail together): below 1 the surface is
+  // smoother than Cox-Munk, as calm water or a slick, where surface films damp the short waves
   const target = coxMunk(windSpeed);
   const gerstner = slopeVariance(waves, windDir);
   const fftSlopes = fftSlopeVariance(fft, windDir);
-  const budget = { up: Math.max(0, target.up - gerstner.up - fftSlopes.up),
-    cross: Math.max(0, target.cross - gerstner.cross - fftSlopes.cross) };
+  const strength = s.spreadMode == 'custom' ? clamp(Number(s.strength ?? 1), 0, 1) : 1;
+  const budget = { up: strength * Math.max(0, target.up - gerstner.up - fftSlopes.up),
+    cross: strength * Math.max(0, target.cross - gerstner.cross - fftSlopes.cross) };
 
   // Grid: the ripples start just above the shortest wave of the other layers (where the FFT grid ends, or
   // RIPPLE_K_MIN, or 1.2 x the shortest discrete wave). The grid spacing is kMin / 2, so that there are wavevectors
