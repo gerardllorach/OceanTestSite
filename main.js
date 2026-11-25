@@ -13,10 +13,20 @@ window.SceneManager = SceneManager;
 import WMSDataRetriever from '/OceanTestSite/Assets/Scripts/WMSDataRetriever.js';
 window.WMSDataRetriever = WMSDataRetriever;
 
+// Ocean Analysis (virtual wave buoy) and its charts
+import { OceanAnalysis } from "./Assets/Scripts/OceanAnalysis/OceanAnalysis.js";
+window.OceanAnalysis = OceanAnalysis;
+import * as AnalysisCharts from "./Assets/Scripts/OceanAnalysis/AnalysisCharts.js";
+window.AnalysisCharts = AnalysisCharts;
+
 
 // Declare event emitter
 // https://github.com/developit/mitt
 window.eventBus = window.mitt();
+
+// D3
+import d3_timeseries from "./lib/d3-timeseries/d3_timeseries.js";
+window.d3_timeseries = d3_timeseries;
 
 const options = {
   moduleCache: { vue: Vue },

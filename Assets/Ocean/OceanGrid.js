@@ -51,6 +51,8 @@ export class OceanGrid {
     let divisions = Math.floor(Math.sqrt(numVertices/extraYFactor));
     
     let gridGeom = new THREE.PlaneGeometry( size, size, divisions , divisions * extraYFactor );
+    // Spacing between vertices (used by the shader to know which ripples the mesh can represent)
+    this.gridStep = new THREE.Vector2(size / divisions, size / (divisions * extraYFactor));
 
     console.log("Number of vertices: " + divisions * divisions * extraYFactor);
     
@@ -75,6 +77,9 @@ export class OceanGrid {
 
 
   updateCameraGrid = function(){
+    // Only the horizon case below sets the vertical scale: reset it, otherwise a value from a previous view (camera
+    // looking at the horizon) stays and the grid no longer covers the screen when looking down
+    this.yHeightScale = 1;
 
     // Create the central top or bottom vertex
     // When cameraUser is below XZ plane, the central vertex of the last row should be taken

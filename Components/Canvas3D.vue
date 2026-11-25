@@ -21,7 +21,7 @@ export default {
     
   },
   mounted() {
-    this.sceneManager = new window.SceneManager(this.$refs.canvas3D);
+    window.sceneManager = this.sceneManager = new window.SceneManager(this.$refs.canvas3D);
     this.sceneManager.startRender();
     this.sceneManager.windowWasResized();
 
@@ -38,19 +38,35 @@ export default {
     window.eventBus.on('InstrumentsMenu_baseButtonClicked', () => {
       this.sceneManager.focusOnBase();
     });
-    // ***** APP MANAGER *****
-    window.eventBus.on('AppManager_fpsButtonClicked', () => {
+    // ***** MENU *****
+    window.eventBus.on('MenuPanel_fpsClicked', () => {
       this.sceneManager.showHideFPS();
     });
     window.eventBus.on('RenderStereoPanel_calibrateClicked', () => {
       this.sceneManager.calibrate();
     });
-    window.eventBus.on('AppManager_cameraClicked', (value) => {
+    // ***** CAMERA VIEWS (render sections) *****
+    window.eventBus.on('CameraViewButtons_cameraClicked', (value) => {
       this.sceneManager.changeCamera(value);
     });
-    // ***** WAVE PROPERTIES PANEL *****
-    window.eventBus.on('WavesPropertiesPanel_setWavesProperties', (wavesProperties) => {
-      this.sceneManager.setWavesProperties(wavesProperties);
+    // ***** DISCRETE WAVES PANEL *****
+    window.eventBus.on('DiscreteWavesPanel_setDiscreteWaves', (discreteWaves) => {
+      this.sceneManager.setDiscreteWaves(discreteWaves);
+    });
+    // ***** GENERATE SEA STATE PANEL *****
+    window.eventBus.on('SeaStatePanel_changed', (settings) => {
+      this.sceneManager.generateSeaState(settings);
+    });
+    // ***** SURFACE RIPPLES PANEL *****
+    window.eventBus.on('SurfaceRipplesPanel_changed', (settings) => {
+      this.sceneManager.setRippleSettings(settings);
+    });
+    window.eventBus.on('SurfaceRipplesPanel_debugViewChanged', (view) => {
+      this.sceneManager.setDebugView(view);
+    });
+    // ***** ENVIRONMENT PANEL *****
+    window.eventBus.on('EnvironmentPanel_sunChanged', (sun) => {
+      this.sceneManager.setSun(sun);
     });
     // ***** RECORD STEREO PANEL *****
     window.eventBus.on('RenderStereoPanel_renderFramesClicked', (el) => {
@@ -66,12 +82,22 @@ export default {
     window.eventBus.on('RenderHeightPanel_renderFramesClicked', (el) => {
       this.sceneManager.recordHeights(el);
     });
-    // ***** TOP-RIGHT ICONS *****
-    // Face northward
-    window.eventBus.on('TopRightMenu_compassButtonClicked', () => {
+    // ***** BOTTOM-RIGHT BUTTONS *****
+    // They move the free camera, so switch back to it first
+    window.eventBus.on('SidePanel_faceNorthClicked', () => {
+      this.sceneManager.changeCamera('F');
       this.sceneManager.faceNorthward();
     });
+    window.eventBus.on('SidePanel_centerCameraClicked', () => {
+      this.sceneManager.changeCamera('F');
+      this.sceneManager.centerCamera();
+    });
 
+
+    // ***** SIDE PANEL - EXPORT WAVES *****
+    window.eventBus.on('SidePanel_ExportWavesClicked', ()=>{
+      this.sceneManager.exportOceanParamsJSON();
+    })
 
 
 
@@ -246,7 +272,7 @@ export default {
 
 
     // Event emitters
-    // Listeners: TopRightMenu, BottomSection
+    // Listeners: SidePanel (compass)
     this.sceneManager.controls.addEventListener('change', (e) => {
       window.eventBus.emit('Canvas3D_cameraChange', this.sceneManager);
 
@@ -284,9 +310,15 @@ export default {
 
 
 <style scoped>
+#canvas3Dcontainer{
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
 #canvas3D {
-  width: 100vw;
-  height: 100vh;
+  width: 100%;
+  height: 100%;
   position: absolute;
   background-color: red;
   z-index: 0;

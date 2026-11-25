@@ -2,7 +2,22 @@
   
   <div id="render-height-panel" class="content">
 
-    <h3>Render height frames</h3>
+    <p>
+      In this section you can export a series of images of the sea state. The exported images are in grayscale and
+      they encode the height of the wave.
+    </p>
+    
+    <p>
+      In the following menu you can configure the export settings,
+      such as the image size, the coverage area, the frames per second, the total duration and the maximum encoded height.
+    </p>
+
+    <p>
+      Scene objects and reflections are not rendered, only the sea surface height in grayscale.
+    </p>
+
+    <!-- Preview the heights camera in the 3D view -->
+    <camera-view-buttons :cameras="[{ id: 'Top', title: 'Top camera', iconClass: 'rotate90' }]"></camera-view-buttons>
 
     <!-- TABLE -->
     <div class="container-vertical options">
@@ -38,7 +53,7 @@
 
     <!-- Export button -->
     <div class="container-vertical">
-      <button class="renderButton clickable" @click="renderFramesClicked">Render frames <span class="fa">&#xf56d;</span></button>
+      <button class="renderButton clickable" @click="renderFramesClicked">Render frames <span class="fa">&#xf019;</span></button>
       <!-- Progress bar -->
       <div class="progress-container" v-show="progress!=100">
         <div :style="'width:' + progress + '%' "></div>
@@ -66,6 +81,7 @@
 
 
 <script>
+import CameraViewButtons from './CameraViewButtons.vue';
 
 
 
@@ -76,12 +92,12 @@ export default {
 
   },
   mounted() {
-    window.eventBus.on('SceneManager_recordProgress', (progress) => {
-      this.progress = progress;
-    });
-    window.eventBus.on('SceneManager_recordFinished', () => {
-      this.progress = 100;
-    });
+    window.eventBus.on('SceneManager_recordProgress', this.onRecordProgress);
+    window.eventBus.on('SceneManager_recordFinished', this.onRecordFinished);
+  },
+  unmounted() {
+    window.eventBus.off('SceneManager_recordProgress', this.onRecordProgress);
+    window.eventBus.off('SceneManager_recordFinished', this.onRecordFinished);
   },
   data() {
     return {
@@ -94,6 +110,13 @@ export default {
     }
   },
   methods: {
+    // EVENTS
+    onRecordProgress: function(progress){
+      this.progress = progress;
+    },
+    onRecordFinished: function(){
+      this.progress = 100;
+    },
     // USER INPUT
     renderFramesClicked: function(){
       window.eventBus.emit('RenderHeightPanel_renderFramesClicked', {
@@ -109,7 +132,7 @@ export default {
     }
   },
   components: {
-
+    'camera-view-buttons': CameraViewButtons,
   }
 }
 </script>
@@ -121,6 +144,9 @@ export default {
 .content {
   padding: 20px;
   overflow: auto;
+  font-size: small;
+  max-width: 700px;
+
 }
 
 .container-vertical{
@@ -161,7 +187,7 @@ export default {
 }
 
 .renderButton{
-  margin: 20px 20px 0px 20px;
+  margin: 20px 20px 20px 20px;
 }
 
 .progress-container {

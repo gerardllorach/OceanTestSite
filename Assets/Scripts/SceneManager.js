@@ -6,6 +6,8 @@ import { SkyboxEntity } from '/OceanTestSite/Assets/Skybox/SkyboxEntity.js';
 
 import * as FogShader from '/OceanTestSite/Assets/Terrain/FogShader.js'
 import { OceanEntity } from '/OceanTestSite/Assets/Ocean/OceanEntity.js';
+import { spectralDensity } from '/OceanTestSite/Assets/Ocean/SeaSpectrum.js';
+import * as InputSpectrum from '/OceanTestSite/Assets/Ocean/InputSpectrum.js';
 
 import { TextMeshEntity } from '/OceanTestSite/Assets/TextMesh/TextMeshEntity.js';
 
@@ -98,10 +100,11 @@ class SceneManager{
       #endif
     #endif`
 
-    // Skybox
-    this.skybox = new SkyboxEntity(scene);
-    // Ocean
+    // Ocean (the FFT sea is computed with the renderer)
     this.ocean = new OceanEntity(scene);
+    this.ocean.setRenderer(renderer);
+    // Skybox. Once loaded, the water reflects it
+    this.skybox = new SkyboxEntity(scene, (root) => this.ocean.captureSky(this.renderer, root));
 
 
 
@@ -144,20 +147,127 @@ class SceneManager{
       scene.add(light);
     }
 
-    { // LIGHT
+    { // LIGHT (sun): its direction is set by setSun()
       const color = 0xFFFFFF;
       const intensity = 0.8;
       const light = new THREE.DirectionalLight(color, intensity);
       light.position.set(0, 10, 0);
-      light.target.position.set(-5, 0, 0);
+      light.target.position.set(0, 0, 0);
       scene.add(light);
       scene.add(light.target);
+      this.sunLight = light;
     }
+    this.setSun(this.sunSettings);
 
 
     // RECORDER
     this.recorder = new Recorder(scene, this.ocean);
 
+  }
+
+
+
+  // SUN
+  // The sun moves on a vertical semicircle (Scene > Environment): arcAngle 0 = horizon at bearing `azimuth`,
+  // 90 = zenith, 180 = horizon at the opposite bearing. Bearings in degrees clockwise from north (north = -z, east = +x).
+  sunSettings = { arcAngle: 90, azimuth: 90 };
+  sunDirection = new THREE.Vector3(0, 1, 0);
+  sunColor = new THREE.Color(1, 1, 1);
+
+  setSun = function(settings){
+    Object.assign(this.sunSettings, settings);
+    const a = this.sunSettings.arcAngle * Math.PI / 180;
+    const phi = this.sunSettings.azimuth * Math.PI / 180;
+    // Horizontal direction of the bearing phi, times cos(a), plus the vertical, times sin(a)
+    this.sunDirection.set(Math.cos(a) * Math.sin(phi), Math.sin(a), -Math.cos(a) * Math.cos(phi)).normalize();
+    // A low sun is dimmer and warmer (longer path through the atmosphere)
+    const y = this.sunDirection.y;
+    const warm = THREE.MathUtils.smoothstep(y, 0.0, 0.35);
+    const intensity = THREE.MathUtils.lerp(0.45, 1.0, THREE.MathUtils.smoothstep(y, 0.0, 0.5));
+    this.sunColor.setRGB(
+      intensity,
+      THREE.MathUtils.lerp(0.62, 0.97, warm) * intensity,
+      THREE.MathUtils.lerp(0.38, 0.92, warm) * intensity);
+    // Ocean shader and directional light (lights the other objects of the scene)
+    this.ocean.setSun(this.sunDirection, this.sunColor);
+    if (this.sunLight) {
+      this.sunLight.position.copy(this.sunDirection).multiplyScalar(10);
+      this.sunLight.color.copy(this.sunColor);
+      this.sunLight.intensity = 0.8;
+    }
+    // Listeners: EnvironmentPanel (keeps its controls in sync when the sun is moved from elsewhere)
+    if (window.eventBus) window.eventBus.emit('SceneManager_sunChanged', this.getSunSettings());
+  }
+
+  getSunSettings = function(){
+    return { ...this.sunSettings };
+  }
+
+  // Elevation (deg) and bearing (deg, clockwise from north) of the sun
+  getSunPosition = function(){
+    const d = this.sunDirection;
+    return {
+      elevation: Math.asin(THREE.MathUtils.clamp(d.y, -1, 1)) * 180 / Math.PI,
+      bearing: ((Math.atan2(d.x, -d.z) * 180 / Math.PI) + 360) % 360,
+    };
+  }
+
+
+  // SEA STATE FROM A SPECTRUM (see Assets/Ocean/SeaSpectrum.js)
+  // settings: {Hm0, Tp (null: fully developed sea), gamma, Mdir, Spr1, numComponents, seed}
+  generateSeaState = function(settings){
+    this.ocean.generateSeaState(settings);
+  }
+  getSeaSettings = function(){
+    return this.ocean.getSeaSettings();
+  }
+  // Spectrum of the current waves ({settings, waves, bins, ...}) or null if they were set by hand
+  getSea = function(){
+    return this.ocean.getSea();
+  }
+  // FFT sea ({settings, L, kCut, components, ...}) or null
+  getFFTSea = function(){
+    return this.ocean.getFFTSea();
+  }
+  // Target variance density S(f) (m^2/Hz) of the current spectrum at the frequencies `freqs`, or null
+  getSeaSpectralDensity = function(freqs){
+    const sea = this.ocean.getSea() || this.ocean.getFFTSea();
+    return sea ? Array.from(freqs, f => spectralDensity(f, sea.settings)) : null;
+  }
+
+  // INPUT SPECTRUM: the sea (FFT), the swell (discrete Gerstner waves) and the ripples together
+  // (see Assets/Ocean/InputSpectrum.js)
+  getInputSpectrumState = function(){
+    const fft = this.ocean.getFFTSea(), sea = this.ocean.getSea();
+    // With a Gerstner sea (fallback), the discrete waves are its components, not swells
+    return { fft, sea: fft ? null : sea, swell: sea && !fft ? [] : this.ocean.getDiscreteWaves(), ripples: this.ocean.getRipples() };
+  }
+  // {sea, ripples (m^2/Hz at `freqs`), swell lines [{f, T, dir, variance}], seaBand, rippleBand}
+  getInputFrequencySpectrum = function(freqs){
+    return InputSpectrum.frequencySpectrum(this.getInputSpectrumState(), freqs);
+  }
+  // Polar grid {freq, df, dirs, binWidth, energy (m^2/Hz/deg), max, peak}. options: {fmin, fmax, numFreqs, numDirections}
+  getInputDirectionalSpectrum = function(options){
+    return InputSpectrum.directionalSpectrum(this.getInputSpectrumState(), options);
+  }
+  // Variance of each layer {sea, swell, ripples} (m^2)
+  getInputLayerVariances = function(){
+    return InputSpectrum.layerVariances(this.getInputSpectrumState());
+  }
+
+
+  // SURFACE RIPPLES (see Assets/Ocean/RippleSpectrum.js)
+  setRippleSettings = function(settings){
+    this.ocean.setRippleSettings(settings);
+  }
+  getRippleSettings = function(){
+    return this.ocean.getRippleSettings();
+  }
+  getRipples = function(){
+    return this.ocean.getRipples();
+  }
+  setDebugView = function(view){
+    this.ocean.setDebugView(view);
   }
 
 
@@ -205,14 +315,17 @@ class SceneManager{
       // Set default width and height
       this.recorder.renderer.setSize(this.recorder.imgWidth, this.recorder.imgHeight);
 
+      // Create JSZip
+      let zip = new JSZip();
+
       for (let i = 0; i < fps * duration; i++){
         let time = i/fps;
         this.update(1000 * time);
         this.recorder.renderLeft(grayscale);
         let timeStr = String(time.toFixed(2)).padStart(6, '0');
-        await this.recorder.savePNG('L_' + timeStr);
+        zip.file('L_' + timeStr + '.png', this.recorder.getImgData(), {binary: true});
         this.recorder.renderRight(grayscale);
-        await this.recorder.savePNG('R_' + timeStr);
+        zip.file('R_' + timeStr + '.png', this.recorder.getImgData(), {binary: true});
 
         // Show progress
         if ((100 *(i+1) / (fps*duration)) > currentPercent){
@@ -220,6 +333,18 @@ class SceneManager{
           window.eventBus.emit('SceneManager_recordProgress', 100 * (i+1) / (fps*duration));
         }
       }
+
+      // Generate zip and download
+      let nowDateISO = new Date().toISOString();
+      zip.generateAsync({type:"blob"})
+      .then(function(content) {
+        let blobUrl = URL.createObjectURL(content);
+        let link = document.createElement('a');
+        link.download = 'OceanTestSite_StereoCameras_' + nowDateISO.substring(0,10) + '.zip';
+        link.href = blobUrl;
+        link.click();
+        link.delete;
+      });
       window.eventBus.emit('SceneManager_recordFinished');
 
 
@@ -253,13 +378,15 @@ class SceneManager{
     let currentPercent = 0;
     // Reset timer in ocean entity
     this.ocean.prevTime = 0;
+    // Create JSZip
+    let zip = new JSZip();
     // Iterate frames
     for (let i = 0; i < fps * duration; i++){
       let time = i/fps;
       this.update(1000 * time);
       this.recorder.renderTop(maxWaveHeight);
       let timeStr = String(time.toFixed(2)).padStart(6, '0');
-      await this.recorder.savePNG('WaveHeight_range_' + maxWaveHeight + '_' + timeStr);
+      zip.file('WaveHeight_range_' + maxWaveHeight + '_' + timeStr + '.png', this.recorder.getImgData(), {binary: true});
 
       // Show progress
       if ((100 *(i+1) / (fps*duration)) > currentPercent){
@@ -267,6 +394,17 @@ class SceneManager{
         window.eventBus.emit('SceneManager_recordProgress', 100 * (i+1) / (fps*duration));
       }
     }
+    // Generate zip and download
+    let nowDateISO = new Date().toISOString();
+    zip.generateAsync({type:"blob"})
+    .then(function(content) {
+      let blobUrl = URL.createObjectURL(content);
+      let link = document.createElement('a');
+      link.download = 'OceanTestSite_WaveHeights_' + nowDateISO.substring(0,10) + '.zip';
+      link.href = blobUrl;
+      link.click();
+      link.delete;
+    });
     // Loaded
     window.eventBus.emit('SceneManager_recordFinished');
 
@@ -283,15 +421,45 @@ class SceneManager{
     this.startRender();
   }
 
-  setWavesProperties = function(wavesProperties){
-    this.ocean.setWavesProperties(wavesProperties);
+  setDiscreteWaves = function(discreteWaves){
+    this.ocean.setDiscreteWaves(discreteWaves);
   }
 
-  // Export JSON
+  getDiscreteWaves = function(){
+    return this.ocean.getDiscreteWaves();
+  }
+
+  // Export JSON: discreteWaves.json (unchanged format: a list of waves) and surfaceRipples.json (sidecar with the
+  // ripples and the sun, so that a render can be reproduced)
   exportOceanParamsJSON = function(){
-    this.ocean.oceanParams.exportOceanParameters();
+    this.ocean.oceanParams.exportOceanParameters().then(() => this.exportRipplesJSON());
   }
 
+  exportRipplesJSON = function(){
+    const r = this.ocean.getRipples();
+    if (!r) return;
+    const data = {
+      description: 'Surface ripples: second FFT cascade (Assets/Ocean/RippleSpectrum.js generateRipples). ' +
+        'Deterministic: the same settings (seed included), discrete waves and FFT sea give the same ripples. ' +
+        'Grid of N x N wavevectors on a tile of L metres, from kMin to kCut (rad/m). ' +
+        'tailSigma2: slope variance finer than the grid (roughness only), upwind and crosswind.',
+      settings: r.settings,
+      windSpeed: r.windSpeed, windDir: r.windDir,
+      grid: { N: r.N, L: r.L, kMin: r.kMin, kCut: r.kCut, components: r.numComponents, choppiness: r.choppiness },
+      heightVariance: r.heightVariance,
+      tailSigma2: r.tailSigma2,
+      slopes: r.slopes,
+      fftSea: this.ocean.getFFTSea() ? { settings: this.ocean.getFFTSea().settings, L: this.ocean.getFFTSea().L, N: this.ocean.getFFTSea().N } : null,
+      sun: { ...this.getSunSettings(), ...this.getSunPosition() },
+    };
+    const link = document.createElement('a');
+    link.download = 'surfaceRipples.json';
+    link.href = window.URL.createObjectURL(new Blob([JSON.stringify(data)], { type: 'text/json' }));
+    link.click();
+  }
+
+  // Camera used to render the view: 'F' (free, orbit controls), 'L' / 'R' (stereo cameras), 'Top' (heights camera)
+  selectedCameraName = 'F';
   changeCamera = function(value){
     if (value == 'F')
       this.selectedCamera = this.camera;
@@ -301,6 +469,18 @@ class SceneManager{
       this.selectedCamera = this.recorder.cameraL;
     else if (value == 'Top')
       this.selectedCamera = this.recorder.cameraTop;
+    else
+      return;
+    this.selectedCameraName = value;
+    window.eventBus.emit('SceneManager_cameraChanged', value);
+  }
+
+  // Move the free camera so that it looks at the centre of the scene (0,0), keeping its viewing angle and distance
+  centerCamera = function(){
+    const offset = this.camera.position.clone().sub(this.controls.target);
+    this.controls.target.set(0, 0, 0);
+    this.camera.position.copy(this.controls.target).add(offset);
+    this.controls.update();
   }
 
   faceNorthward = function(){

@@ -14,7 +14,7 @@ import { RosaVentsEntity } from '../Assets/Orientation/RosaVentsEntity.js';
 
 
 /* OCEAN
-https://threejs.org/examples/webgl_shaders_ocean.html
+/OceanTestSite/lib/three.js/examples/webgl_shaders_ocean.html
 https://29a.ch/slides/2012/webglwater/
 https://29a.ch/sandbox/2012/terrain/
 https://www.tamats.com/work/bwr/
@@ -27,7 +27,7 @@ https://www.shadertoy.com/view/4dBcRD#
 https://www.shadertoy.com/view/Xdlczl
 
 sky shader
-https://threejs.org/examples/?q=sky#webgl_shaders_sky
+/OceanTestSite/lib/three.js/examples/?q=sky#webgl_shaders_sky
 
 
 TODO:
