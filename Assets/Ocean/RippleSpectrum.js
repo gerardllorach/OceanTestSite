@@ -39,6 +39,9 @@ export const DEFAULT_RIPPLE_SETTINGS = {
   spreadMode: 'auto',    // 'auto': spread from the Cox-Munk cross/up slope ratio, broader for shorter ripples. 'custom'
   spread: 30,            // Custom directional spread (deg, width of the wrapped normal distribution), the same for all
   strength: 1,           // Custom only: fraction of the slope budget given to the ripples and the tail (0: glassy surface)
+  // Rendering only (no new spectrum): ripples strained by the long waves, steeper on the crests and smoother in the
+  // troughs (Longuet-Higgins & Stewart 1960). 0: off, 1: physical, up to 10: exaggerated
+  strain: 1,
 };
 
 

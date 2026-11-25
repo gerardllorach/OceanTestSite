@@ -78,6 +78,7 @@ export const OceanProjectedGridVertShader = /* glsl */ `
   varying vec3 v_WorldPosition; // Rest position of the surface point (projected grid on the plane y = 0)
   varying vec3 v_Normal;        // Normal of the Gerstner surface (without the FFT cascades: the fragment shader adds them)
   varying vec3 v_wavePosition;  // Position displaced by the Gerstner waves and the FFT cascades (filtered to the mesh)
+  varying vec3 v_gerstnerStrain; // Strain of the Gerstner waves (dDx/dx, dDz/dz, dDx/dz): how they stretch the surface
 
 
 
@@ -85,7 +86,7 @@ export const OceanProjectedGridVertShader = /* glsl */ `
   // https://catlikecoding.com/unity/tutorials/flow/waves/
   vec3 GerstnerWave(
       vec4 waveParams, vec3 position, 
-      inout vec3 tangent, inout vec3 binormal){
+      inout vec3 tangent, inout vec3 binormal, inout vec3 strain){
 
     float amplitude = waveParams.y / 2.0;
     float T = max(waveParams.x, 0.1);
@@ -129,6 +130,10 @@ export const OceanProjectedGridVertShader = /* glsl */ `
       direction.y * (steepness * cos(f)),
       -direction.y * direction.y * (steepness * sin(f))
     );
+
+    // Strain: derivatives of the horizontal displacement (the same terms as in the tangent and binormal, which are
+    // normalised and lose them). 1 - steepness at the crest (squeezed), 1 + steepness in the trough (stretched)
+    strain += -steepness * sin(f) * vec3(direction.x * direction.x, direction.y * direction.y, direction.x * direction.y);
 
     return vec3(
       direction.x * (amplitude * cos(f)),
@@ -208,6 +213,7 @@ export const OceanProjectedGridVertShader = /* glsl */ `
     // Declare tangent and binormal
     vec3 tangent = vec3(1.0, 0.0, 0.0);
     vec3 binormal = vec3(0.0, 0.0, 1.0);
+    vec3 strain = vec3(0.0);
 
 
     // Gerstner Waves (the discrete waves), chained: each one is evaluated at the position displaced by the previous ones
@@ -235,7 +241,7 @@ export const OceanProjectedGridVertShader = /* glsl */ `
           params.w = params.w * 360.0 * PI / 180.0;
           
           // Interate position
-          modPos += GerstnerWave(params, modPos, tangent, binormal);
+          modPos += GerstnerWave(params, modPos, tangent, binormal, strain);
           
           // Attenuation
           //modPos.y *= distanceFactor;
@@ -251,6 +257,7 @@ export const OceanProjectedGridVertShader = /* glsl */ `
     // Normal
     vec3 normal = normalize(cross(binormal, tangent));
     v_Normal = normalize(normal.xyz);
+    v_gerstnerStrain = strain;
 
     // FFT cascades (sea and ripples): displacement at the rest position (Tessendorf: linear superposition of
     // trochoidal components), added after the discrete waves, like in the analysis
@@ -291,8 +298,10 @@ export const OceanProjectedGridFragShader = /* glsl */`
   varying vec3 v_WorldPosition; // Rest position of the surface point (projected grid on the plane y = 0)
   varying vec3 v_Normal;        // Normal of the Gerstner surface
   varying vec3 v_wavePosition;  // Position displaced by the Gerstner waves and the FFT cascades
+  varying vec3 v_gerstnerStrain; // Strain of the Gerstner waves (dDx/dx, dDz/dz, dDx/dz)
 
   uniform vec2 u_rippleTailSigma2;        // Slope variance finer than the ripple grid (upwind, crosswind)
+  uniform float u_rippleStrain;           // Ripples strained by the long waves. 0: off, 1: Longuet-Higgins & Stewart
   uniform vec2 u_windDirection;           // Direction the wind blows towards, in the xz plane (unit)
 
   // Sun
@@ -315,7 +324,8 @@ export const OceanProjectedGridFragShader = /* glsl */`
   uniform float u_rippleN;
   uniform bool u_skyReady;
 
-  // 0: final colour, 1: Fresnel, 2: normal, 3: roughness (red upwind, green crosswind), 4: resolved ripple slopes
+  // 0: final colour, 1: Fresnel, 2: normal, 3: roughness (red upwind, green crosswind), 4: resolved ripple slopes,
+  // 5: stretch of the surface by the long waves (red squeezed, blue stretched)
   uniform int u_debugView;
 
   // Fog
@@ -405,17 +415,61 @@ export const OceanProjectedGridFragShader = /* glsl */`
 
   // Slopes and Jacobian of an FFT cascade at rest position xz, at the mip level of the pixel (trilinear filtering):
   // adds (hx, hz, Dxx, Dzz) to s and Dxz to dxz. Its mipmaps of the squared slopes keep the slope variance finer than
-  // that level (LEAN mapping); returned as (upwind, crosswind) for the wind direction windU
-  vec2 sampleCascade(sampler2D slopes, sampler2D extra, float size, float n, vec2 xz, vec2 windU, inout vec4 s, inout float dxz) {
+  // that level (LEAN mapping); returned as a symmetric tensor (xx, zz, xz)
+  vec3 sampleCascade(sampler2D slopes, sampler2D extra, float size, float n, vec2 xz, inout vec4 s, inout float dxz) {
     vec2 uv = xz / size + 0.5 / n;
     vec4 a = texture2D(slopes, uv); // (hx, hz, Dxx, Dzz)
     vec4 b = texture2D(extra, uv);  // (Dxz, hx^2, hz^2, hx hz)
     s += a;
     dxz += b.x;
-    float vxx = max(0.0, b.y - a.x * a.x), vzz = max(0.0, b.z - a.y * a.y), vxz = b.w - a.x * a.y;
+    return vec3(max(0.0, b.y - a.x * a.x), max(0.0, b.z - a.y * a.y), b.w - a.x * a.y);
+  }
+
+  // Slope variance tensor (xx, zz, xz) as (upwind, crosswind) variances for the wind direction windU
+  vec2 toWindFrame(vec3 v, vec2 windU) {
     return max(vec2(0.0), vec2(
-      windU.x * windU.x * vxx + 2.0 * windU.x * windU.y * vxz + windU.y * windU.y * vzz,
-      windU.y * windU.y * vxx - 2.0 * windU.x * windU.y * vxz + windU.x * windU.x * vzz));
+      windU.x * windU.x * v.x + 2.0 * windU.x * windU.y * v.z + windU.y * windU.y * v.y,
+      windU.y * windU.y * v.x - 2.0 * windU.x * windU.y * v.z + windU.x * windU.x * v.y));
+  }
+
+  // (Upwind, crosswind) variances as a tensor (xx, zz, xz)
+  vec3 fromWindFrame(vec2 uc, vec2 windU) {
+    return vec3(uc.x * windU.x * windU.x + uc.y * windU.y * windU.y,
+                uc.x * windU.y * windU.y + uc.y * windU.x * windU.x,
+                (uc.x - uc.y) * windU.x * windU.y);
+  }
+
+  // RIPPLES STRAINED BY THE LONG WAVES (Longuet-Higgins & Stewart 1960, "Changes in the form of short gravity waves on
+  // long waves and tidal currents"). The orbital velocity of a long wave converges on its front face and diverges on its
+  // back face, so a patch of surface is squeezed at the crest and stretched in the trough by J = 1 - ak cos(phase)
+  // (the Jacobian of the horizontal displacement). The ripples riding on it change with it, only along the direction
+  // of the squeeze: their wavenumber and their amplitude both scale by 1 / J, so their slope by 1 / J^2. Steeper and
+  // shorter on the crests, longer and smoother in the troughs; ripples whose crests lie along the stretch do not change.
+  //
+  // Principal stretches of the symmetric matrix I + e, e = (xx, zz, xz): (largest, smallest, angle of the largest)
+  vec3 principalStretch(vec3 e) {
+    float a = 1.0 + e.x, d = 1.0 + e.y;
+    float m = 0.5 * (a + d);
+    float r = sqrt(0.25 * (a - d) * (a - d) + e.z * e.z);
+    float theta = r > 1e-6 ? 0.5 * atan(2.0 * e.z, a - d) : 0.0;
+    return vec3(m + r, m - r, theta);
+  }
+
+  // Inverse of I + e, with the principal stretches clamped to >= 0.6. Where the long waves squeeze the surface to
+  // nothing (the crest of a Gerstner wave about to loop) the ripples would grow without limit; in the sea they break
+  // (micro-breaking). 0.6 caps the ripple slope gain at ~2.8 (1 / 0.6^2)
+  mat2 inverseStretch(vec3 e) {
+    vec3 p = principalStretch(e);
+    float i1 = 1.0 / max(p.x, 0.6), i2 = 1.0 / max(p.y, 0.6);
+    float c = cos(p.z), s = sin(p.z);
+    float xz = c * s * (i1 - i2);
+    return mat2(c * c * i1 + s * s * i2, xz, xz, s * s * i1 + c * c * i2);
+  }
+
+  // T V T^t for a symmetric tensor v = (xx, zz, xz)
+  vec3 transformTensor(mat2 T, vec3 v) {
+    mat2 R = T * mat2(v.x, v.z, v.z, v.y) * mat2(T[0][0], T[1][0], T[0][1], T[1][1]);
+    return vec3(R[0][0], R[1][1], 0.5 * (R[0][1] + R[1][0]));
   }
 
 
@@ -434,15 +488,31 @@ export const OceanProjectedGridFragShader = /* glsl */`
     vec4 cs = vec4(0.0); // (hx, hz, Dxx, Dzz)
     float cDxz = 0.0;
     vec2 unresolved = vec2(0.0); // Slope variance finer than the pixel (upwind, crosswind)
-    vec2 rippleVariance = vec2(0.0);
-    vec4 rippleS = vec4(0.0); float rippleDxz = 0.0;
     if (u_fftEnabled)
-      unresolved += sampleCascade(u_fftSlopes, u_fftExtra, u_fftSize, u_fftN, xz, windU, cs, cDxz);
+      unresolved += toWindFrame(sampleCascade(u_fftSlopes, u_fftExtra, u_fftSize, u_fftN, xz, cs, cDxz), windU);
+
+    // Ripples strained by the long waves (Gerstner + FFT sea; see principalStretch). Their slope gets 1 / J twice:
+    //  - amplitude (Longuet-Higgins & Stewart): the inverse of the whole long-wave strain
+    //  - wavenumber: the ripples are sampled at the rest position, so the displaced mesh already squeezes them; their
+    //    slope follows by the chain rule. The normal below does it for the FFT sea (it sums the Jacobians), not for
+    //    the Gerstner waves (their slopes are added): their inverse strain here
+    // u_rippleStrain scales the strain (0: off, as before; > 1: exaggerated)
+    vec3 gStrain = v_gerstnerStrain;
+    vec3 longStrain = gStrain + vec3(cs.z, cs.w, cDxz); // Gerstner + FFT sea (the ripples are not added yet)
+    mat2 rippleT = inverseStretch(u_rippleStrain * gStrain) * inverseStretch(u_rippleStrain * longStrain);
+    vec3 rippleTensor = fromWindFrame(u_rippleTailSigma2, windU); // Tail: strained like the ripples
+
+    vec4 rippleS = vec4(0.0); float rippleDxz = 0.0;
     if (u_rippleEnabled) {
-      rippleVariance = sampleCascade(u_rippleSlopes, u_rippleExtra, u_rippleSize, u_rippleN, xz, windU, rippleS, rippleDxz);
+      rippleTensor += sampleCascade(u_rippleSlopes, u_rippleExtra, u_rippleSize, u_rippleN, xz, rippleS, rippleDxz);
+      rippleS.xy = rippleT * rippleS.xy;
+      // Their own Jacobian (trochoidal ripples) scales like their slope
+      mat2 rJ = rippleT * mat2(rippleS.z, rippleDxz, rippleDxz, rippleS.w);
+      rippleS.zw = vec2(rJ[0][0], rJ[1][1]);
+      rippleDxz = 0.5 * (rJ[0][1] + rJ[1][0]);
       cs += rippleS; cDxz += rippleDxz;
-      unresolved += rippleVariance;
     }
+    unresolved += toWindFrame(transformTensor(rippleT, rippleTensor), windU); // Ripples finer than the pixel + tail
     vec3 cT = vec3(1.0 + cs.z, cs.x, cDxz);
     vec3 cB = vec3(cDxz, cs.y, 1.0 + cs.w);
     vec3 cN = normalize(cross(cB, cT));
@@ -463,7 +533,7 @@ export const OceanProjectedGridFragShader = /* glsl */`
     if (underwater) { N = -N; geoNormal = -geoNormal; }
 
     // Roughness: slope variance of everything finer than the pixel, in a frame along / across the wind
-    vec2 sigmaSq = unresolved + u_rippleTailSigma2 + vec2(2e-4);
+    vec2 sigmaSq = unresolved + vec2(2e-4);
     vec3 wind3 = vec3(windU.x, 0.0, windU.y);
     vec3 Tu = normalize(wind3 - N * dot(N, wind3));
     vec3 Tc = cross(N, Tu);
@@ -496,6 +566,11 @@ export const OceanProjectedGridFragShader = /* glsl */`
     if (u_debugView == 2) { gl_FragColor = vec4(N.x * 0.5 + 0.5, N.y, N.z * 0.5 + 0.5, 1.0); return; }
     if (u_debugView == 3) { gl_FragColor = vec4(sqrt(sigmaSq) * 4.0, 0.0, 1.0); return; }
     if (u_debugView == 4) { gl_FragColor = vec4(rippleSlope * 2.0 + 0.5, 0.5, 1.0); return; }
+    if (u_debugView == 5) {
+      vec3 p = principalStretch(longStrain);
+      gl_FragColor = vec4(0.1 + 3.0 * max(0.0, 1.0 - p.y), 0.1, 0.1 + 3.0 * max(0.0, p.x - 1.0), 1.0);
+      return;
+    }
 
     color = hdr(color, 0.99); // From David Li https://github.com/dli/waves/blob/master/simulation.js
 

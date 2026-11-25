@@ -87,6 +87,7 @@ class OceanEntity {
         u_rippleSize: {value: 4},
         u_rippleN: {value: RIPPLE_N},
         u_rippleTailSigma2: {value: new THREE.Vector2(0.003, 0.003)},
+        u_rippleStrain: {value: DEFAULT_RIPPLE_SETTINGS.strain}, // Ripples strained by the long waves (0: off)
         u_windDirection: {value: new THREE.Vector2(0, 1)},
         // Spacing of the grid vertices (mesh units, before the viewport scale): the vertex shader only displaces the
         // geometry with ripples that are at least ~4 vertices long
@@ -104,7 +105,7 @@ class OceanEntity {
         u_fftExtra: {value: null},        // (Dxz, hx^2, hz^2, hx hz)
         u_fftSize: {value: 512},
         u_fftN: {value: 512},
-        // Debug views: 0 final, 1 Fresnel, 2 normal, 3 roughness, 4 ripple slopes
+        // Debug views: 0 final, 1 Fresnel, 2 normal, 3 roughness, 4 ripple slopes, 5 long-wave stretch
         u_debugView: {value: 0},
 
         // Projected grid parameters
@@ -305,7 +306,13 @@ class OceanEntity {
   // partial: {mode: 'wind' | 'seaState', windSpeed (m/s), windDir (deg, from), enabled}
   setRippleSettings(partial) {
     Object.assign(this.rippleSettings, partial);
-    this.updateRipples();
+    // The strain is a shader uniform only: no need to regenerate the spectrum (the slider would stutter)
+    if (Object.keys(partial).every(key => key == 'strain')) this.updateRippleStrain();
+    else this.updateRipples();
+  }
+
+  updateRippleStrain() {
+    if (this.oceanTile) this.oceanTile.material.uniforms.u_rippleStrain.value = this.rippleSettings.strain ?? 1;
   }
 
   getRippleSettings() {
@@ -328,6 +335,7 @@ class OceanEntity {
       u.u_windDirection.value.set(ux, uz);
       u.u_rippleEnabled.value = this.ripples.enabled;
       u.u_rippleSize.value = this.ripples.L;
+      this.updateRippleStrain();
       if (this.rippleFFT) {
         this.rippleFFT.setSpectrum(this.ripples.enabled ? this.ripples : null);
         if (this.ripples.enabled) this.rippleFFT.update(this.time);
@@ -345,7 +353,7 @@ class OceanEntity {
     if (color) u.u_sunColor.value.set(color.r, color.g, color.b);
   }
 
-  // 0 final, 1 Fresnel, 2 normal, 3 roughness, 4 ripple slopes
+  // 0 final, 1 Fresnel, 2 normal, 3 roughness, 4 ripple slopes, 5 long-wave stretch
   setDebugView(view) {
     if (this.oceanTile) this.oceanTile.material.uniforms.u_debugView.value = Number(view) || 0;
   }

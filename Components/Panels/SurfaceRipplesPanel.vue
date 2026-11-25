@@ -74,6 +74,13 @@
             @input="change({ strength: Number($event.target.value) / 100 })"><span>{{ Math.round((settings.strength ?? 1) * 100) }}%</span></div>
       </div>
 
+      <!-- STRAIN BY THE LONG WAVES -->
+      <div class="container-horizontal">
+        <span title="The long waves squeeze the surface on their crests and stretch it in their troughs, and the ripples with it: steeper and shorter on the crests, longer and smoother in the troughs, only across the long-wave crests (Longuet-Higgins & Stewart 1960). ×0: off, ×1: physical, above: exaggerated">Strained by the waves</span>
+        <div><input type="range" min="0" max="10" step="0.5" :value="settings.strain ?? 1"
+            @input="change({ strain: Number($event.target.value) })"><span>×{{ (settings.strain ?? 1).toFixed(1) }}</span></div>
+      </div>
+
       <!-- RIPPLE GRID ON / OFF -->
       <div class="container-horizontal">
         <span title="Off: no ripple grid; their slopes remain as roughness (sun glitter, Fresnel)">Ripple grid</span>
@@ -150,7 +157,7 @@ export default {
   },
   data() {
     return {
-      settings: { mode: 'seaState', windSpeed: 7, windDir: 0, enabled: true, directionMode: 'wind', direction: 0, spreadMode: 'auto', spread: 30, strength: 1 },
+      settings: { mode: 'seaState', windSpeed: 7, windDir: 0, enabled: true, directionMode: 'wind', direction: 0, spreadMode: 'auto', spread: 30, strength: 1, strain: 1 },
       ripples: null,
       debugView: 0,
       debugViews: [
@@ -159,6 +166,7 @@ export default {
         { id: 2, title: 'Surface normal' },
         { id: 3, title: 'Roughness (red upwind, green crosswind)' },
         { id: 4, title: 'Ripple slopes' },
+        { id: 5, title: 'Stretch by the waves (red squeezed, blue stretched)' },
       ],
     }
   },
