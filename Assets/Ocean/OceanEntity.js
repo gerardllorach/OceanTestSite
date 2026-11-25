@@ -185,12 +185,12 @@ class OceanEntity {
     this.fft = new FFTOcean(renderer, FFT_N);
     this.rippleFFT = new FFTOcean(renderer, RIPPLE_N);
     const u = this.oceanTile.material.uniforms;
-    u.u_fftDisplacement.value = this.fft.displacement.texture;
-    u.u_fftSlopes.value = this.fft.slopes.texture;
-    u.u_fftExtra.value = this.fft.extra.texture;
-    u.u_rippleDisplacement.value = this.rippleFFT.displacement.texture;
-    u.u_rippleSlopes.value = this.rippleFFT.slopes.texture;
-    u.u_rippleExtra.value = this.rippleFFT.extra.texture;
+    u.u_fftDisplacement.value = this.fft.displacementTexture;
+    u.u_fftSlopes.value = this.fft.slopesTexture;
+    u.u_fftExtra.value = this.fft.extraTexture;
+    u.u_rippleDisplacement.value = this.rippleFFT.displacementTexture;
+    u.u_rippleSlopes.value = this.rippleFFT.slopesTexture;
+    u.u_rippleExtra.value = this.rippleFFT.extraTexture;
     u.u_fftN.value = FFT_N;
     this.updateParamsTexture();
   }
