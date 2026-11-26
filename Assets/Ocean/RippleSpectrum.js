@@ -62,8 +62,9 @@ function mulberry32(seed) {
   };
 }
 
-// Wrapped normal distribution of width sigma (rad), per radian
+// Wrapped normal distribution of width sigma (rad), per radian. sigma is kept above 1e-3 rad (0/0 at sigma = 0)
 export function wrappedNormal(theta, sigma) {
+  sigma = Math.max(1e-3, sigma);
   let sum = 0;
   for (let m = -2; m <= 2; m++) sum += Math.exp(-Math.pow(theta + TWO_PI * m, 2) / (2 * sigma * sigma));
   return sum / (Math.sqrt(TWO_PI) * sigma);
@@ -198,7 +199,9 @@ export function generateRipples(waves, settings = {}, fft = null, N = RIPPLE_N) 
   //    observed for short wind waves. The tail then completes Cox-Munk along both axes.
   //  - custom: the same width for all the ripples. The total slope stays the Cox-Munk one, but its split between
   //    upwind and crosswind follows the chosen spread (a narrow spread gives long-crested ripples)
-  const ratio = budget.up > 0 ? Math.min(0.98, budget.cross / budget.up) : 0.98;
+  //  The ratio is kept within 0.02..0.98 (sigma ~8 to ~87 deg): when the waves already carry the whole crosswind
+  //  budget (a light wind across, or under, a broad sea) the ripples are narrow instead of a single direction (sigma 0)
+  const ratio = budget.up > 0 ? clamp(budget.cross / budget.up, 0.02, 0.98) : 0.98;
   const autoSpread = s.spreadMode != 'custom';
   const sigmaTheta = autoSpread ? Math.sqrt(-0.5 * Math.log((1 - ratio) / (1 + ratio)))
     : clamp(Number(s.spread) || 30, 1, 180) * DEG2RAD;
