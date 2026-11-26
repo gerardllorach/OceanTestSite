@@ -13,6 +13,8 @@
 // It is scaled so that the mean square slope of the whole surface (discrete waves + FFT sea + ripples + tail) matches
 // Cox & Munk (1954). The tail (the part of the slope budget finer than the ripple grid) is roughness only (Bruneton et
 // al. 2010, "Real-time realistic ocean lighting using seamless transitions from geometry to BRDF").
+// With spreadMode 'sea', D is the spreading of the FFT sea, D(f, theta) around its mean direction (Assets/Ocean/
+// DirectionalSpreading.js), continued into the ripple band: a narrow sea (e.g. Goda s_max 100) has narrow ripples too.
 
 const G = 9.8; // Same gravity as the shader and gerstner.js
 const DEG2RAD = Math.PI / 180;
@@ -38,7 +40,8 @@ export const DEFAULT_RIPPLE_SETTINGS = {
   // Directionality
   directionMode: 'wind', // 'wind': the ripples come from the wind direction (or the mean wave direction). 'custom'
   direction: 0,          // Custom direction the ripples come FROM (deg clockwise from north)
-  spreadMode: 'auto',    // 'auto': spread from the Cox-Munk cross/up slope ratio, broader for shorter ripples. 'custom'
+  spreadMode: 'auto',    // 'auto': spread from the Cox-Munk cross/up slope ratio, broader for shorter ripples. 'custom'.
+                         // 'sea': the spreading of the FFT sea continued to the ripples ('auto' without an FFT sea)
   spread: 30,            // Custom directional spread (deg, width of the wrapped normal distribution), the same for all
   strength: 1,           // Custom only: fraction of the slope budget given to the ripples and the tail (0: glassy surface)
   // Light wind: 'coxMunk' keeps the Cox-Munk slopes at any wind (their fit has slopes even at 0 m/s); 'onset' keeps
@@ -201,10 +204,18 @@ export function generateRipples(waves, settings = {}, fft = null, N = RIPPLE_N) 
   //    upwind and crosswind follows the chosen spread (a narrow spread gives long-crested ripples)
   //  The ratio is kept within 0.02..0.98 (sigma ~8 to ~87 deg): when the waves already carry the whole crosswind
   //  budget (a light wind across, or under, a broad sea) the ripples are narrow instead of a single direction (sigma 0)
+  //  - sea: the spreading of the FFT sea at the frequency of each ripple, around the mean direction of the sea. Like
+  //    custom, the total slope stays the Cox-Munk one and its split follows the spreading. sigmaTheta: sigma1 of the
+  //    longest ripples (a single width for the analysis, InputSpectrum.rippleDensity)
   const ratio = budget.up > 0 ? clamp(budget.cross / budget.up, 0.02, 0.98) : 0.98;
-  const autoSpread = s.spreadMode != 'custom';
-  const sigmaTheta = autoSpread ? Math.sqrt(-0.5 * Math.log((1 - ratio) / (1 + ratio)))
+  const seaSpreading = s.spreadMode == 'sea' && fft && fft.spreading ? fft.spreading : null;
+  const spreadMode = seaSpreading ? 'sea' : s.spreadMode == 'custom' ? 'custom' : 'auto';
+  const autoSpread = spreadMode == 'auto';
+  const fOfK = k => Math.sqrt(G * k) / TWO_PI;
+  const sigmaTheta = spreadMode == 'sea' ? seaSpreading.sigma1(fOfK(kMin)) * DEG2RAD
+    : autoSpread ? Math.sqrt(-0.5 * Math.log((1 - ratio) / (1 + ratio)))
     : clamp(Number(s.spread) || 30, 1, 180) * DEG2RAD;
+  const seaDirRad = seaSpreading ? (Number(fft.settings.Mdir) || 0) * DEG2RAD : 0;
   const spreadGrowth = autoSpread ? 0.6 : 0;
   const logRange = Math.log(kCut / kMin);
 
@@ -222,8 +233,16 @@ export function generateRipples(waves, settings = {}, fft = null, N = RIPPLE_N) 
       const from = Math.atan2(-kx / k, kz / k); // Direction the component comes from
       let rel = from - windRad;
       rel = Math.atan2(Math.sin(rel), Math.cos(rel));
-      const sigma = autoSpread ? Math.min(1.6, sigmaTheta * (1 + spreadGrowth * Math.log(k / kMin) / logRange)) : sigmaTheta;
-      const psi = Math.pow(k, -4) * wrappedNormal(rel, sigma); // Saturation range, any scale
+      let D;
+      if (seaSpreading) {
+        let relSea = from - seaDirRad;
+        relSea = Math.atan2(Math.sin(relSea), Math.cos(relSea));
+        D = seaSpreading.D(fOfK(k), relSea);
+      } else {
+        const sigma = autoSpread ? Math.min(1.6, sigmaTheta * (1 + spreadGrowth * Math.log(k / kMin) / logRange)) : sigmaTheta;
+        D = wrappedNormal(rel, sigma);
+      }
+      const psi = Math.pow(k, -4) * D; // Saturation range, any scale
       const a = Math.sqrt(2 * psi * dk * dk);
       const i = m * N + n;
       amp[i] = a; phase[i] = ph; omega[i] = Math.sqrt(G * k);
@@ -283,6 +302,7 @@ export function generateRipples(waves, settings = {}, fft = null, N = RIPPLE_N) 
     sourceWindDir, // Wind direction (or mean wave direction in 'seaState' mode)
     spread: sigmaTheta * RAD2DEG, // Directional spread of the longest ripples (deg)
     autoSpread,
+    spreadMode, // Resolved: 'auto', 'custom' or 'sea' (the spreading of the FFT sea, 'auto' without one)
     seaStateHm0: seaState.Hm0,
     // Grid (FFTOcean.setSpectrum)
     N, L, dk, kMin, kMax: kCut, kCut, amp, phase, omega, choppiness: 1,

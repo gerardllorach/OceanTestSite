@@ -60,7 +60,9 @@ export function targetOf(st) {
   const sea = windSeaOf(st), pm = st.model == 'pm';
   const U = st.windSpeed;
   const ripples = {};
-  if (st.driveRipples) Object.assign(ripples, { mode: 'wind', windSpeed: U, windDir: st.windDir });
+  // Driven ripples continue the directional spreading of the sea (RippleSpectrum.js spreadMode 'sea'): a narrow sea
+  // (e.g. Goda s_max 100, offshore wind) has narrow ripples too
+  if (st.driveRipples) Object.assign(ripples, { mode: 'wind', windSpeed: U, windDir: st.windDir, spreadMode: 'sea' });
   if (st.driveStrainFoam) ripples.strain = strainFor(U);
   ripples.lightWind = st.calmLightWind ? 'onset' : 'coxMunk';
   return {
@@ -93,7 +95,8 @@ export function inSync(st, sceneManager) {
     && (t.sea.spreadWind == null || close(p.spreadWind, t.sea.spreadWind, 0.01));
   if (ok && t.ripples) {
     const r = sceneManager.getRippleSettings();
-    if (t.ripples.mode) ok = r.mode == 'wind' && close(r.windSpeed, t.ripples.windSpeed, 0.01) && close(r.windDir, t.ripples.windDir, 0.5);
+    if (t.ripples.mode) ok = r.mode == 'wind' && close(r.windSpeed, t.ripples.windSpeed, 0.01) && close(r.windDir, t.ripples.windDir, 0.5)
+      && r.spreadMode == t.ripples.spreadMode;
     if (ok && t.ripples.strain != null) ok = close(r.strain ?? 1, t.ripples.strain, 0.005);
     if (ok) ok = (r.lightWind || 'coxMunk') == t.ripples.lightWind;
   }
