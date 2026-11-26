@@ -287,6 +287,20 @@ class SceneManager{
   getRipples = function(){
     return this.ocean.getRipples();
   }
+
+  // WHITECAPS (see Assets/Ocean/Foam.js)
+  setFoamSettings = function(settings){
+    this.ocean.setFoamSettings(settings);
+  }
+  getFoamSettings = function(){
+    return this.ocean.getFoamSettings();
+  }
+  getFoam = function(){
+    return this.ocean.getFoam();
+  }
+  measureFoamCoverage = function(){
+    return this.ocean.measureFoamCoverage();
+  }
   setDebugView = function(view){
     this.ocean.setDebugView(view);
   }

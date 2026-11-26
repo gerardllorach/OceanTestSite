@@ -61,6 +61,10 @@ export default {
     window.eventBus.on('SurfaceRipplesPanel_changed', (settings) => {
       this.sceneManager.setRippleSettings(settings);
     });
+    // ***** FOAM PANEL *****
+    window.eventBus.on('FoamPanel_changed', (settings) => {
+      this.sceneManager.setFoamSettings(settings);
+    });
     window.eventBus.on('SurfaceRipplesPanel_debugViewChanged', (view) => {
       this.sceneManager.setDebugView(view);
     });

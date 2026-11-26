@@ -25,6 +25,13 @@
       FFT cascade. Their slopes follow the Cox &amp; Munk (1954) relation between wind speed and sea surface roughness.</p>
     <surface-ripples-panel embedded></surface-ripples-panel>
 
+    <!-- WHITECAPS -->
+    <h3 class="layer-title">Whitecaps</h3>
+    <p class="layer-intro">Foam left by the breaking crests of the FFT sea. A crest breaks where it squeezes the surface
+      too much (Jacobian of the horizontal displacement); how often depends on the wind, after the whitecap coverage of
+      Monahan &amp; O'Muircheartaigh (1980).</p>
+    <foam-panel></foam-panel>
+
     <!-- SPECTRA -->
     <h3 class="layer-title">Spectrum of the generated sea</h3>
     <div class="stats">
@@ -85,6 +92,7 @@
 import SeaStatePanel from './SeaStatePanel.vue';
 import DiscreteWavesPanel from './DiscreteWavesPanel.vue';
 import SurfaceRipplesPanel from './SurfaceRipplesPanel.vue';
+import FoamPanel from './FoamPanel.vue';
 
 export default {
   name: "SeaStateGenerationPanel",
@@ -238,6 +246,7 @@ export default {
     'sea-state-panel': SeaStatePanel,
     'discrete-waves-panel': DiscreteWavesPanel,
     'surface-ripples-panel': SurfaceRipplesPanel,
+    'foam-panel': FoamPanel,
   }
 }
 </script>

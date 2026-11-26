@@ -9,6 +9,7 @@ import { OceanParameters } from '/OceanTestSite/Assets/Ocean/OceanParams.js';
 import { DEFAULT_RIPPLE_SETTINGS, RIPPLE_N, generateRipples, travelVector } from '/OceanTestSite/Assets/Ocean/RippleSpectrum.js';
 import { FFT_N } from '/OceanTestSite/Assets/Ocean/SeaSpectrum.js';
 import { FFTOcean } from '/OceanTestSite/Assets/Ocean/FFTOcean.js';
+import { FoamSimulation, DEFAULT_FOAM_SETTINGS, FOAM_DETAIL_N, FOAM_DETAIL_SIZE, foamCalibration, foamDetailTexture, foamRadiusLod } from '/OceanTestSite/Assets/Ocean/Foam.js';
 import { RippleLoop, RIPPLE_LOOP_N, RIPPLE_LOOP_FRAMES, RIPPLE_LOOP_PERIOD } from '/OceanTestSite/Assets/Ocean/RippleLoop.js';
 import { QUALITY_PRESETS, SHADING_OPTIONS, initialQuality, loadShadingOptions } from '/OceanTestSite/Assets/Ocean/Quality.js';
 
@@ -119,7 +120,30 @@ class OceanEntity {
         u_fftExtra: {value: null},        // (Dxz, hx^2, hz^2, hx hz)
         u_fftSize: {value: 512},
         u_fftN: {value: 512},
-        // Debug views: 0 final, 1 Fresnel, 2 normal, 3 roughness, 4 ripple slopes, 5 long-wave stretch
+        // Whitecaps (Assets/Ocean/Foam.js): foam state on the grid of the FFT sea, and its detail
+        u_foamEnabled: {value: false},
+        u_foam: {value: null},
+        u_foamDetail: {value: null},
+        u_foamDetailSize: {value: FOAM_DETAIL_SIZE},
+        u_foamDetailN: {value: FOAM_DETAIL_N},
+        u_foamStretch: {value: 1},
+        u_foamThreshold: {value: -1e3},
+        u_collapseStrength: {value: DEFAULT_FOAM_SETTINGS.collapse}, // Crest that has broken: loses height
+        u_trailDamping: {value: DEFAULT_FOAM_SETTINGS.trailDamping}, // Foam trail: damps the waves through it
+        u_foamCollapse: {value: null},                               // Collapse of each scale of breakers
+        u_foamRadiusLod: {value: 0},                                 // Mip of their radius, scale 0 (+1 per scale)
+        u_foamLambda0: {value: 4},                                   // m, wavelength of the breakers of scale 0
+        // Small breakers (waves of ~1-4 m) from the ripple FFT, without state
+        u_smallEnabled: {value: false},
+        u_smallLevels: {value: new THREE.Vector2(4, 5)},
+        u_smallThreshold: {value: new THREE.Vector2(-1e3, -1e3)},
+        u_smallWidth: {value: new THREE.Vector2(1, 1)},
+        u_smallExpected: {value: 0},
+        u_seaSigmaJ: {value: 0.1},
+        u_foamSurge: {value: DEFAULT_FOAM_SETTINGS.surge},           // Forward surge of a collapsing crest
+        u_seaDirection: {value: new THREE.Vector2(0, 1)},            // Mean travel direction of the FFT sea
+        // Debug views: 0 final, 1 Fresnel, 2 normal, 3 roughness, 4 ripple slopes, 5 long-wave stretch, 6 foam,
+        // 7 Jacobian of the FFT sea, 8 foam by breaking scale
         u_debugView: {value: 0},
 
         // Projected grid parameters
@@ -199,9 +223,11 @@ class OceanEntity {
   // Regenerates the sea (the FFT grid size depends on the quality); the caller updates the textures
   setupFFT() {
     const u = this.oceanTile.material.uniforms;
-    [this.fft, this.rippleFFT].forEach(f => f && f.dispose());
-    this.fft = this.rippleFFT = null;
-    u.u_fftEnabled.value = u.u_rippleEnabled.value = false;
+    [this.fft, this.rippleFFT, this.foam].forEach(f => f && f.dispose());
+    this.fft = this.rippleFFT = this.foam = null;
+    u.u_fftEnabled.value = u.u_rippleEnabled.value = u.u_foamEnabled.value = false;
+    u.u_foam.value = u.u_foamCollapse.value = null;
+    u.u_smallEnabled.value = false;
     ['u_fftDisplacement', 'u_fftSlopes', 'u_fftExtra', 'u_rippleDisplacement', 'u_rippleSlopes', 'u_rippleExtra']
       .forEach(name => u[name].value = null);
 
@@ -235,6 +261,11 @@ class OceanEntity {
     u.u_rippleExtra.value = this.rippleFFT.extraTexture;
     u.u_fftN.value = q.seaN;
     u.u_rippleN.value = q.rippleN;
+    // Whitecaps on the grid of the FFT sea
+    this.foam = new FoamSimulation(renderer, q.seaN);
+    u.u_foam.value = this.foam.texture;
+    u.u_foamCollapse.value = this.foam.collapseTexture;
+    u.u_foamDetail.value = foamDetailTexture();
 
     if (params.oceanParameters.method == 'gerstner') {
       params.setSeaSettings({ method: 'fft' }, true);
@@ -315,6 +346,8 @@ class OceanEntity {
     u.u_fftEnabled.value = !!sea;
     if (sea) u.u_fftSize.value = sea.L;
     if (sea) this.fft.update(this.time);
+    // New waves: the old foam belongs to waves that no longer exist (recalibrated with the ripples, see updateFoam)
+    if (this.foam) this.foam.reset();
   }
 
 
@@ -460,6 +493,92 @@ class OceanEntity {
       this.updateRippleLoop();
     }
     if (window.eventBus) window.eventBus.emit('OceanEntity_ripplesChanged', this.ripples);
+    // The foam depends on the wind of the ripples and on the FFT sea
+    this.updateFoam();
+  }
+
+
+
+  // WHITECAPS (Assets/Ocean/Foam.js): only on the FFT sea (none in 'low')
+  foamSettings = { ...DEFAULT_FOAM_SETTINGS };
+  foamCalibration = null;
+  foamGain = 1;          // 'wind' mode: feedback gain so that the coverage drawn matches the wind (see adjustFoamGain)
+  foamGainClock = 0;     // s since the last adjustment
+
+  // partial: {enabled, mode ('wind' | 'shape'), amount, scaleSplit ('quantile' | 'phillips'), threshold, lead,
+  // persistence, collapse, radius (x wavelength), trailDamping, surge, small (small breakers from the ripples)}
+  setFoamSettings(partial) {
+    const wasEnabled = this.foamSettings.enabled;
+    Object.assign(this.foamSettings, partial);
+    if (this.foam && this.foamSettings.enabled && !wasEnabled) this.foam.reset();
+    this.updateFoam();
+  }
+
+  getFoamSettings() {
+    return { ...this.foamSettings };
+  }
+
+  // Output of foamCalibration() for the current sea and wind, or null without FFT sea
+  getFoam() {
+    return this.foamCalibration;
+  }
+
+  // 'wind' mode: every 2 s, compare the coverage drawn (read back from the GPU, without stalling it) with the target
+  // of the wind, minus the expected coverage of the small breakers (drawn by the shader, not in the foam texture), and
+  // move the gain on the breaking fractions of the FFT sea scales towards it (at most x2 per step). Skipped while the
+  // foam builds up after a reset (two lifetimes of the longest scale)
+  async adjustFoamGain() {
+    const c = this.foamCalibration;
+    if (!c || c.mode != 'wind' || !this.foam || !this.oceanTile.material.uniforms.u_foamEnabled.value) return;
+    if (this.foam.age < 2 * c.tauFoam[1]) return;
+    const m = await this.foam.measureCoverage();
+    if (!m || this.foamCalibration !== c) return;
+    const target = Math.max(1e-5, (c.coverage || 0) - (c.small.enabled ? c.small.expected : 0));
+    if (!(c.coverage > 1e-5)) return;
+    const ratio = Math.min(2, Math.max(0.5, Math.sqrt(target / Math.max(m.coverage, 1e-5))));
+    const gain = Math.min(100, Math.max(0.05, this.foamGain * ratio));
+    if (Math.abs(gain / this.foamGain - 1) < 0.02) return;
+    this.foamGain = gain;
+    this.updateFoam();
+  }
+
+  // Foam drawn on the sea: {coverage, active} (fractions), read back from the GPU; null without foam
+  async measureFoamCoverage() {
+    return this.foam && this.oceanTile.material.uniforms.u_foamEnabled.value ? this.foam.measureCoverage() : null;
+  }
+
+  // Wind ('wind' mode): the wind of the ripples, set in the ripples panel or the one of a fully developed sea with the
+  // same Hm0. The FFT sea's choppiness and slopes set the spread of the Jacobian
+  updateFoam() {
+    if (!this.oceanTile) return;
+    const u = this.oceanTile.material.uniforms;
+    const sea = this.fft && this.fft.enabled ? this.oceanParams.fftSea : null;
+    const windSpeed = this.ripples ? this.ripples.windSpeed : 0;
+    // The ripples give the small breakers, when their FFT is drawn
+    const ripples = this.rippleFFT && this.rippleFFT.enabled ? this.ripples : null;
+    this.foamCalibration = sea ? foamCalibration(sea, windSpeed, this.foamSettings, ripples, this.foamGain) : null;
+    const c = this.foamCalibration;
+    if (this.foam && c) this.foam.setCalibration(c);
+    u.u_foamEnabled.value = !!(this.foam && c && this.foamSettings.enabled);
+    u.u_foamThreshold.value = c ? c.threshold : -1e3;
+    u.u_foamStretch.value = c ? c.streak : 1;
+    u.u_collapseStrength.value = c ? c.collapse : 0;
+    u.u_trailDamping.value = c ? c.trailDamping : 0;
+    u.u_foamRadiusLod.value = c ? foamRadiusLod(c) : 0;
+    u.u_foamLambda0.value = c ? c.lambda0 : 4;
+    u.u_seaSigmaJ.value = c ? Math.max(1e-3, c.sigmaJ) : 0.1;
+    const small = c && c.small.enabled ? c.small : null;
+    u.u_smallEnabled.value = !!(small && u.u_foamEnabled.value);
+    if (small) {
+      u.u_smallLevels.value.set(small.levels[0], small.levels[1]);
+      u.u_smallThreshold.value.set(small.scales[0].threshold, small.scales[1].threshold);
+      u.u_smallWidth.value.set(small.scales[0].width, small.scales[1].width);
+      u.u_smallExpected.value = small.expected;
+    }
+    u.u_foamSurge.value = c ? c.surge : 0;
+    if (sea) u.u_seaDirection.value.fromArray(travelVector(sea.settings.Mdir));
+    if (window.eventBus) window.eventBus.emit('OceanEntity_foamChanged', { settings: this.getFoamSettings(), calibration: c,
+      available: !!this.foam });
   }
 
   // RIPPLE FIELD LOOP (Assets/Ocean/RippleLoop.js): the ripples of the qualities without FFT
@@ -502,7 +621,7 @@ class OceanEntity {
     if (color) u.u_sunColor.value.set(color.r, color.g, color.b);
   }
 
-  // 0 final, 1 Fresnel, 2 normal, 3 roughness, 4 ripple slopes, 5 long-wave stretch
+  // 0 final, 1 Fresnel, 2 normal, 3 roughness, 4 ripple slopes, 5 long-wave stretch, 6 foam, 7 Jacobian
   setDebugView(view) {
     if (this.oceanTile) this.oceanTile.material.uniforms.u_debugView.value = Number(view) || 0;
   }
@@ -618,6 +737,14 @@ class OceanEntity {
       // FFT cascades at this time (displacement and slope maps): sea and ripples
       if (this.fft && this.fft.enabled) this.fft.update(this.time);
       if (this.rippleFFT && this.rippleFFT.enabled) this.rippleFFT.update(this.time);
+      // Whitecaps: one step of the foam from the new FFT maps
+      if (this.foam && oceanTile.material.uniforms.u_foamEnabled.value) {
+        this.foam.update(this.fft, dt);
+        this.foamGainClock += dt;
+        if (this.foamGainClock > 2) { this.foamGainClock = 0; this.adjustFoamGain(); }
+        oceanTile.material.uniforms.u_foam.value = this.foam.texture;
+        oceanTile.material.uniforms.u_foamCollapse.value = this.foam.collapseTexture;
+      }
       // Ripple field loop: the two frames to blend at this time
       if (this.rippleLoop && oceanTile.material.uniforms.u_rippleLoopEnabled.value)
         oceanTile.material.uniforms.u_rippleLoopFrames.value.fromArray(this.rippleLoop.framesAt(this.time));

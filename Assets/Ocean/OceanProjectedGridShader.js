@@ -81,6 +81,16 @@ export const OceanProjectedGridVertShader = /* glsl */ `
   uniform sampler2D u_rippleDisplacement;
   uniform float u_rippleSize;
   uniform float u_rippleN;
+  // Whitecaps (Assets/Ocean/Foam.js): foam state on the grid of the FFT sea, (foam, breaking, bubbles, foam x scale),
+  // and the collapse of the breakers of each scale (RGBA: scales 0..3)
+  uniform bool u_foamEnabled;
+  uniform sampler2D u_foam;
+  uniform sampler2D u_foamCollapse;
+  uniform float u_collapseStrength; // How much a crest that has broken loses height (0: off)
+  uniform float u_trailDamping;     // How much the foam trail damps the waves through it (0: off)
+  uniform float u_foamRadiusLod;    // Mip of the collapse and trail radius around a breaker of scale 0 (+1 per scale)
+  uniform float u_foamSurge;        // Forward surge of a collapsing crest, times its height (0: off)
+  uniform vec2 u_seaDirection;      // Mean travel direction of the FFT sea (xz, unit)
 
   varying vec3 v_WorldPosition; // Rest position of the surface point (projected grid on the plane y = 0)
   varying vec3 v_Normal;        // Normal of the Gerstner surface (without the FFT cascades: the fragment shader adds them)
@@ -188,11 +198,26 @@ export const OceanProjectedGridVertShader = /* glsl */ `
   }
 
 
+  // Collapse around a point (Assets/Ocean/Foam.js): each scale l of breakers read at its own radius (mip
+  // u_foamRadiusLod + l, not finer than minLod), the strongest
+  float foamCollapse(vec2 uv, float minLod) {
+    float c = textureLod(u_foamCollapse, uv, max(minLod, u_foamRadiusLod)).x;
+    c = max(c, textureLod(u_foamCollapse, uv, max(minLod, u_foamRadiusLod + 1.0)).y);
+    c = max(c, textureLod(u_foamCollapse, uv, max(minLod, u_foamRadiusLod + 2.0)).z);
+    return max(c, textureLod(u_foamCollapse, uv, max(minLod, u_foamRadiusLod + 3.0)).w);
+  }
+  // Scale (0..1: breakers of scale 0..3) of the foam of a foam state (foam, breaking, bubbles, foam x scale)
+  float foamScaleOf(vec4 state) {
+    return state.r > 1e-3 ? clamp(state.a / state.r, 0.0, 1.0) : 0.0;
+  }
+
   // Displacement of an FFT cascade at rest position xz. Mip level from the size of the mesh: where the mesh is coarser
   // than the texels, it takes the filtered displacement instead of aliasing it
+  float cascadeLod(float size, float n, float footprint) {
+    return clamp(log2(max(footprint, 1e-6) * n / size), 0.0, log2(n));
+  }
   vec3 cascadeDisplacement(sampler2D map, float size, float n, vec2 xz, float footprint) {
-    float lod = clamp(log2(max(footprint, 1e-6) * n / size), 0.0, log2(n));
-    return textureLod(map, xz / size + 0.5 / n, lod).xyz;
+    return textureLod(map, xz / size + 0.5 / n, cascadeLod(size, n, footprint)).xyz;
   }
 
 
@@ -274,8 +299,30 @@ export const OceanProjectedGridVertShader = /* glsl */ `
     // FFT cascades (sea and ripples): displacement at the rest position (Tessendorf: linear superposition of
     // trochoidal components), added after the discrete waves, like in the analysis
     #ifndef SIMPLE_SHADING
-    if (u_fftEnabled)
-      modPos += cascadeDisplacement(u_fftDisplacement, u_fftSize, u_fftN, intersectionPoint.xz, footprint);
+    if (u_fftEnabled) {
+      vec3 seaDisplacement = cascadeDisplacement(u_fftDisplacement, u_fftSize, u_fftN, intersectionPoint.xz, footprint);
+      // Waves damped where they have broken (Assets/Ocean/Foam.js; same expressions as its foam pass), each at the
+      // radius of its breakers (radiusFactor x their wavelength), ahead, behind and to the sides:
+      //  - trail: the foam and bubbles left behind (not the crest breaking now) damp the crests that pass through them
+      //  - collapse: the crest that has just broken drops (up to 80% at the top, the water around it rises a little)
+      //    and squeezes less; its water surges forward (the mean direction of the sea) by u_foamSurge times the crest
+      //    height while the collapse grows, then drifts back as it recovers (both in fractions of the wave period)
+      if (u_foamEnabled) {
+        vec2 foamUV = intersectionPoint.xz / u_fftSize + 0.5 / u_fftN;
+        float footLod = cascadeLod(u_fftSize, u_fftN, footprint);
+        float foamScale = foamScaleOf(textureLod(u_foam, foamUV, footLod));
+        vec4 around = textureLod(u_foam, foamUV, max(footLod, u_foamRadiusLod + 3.0 * foamScale));
+        float trail = max(around.r, around.b) * (1.0 - around.g);
+        float collapseAround = foamCollapse(foamUV, footLod);
+        float collapse = u_collapseStrength * collapseAround;
+        float crestHeight = max(seaDisplacement.y, 0.0);
+        seaDisplacement *= 1.0 - u_trailDamping * trail;
+        seaDisplacement.y -= collapse * (0.4 * seaDisplacement.y + 0.4 * max(seaDisplacement.y, 0.0));
+        seaDisplacement.xz *= 1.0 - 0.6 * collapse;
+        seaDisplacement.xz += u_seaDirection * (u_foamSurge * collapseAround * crestHeight);
+      }
+      modPos += seaDisplacement;
+    }
     if (u_rippleEnabled)
       modPos += cascadeDisplacement(u_rippleDisplacement, u_rippleSize, u_rippleN, intersectionPoint.xz, footprint);
     #endif
@@ -344,8 +391,33 @@ export const OceanProjectedGridFragShader = /* glsl */`
   uniform float u_rippleN;
   uniform bool u_skyReady;
 
+  // Whitecaps (Assets/Ocean/Foam.js)
+  uniform bool u_foamEnabled;
+  uniform sampler2D u_foam;        // (foam, active breaking, bubbles, J) on the grid of the FFT sea, mipmapped
+  uniform sampler2D u_foamDetail;  // Structure of the foam finer than its texture, uniform histogram
+  uniform float u_foamDetailSize;  // Tile of the detail (m)
+  uniform float u_foamDetailN;     // Its texels
+  uniform float u_foamStretch;     // Stretch of the detail along the wind (foam streaks in strong winds)
+  uniform float u_foamThreshold;   // Jacobian below which a crest of scale 0 breaks (debug view)
+  // Shared with the vertex shader: highp, as there (SIMPLE_SHADING makes the fragment shader mediump)
+  uniform sampler2D u_foamCollapse; // See the vertex shader
+  uniform highp float u_collapseStrength;
+  uniform highp float u_trailDamping;
+  uniform highp float u_foamRadiusLod;
+  uniform float u_foamLambda0;     // m, wavelength of the breakers of scale 0 (x 2 per scale)
+  // Small breakers (waves of ~1-4 m), from the ripple FFT strained by the long waves, without state
+  uniform bool u_smallEnabled;
+  uniform vec2 u_smallLevels;      // Mip levels of the ripple maps: the waves longer than ~1 m and ~2 m
+  uniform vec2 u_smallThreshold;   // Jacobian below which they break
+  uniform vec2 u_smallWidth;       // From no foam to full foam
+  uniform float u_smallExpected;   // Their mean coverage, where they are finer than the pixel
+  uniform float u_seaSigmaJ;       // Standard deviation of the Jacobian of the FFT sea (gate of the small breakers)
+
   // 0: final colour, 1: Fresnel, 2: normal, 3: roughness (red upwind, green crosswind), 4: resolved ripple slopes,
-  // 5: stretch of the surface by the long waves (red squeezed, blue stretched)
+  // 5: stretch of the surface by the long waves (red squeezed, blue stretched), 6: foam (red drawn foam, green
+  // breaking, blue trail damping), 7: Jacobian of the damped FFT sea (grey 0..2, red below the breaking threshold,
+  // green breaking, blue collapse, yellow folded), 8: foam by breaking scale (blue small .. red large, green: small
+  // breakers of the ripples)
   uniform int u_debugView;
 
   // Fog
@@ -364,6 +436,12 @@ export const OceanProjectedGridFragShader = /* glsl */`
   const vec3 SKY_ZENITH = vec3(0.51, 0.75, 1.0) * 2.0;
   const vec3 SKY_HORIZON = vec3(0.655, 0.84, 1.0) * 2.0;
   const float SUN_IRRADIANCE = 6.0;
+  // Whitecaps: diffuse reflectance of fresh and aged foam (lower in the red: the water in the foam absorbs it), the
+  // bubble cloud under the surface (turquoise), and the sun light on foam relative to the sky light
+  const vec3 FOAM_FRESH = vec3(0.78, 0.84, 0.86);
+  const vec3 FOAM_AGED = vec3(0.45, 0.52, 0.55);
+  const vec3 BUBBLE_COLOR = vec3(0.012, 0.06, 0.05);
+  const float FOAM_SUN = 3.0;
 
 
   // https://github.com/dli/waves/blob/master/simulation.js
@@ -517,6 +595,48 @@ export const OceanProjectedGridFragShader = /* glsl */`
   }
 
 
+  // Collapse around a point (Assets/Ocean/Foam.js): each scale l of breakers read at its own radius (mip
+  // u_foamRadiusLod + l, not finer than minLod), the strongest
+  float foamCollapse(vec2 uv, float minLod) {
+    float c = textureLod(u_foamCollapse, uv, max(minLod, u_foamRadiusLod)).x;
+    c = max(c, textureLod(u_foamCollapse, uv, max(minLod, u_foamRadiusLod + 1.0)).y);
+    c = max(c, textureLod(u_foamCollapse, uv, max(minLod, u_foamRadiusLod + 2.0)).z);
+    return max(c, textureLod(u_foamCollapse, uv, max(minLod, u_foamRadiusLod + 3.0)).w);
+  }
+  // Scale (0..1: breakers of scale 0..3) of the foam of a foam state (foam, breaking, bubbles, foam x scale)
+  float foamScaleOf(vec4 state) {
+    return state.r > 1e-3 ? clamp(state.a / state.r, 0.0, 1.0) : 0.0;
+  }
+
+  // Smooth value noise (period-free), for the small breakers
+  float hash12(vec2 p) {
+    vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+    p3 += dot(p3, p3.yzx + 33.33);
+    return fract((p3.x + p3.y) * p3.z);
+  }
+  float valueNoise(vec2 x) {
+    vec2 i = floor(x), f = fract(x);
+    f = f * f * (3.0 - 2.0 * f);
+    return mix(mix(hash12(i), hash12(i + vec2(1.0, 0.0)), f.x), mix(hash12(i + vec2(0.0, 1.0)), hash12(i + 1.0), f.x), f.y);
+  }
+
+  // Foam at rest position xz for a foam value (mean coverage): (fraction of the pixel covered, thickness 0..1). Near
+  // the camera the detail texture draws it: foam where detail < foam, so as the foam ages it breaks into a network of
+  // edges and patches instead of fading out evenly (the detail has a uniform histogram, so the mean coverage is
+  // kept), thicker where the foam is well above the detail. Far away, where the detail is finer than the pixel, the
+  // mean coverage itself (the mipmaps of the foam texture average it)
+  vec2 foamPattern(vec2 xz, vec2 windU, float foam) {
+    vec2 uv = vec2(dot(xz, windU) / u_foamStretch, dot(xz, vec2(-windU.y, windU.x))) / u_foamDetailSize;
+    float detail = texture2D(u_foamDetail, uv).r;
+    float texels = max(length(dFdx(uv)), length(dFdy(uv))) * u_foamDetailN;
+    float fade = smoothstep(1.0, 16.0, texels);
+    float edge = detail * 0.85;
+    float sharp = smoothstep(edge, edge + 0.1, foam); // 0 without foam, 1 with fresh foam
+    float thickness = clamp((foam - edge) * 2.5, 0.0, 1.0);
+    return mix(vec2(sharp, thickness), vec2(foam), fade);
+  }
+
+
   void main(){
 
     #ifdef SIMPLE_SHADING
@@ -586,6 +706,33 @@ export const OceanProjectedGridFragShader = /* glsl */`
     vec2 unresolved = vec2(0.0); // Slope variance finer than the pixel (upwind, crosswind)
     if (u_fftEnabled)
       unresolved += toWindFrame(sampleCascade(u_fftSlopes, u_fftExtra, u_fftSize, u_fftN, xz, cs, cDxz), windU);
+    // Waves damped where they have broken (trail and collapse, as in the vertex shader): the FFT sea slopes and
+    // Jacobian terms scale with its horizontal displacement, so the shading follows the softened shape
+    // WHITECAPS (Assets/Ocean/Foam.js): foam state at the rest position, on the grid of the FFT sea
+    vec4 foamState = vec4(0.0);
+    float foamScale = 0.0, foamTrail = 0.0, foamCollapseAround = 0.0, foamDamp = 1.0;
+    if (u_foamEnabled) {
+      vec2 foamUV = xz / u_fftSize + 0.5 / u_fftN;
+      foamState = texture2D(u_foam, foamUV);
+      foamScale = foamScaleOf(foamState);
+      vec4 around = textureLod(u_foam, foamUV, u_foamRadiusLod + 3.0 * foamScale);
+      foamTrail = max(around.r, around.b) * (1.0 - around.g);
+      foamCollapseAround = foamCollapse(foamUV, 0.0);
+      foamDamp = (1.0 - u_trailDamping * foamTrail) * (1.0 - 0.6 * u_collapseStrength * foamCollapseAround);
+      cs *= foamDamp;
+      cDxz *= foamDamp;
+    }
+    // Jacobian of the FFT sea (damped): below 1 where the waves squeeze the surface into crests (Assets/Ocean/Foam.js)
+    float seaJ = (1.0 + cs.z) * (1.0 + cs.w) - cDxz * cDxz;
+
+    float foamCoverage = 0.0, foamThickness = 0.0;
+    if (u_foamEnabled) {
+      vec2 f = foamPattern(xz, windU, foamState.r);
+      foamCoverage = f.x;
+      foamThickness = f.y;
+    }
+    // Foam damps the short waves: smoother ripples under it
+    float rippleDamp = 1.0 - 0.8 * foamCoverage;
 
     // Ripples strained by the long waves (Gerstner + FFT sea; see principalStretch). Their slope gets 1 / J twice:
     //  - amplitude (Longuet-Higgins & Stewart): the inverse of the whole long-wave strain
@@ -609,9 +756,43 @@ export const OceanProjectedGridFragShader = /* glsl */`
       mat2 rJ = rippleT * mat2(rippleS.z, rippleDxz, rippleDxz, rippleS.w);
       rippleS.zw = vec2(rJ[0][0], rJ[1][1]);
       rippleDxz = 0.5 * (rJ[0][1] + rJ[1][0]);
+      rippleS *= rippleDamp; rippleDxz *= rippleDamp;
       cs += rippleS; cDxz += rippleDxz;
     }
-    unresolved += toWindFrame(transformTensor(rippleT, rippleTensor), windU); // Ripples finer than the pixel + tail
+    unresolved += toWindFrame(transformTensor(rippleT, rippleTensor * (rippleDamp * rippleDamp)), windU); // Ripples finer than the pixel + tail
+
+    // SMALL BREAKERS (waves of ~1-4 m, Assets/Ocean/Foam.js): the Jacobian of the ripples longer than ~1 m and ~2 m
+    // (mip levels of the ripple maps), strained by the long waves like the ripples. No state: foam while the crest
+    // breaks. Where they are finer than the pixel, their mean coverage. The ripple tile repeats every few metres and a
+    // threshold picks the same extreme in every tile (a lattice of breakers), so:
+    //  - the long waves modulate their steepness (short waves steepen on the crests and front faces of the long waves,
+    //    Phillips & Banner 1974): the squeeze 1 - J of the ripples is scaled by 1 + 0.6 (1 - J_sea) / sigma_sea
+    //    (up to x2.8 on the steepest long-wave crests, down to x0.4 in their troughs), and they do not break where
+    //    the long waves stretch the surface
+    //  - their threshold varies smoothly from tile to tile (period-free noise, +-1 ramp width)
+    float smallSource = 0.0, smallCoverage = 0.0;
+    if (u_smallEnabled && u_rippleEnabled) {
+      float longSqueeze = (1.0 - seaJ) / u_seaSigmaJ;
+      float modulation = 1.0 + 0.6 * clamp(longSqueeze, -1.0, 3.0);
+      float gate = smoothstep(-0.5, 0.5, longSqueeze);
+      float jitter = 2.0 * (valueNoise(xz / u_rippleSize + 17.0) - 0.5);
+      vec2 ruv = xz / u_rippleSize + 0.5 / u_rippleN;
+      float pixelLod = log2(max(max(length(dFdx(ruv)), length(dFdy(ruv))) * u_rippleN, 1e-6));
+      for (int i = 0; i < 2; i++) {
+        float level = i == 0 ? u_smallLevels.x : u_smallLevels.y;
+        vec4 a = textureLod(u_rippleSlopes, ruv, level);
+        float dxz = textureLod(u_rippleExtra, ruv, level).x;
+        mat2 rJ = rippleT * mat2(a.z, dxz, dxz, a.w) * rippleDamp;
+        float offDiagonal = 0.5 * (rJ[0][1] + rJ[1][0]);
+        float j = 1.0 - modulation * (1.0 - ((1.0 + rJ[0][0]) * (1.0 + rJ[1][1]) - offDiagonal * offDiagonal));
+        float width = 2.0 * (i == 0 ? u_smallWidth.x : u_smallWidth.y); // Soft: thin foam at the edges
+        float threshold = (i == 0 ? u_smallThreshold.x : u_smallThreshold.y) + jitter * width;
+        smallSource = max(smallSource, clamp((threshold - j) / width, 0.0, 1.0));
+      }
+      smallSource *= gate;
+      // Small whitecaps are thin and lacy: at most 75% of the detail pattern, never a solid sheet
+      smallCoverage = mix(foamPattern(xz, windU, 0.75 * smallSource).x, u_smallExpected, clamp(pixelLod - u_smallLevels.y, 0.0, 1.0));
+    }
     vec3 cT = vec3(1.0 + cs.z, cs.x, cDxz);
     vec3 cB = vec3(cDxz, cs.y, 1.0 + cs.w);
     vec3 cN = normalize(cross(cB, cT));
@@ -658,7 +839,31 @@ export const OceanProjectedGridFragShader = /* glsl */`
     float diffuse = L.y > 0.0 ? max(0.0, dot(N, L)) : 0.0;
     vec3 water = OCEAN_COLOR * (2.0 + diffuse * u_sunColor);
 
+    // Whitecaps: foam is a diffuse scatterer, lit by the sky (blurred sky cube) and the sun (wrapped: light goes
+    // through the foam). Under it, the bubble cloud brightens the water, seen along the refracted ray at a depth of
+    // ~0.15 the wavelength of the breakers (0.3 to 4 m). Large and small foam add up
+    float allFoam = 1.0 - (1.0 - foamCoverage) * (1.0 - smallCoverage);
+    foamThickness = max(foamThickness, 0.5 * smallSource);
+    vec3 foamColor = vec3(0.0);
+    if (u_foamEnabled) {
+      vec3 skyAmbient = skyReflection(vec3(0.0, 1.0, 0.0), 1.5);
+      float wrapLight = L.y > 0.0 ? clamp(dot(N, L) * 0.6 + 0.4, 0.0, 1.0) : 0.0;
+      vec3 foamLight = skyAmbient + FOAM_SUN * wrapLight * u_sunColor;
+      if (!underwater) {
+        vec3 Rr = refract(-V, N, 1.0 / 1.33);
+        float bubbleDepth = clamp(0.15 * u_foamLambda0 * exp2(3.0 * foamScale), 0.3, 4.0);
+        vec2 bubbleXZ = xz + Rr.xz / max(-Rr.y, 0.25) * bubbleDepth;
+        float bubbles = texture2D(u_foam, bubbleXZ / u_fftSize + 0.5 / u_fftN, 1.5).b;
+        water += BUBBLE_COLOR * bubbles * foamLight;
+      }
+      foamColor = mix(FOAM_AGED, FOAM_FRESH, foamThickness) * foamLight;
+    }
+
     vec3 color = fresnel * sky + (1.0 - fresnel) * water + sun;
+    // Foam covers the water, its reflection and the sun glitter: thin (old) foam lets some of them through. Seen from
+    // below it only dims the light
+    float foamOpacity = allFoam * mix(0.45, 1.0, foamThickness);
+    color = mix(color, underwater ? 0.4 * foamColor : foamColor, foamOpacity);
 
     // Debug views
     if (u_debugView == 1) { gl_FragColor = vec4(vec3(fresnel), 1.0); return; }
@@ -668,6 +873,22 @@ export const OceanProjectedGridFragShader = /* glsl */`
     if (u_debugView == 5) {
       vec2 p = principalStretch(longStrain);
       gl_FragColor = vec4(0.1 + 3.0 * max(0.0, 1.0 - p.y), 0.1, 0.1 + 3.0 * max(0.0, p.x - 1.0), 1.0);
+      return;
+    }
+    if (u_debugView == 6) { gl_FragColor = vec4(foamCoverage, foamState.g, u_trailDamping * foamTrail, 1.0); return; }
+    if (u_debugView == 7) {
+      vec3 c = vec3(clamp(0.5 * seaJ, 0.0, 1.0));
+      c = mix(c, vec3(0.2, 0.3, 1.0), clamp(u_collapseStrength * foamCollapseAround, 0.0, 1.0)); // Collapse: blue
+      if (u_foamEnabled && seaJ < u_foamThreshold) c = vec3(1.0, 0.1, 0.1);              // Below the threshold: red
+      c = mix(c, vec3(0.1, 1.0, 0.2), smoothstep(0.05, 0.3, foamState.g));                 // Breaking: green
+      if (seaJ < 0.0) c = vec3(1.0, 1.0, 0.0);                                             // Folded: yellow
+      gl_FragColor = vec4(c, 1.0);
+      return;
+    }
+    if (u_debugView == 8) {
+      vec3 c = vec3(0.05, 0.08, 0.15) + foamCoverage * mix(vec3(0.1, 0.5, 1.0), vec3(1.0, 0.25, 0.1), foamScale)
+        + smallCoverage * vec3(0.2, 1.0, 0.3);
+      gl_FragColor = vec4(c, 1.0);
       return;
     }
 

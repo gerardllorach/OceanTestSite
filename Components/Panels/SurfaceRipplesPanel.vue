@@ -179,6 +179,9 @@ export default {
         { id: 3, title: 'Roughness (red upwind, green crosswind)' },
         { id: 4, title: 'Ripple slopes' },
         { id: 5, title: 'Stretch by the waves (red squeezed, blue stretched)' },
+        { id: 6, title: 'Foam (red foam, green breaking, blue trail damping)' },
+        { id: 7, title: 'Jacobian (red: below threshold, green: breaking, blue: collapse)' },
+        { id: 8, title: 'Foam by breaking scale (blue small .. red large, green ripples)' },
       ],
     }
   },
