@@ -24,7 +24,7 @@
         <div class="container-horizontal">
           <span>Wind speed (U10)</span>
           <div><input type="range" min="0" max="25" step="0.5" :value="settings.windSpeed"
-              @input="change({ windSpeed: Number($event.target.value) })"><span>{{ settings.windSpeed.toFixed(1) }} m/s</span></div>
+              @input="change({ windSpeed: Number($event.target.value) })"><span><wind-speed :value="settings.windSpeed"></wind-speed></span></div>
         </div>
         <div class="container-horizontal">
           <span>Wind from</span>
@@ -36,7 +36,7 @@
       </template>
       <p v-else-if="ripples" class="derived">
         Equivalent wind of a fully developed sea with the same H<sub>m0</sub> ({{ fmt(ripples.seaStateHm0, 2) }} m):
-        <b>{{ fmt(ripples.windSpeed, 1) }} m/s</b> from <b>{{ compass(ripples.sourceWindDir ?? ripples.windDir) }}</b> (mean wave direction).
+        <b><wind-speed :value="ripples.windSpeed"></wind-speed></b> from <b>{{ compass(ripples.sourceWindDir ?? ripples.windDir) }}</b> (mean wave direction).
       </p>
 
       <!-- DIRECTIONALITY -->
@@ -108,7 +108,7 @@
     <!-- NO SLOPE LEFT FOR THE RIPPLES (see generateRipples: they get Cox-Munk minus the slopes of the waves) -->
     <p v-if="noBudget" class="warning" role="status">
       No ripples: the FFT sea and the swell are already as steep as the sea surface of Cox &amp; Munk for a
-      {{ fmt(ripples.windSpeed, 1) }} m/s wind (mean square slope {{ fmt(waveSlope, 4) }}, target {{ fmt(coxMunkSlope, 4) }}),
+      <wind-speed :value="ripples.windSpeed"></wind-speed> wind (mean square slope {{ fmt(waveSlope, 4) }}, target {{ fmt(coxMunkSlope, 4) }}),
       so nothing is left for the ripples. Raise the wind speed, or make the sea less steep (lower H<sub>m0</sub> or longer
       peak period).
     </p>
@@ -141,6 +141,8 @@
 
 
 <script>
+
+import WindSpeed from '../WindSpeed.vue';
 
 import Knob from '../Knob.vue';
 
@@ -260,6 +262,7 @@ export default {
     },
   },
   components: {
+    'wind-speed': WindSpeed,
     'knob': Knob,
   }
 }

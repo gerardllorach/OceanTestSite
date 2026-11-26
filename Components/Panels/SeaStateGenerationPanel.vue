@@ -7,8 +7,8 @@
 
     <!-- FFT SEA -->
     <h3 class="layer-title"><i class="layer-key" :style="{ background: colors[0] }"></i>FFT sea</h3>
-    <p class="layer-intro">JONSWAP spectrum (Hasselmann et al. 1973; γ = 1 is Pierson–Moskowitz) with a cos<sup>2s</sup>
-      directional spreading, rendered with an FFT (Tessendorf): tens of thousands of trochoidal components computed on
+    <p class="layer-intro">JONSWAP spectrum (Hasselmann et al. 1973; γ = 1 is Pierson–Moskowitz) with a directional
+      spreading, constant or changing with the frequency (references at the end of the page), rendered with an FFT (Tessendorf): tens of thousands of trochoidal components computed on
       the GPU. It stops where the ripples take over.</p>
     <sea-state-panel embedded></sea-state-panel>
 
@@ -82,6 +82,38 @@
       <template v-if="spectrumScale == 'log'">The ripples carry little variance (centimetres) but most of the slope:
         their saturation range falls as f<sup>−5</sup>.</template>
       <template v-else>On linear axes the ripples are too small to see: use log–log.</template></p>
+
+    <!-- REFERENCES -->
+    <h3 class="layer-title">References: directional spreading</h3>
+    <ul class="references">
+      <li><b>Constant σ<sub>1</sub></b>: cos<sup>2s</sup>(θ/2) with the same s at every frequency, s = 2/σ<sub>1</sub>² − 1.
+        Longuet-Higgins, M. S., Cartwright, D. E. &amp; Smith, N. D. (1963). Observations of the directional spectrum of
+        sea waves using the motions of a floating buoy. In <i>Ocean Wave Spectra</i>, Prentice-Hall, 111–136.
+        σ<sub>1</sub> as in Kuik, A. J., van Vledder, G. P. &amp; Holthuijsen, L. H. (1988). A method for the routine
+        analysis of pitch-and-roll buoy wave data. <i>J. Phys. Oceanogr.</i> 18, 1020–1034.</li>
+      <li><b>Mitsuyasu et al. (1975)</b>: cos<sup>2s</sup>(θ/2), s = s<sub>p</sub>(f/f<sub>p</sub>)<sup>5</sup> below the
+        peak and s<sub>p</sub>(f/f<sub>p</sub>)<sup>−2.5</sup> above, s<sub>p</sub> = 11.5 (U<sub>10</sub>/c<sub>p</sub>)<sup>−2.5</sup>.
+        Mitsuyasu, H., Tasai, F., Suhara, T., Mizuno, S., Ohkusu, M., Honda, T. &amp; Rikiishi, K. (1975). Observations
+        of the directional spectrum of ocean waves using a cloverleaf buoy. <i>J. Phys. Oceanogr.</i> 5, 750–760.</li>
+      <li><b>Hasselmann et al. (1980)</b>: cos<sup>2s</sup>(θ/2), s = 6.97 (f/f<sub>p</sub>)<sup>4.06</sup> below
+        1.05 f<sub>p</sub> and 9.77 (f/f<sub>p</sub>)<sup>μ</sup> above, μ = −2.33 − 1.45 (U<sub>10</sub>/c<sub>p</sub> − 1.17).
+        Hasselmann, D. E., Dunckel, M. &amp; Ewing, J. A. (1980). Directional wave spectra observed during JONSWAP 1973.
+        <i>J. Phys. Oceanogr.</i> 10, 1264–1280.</li>
+      <li><b>Donelan et al. (1985)</b>: sech²(βθ), β = 2.61 (f/f<sub>p</sub>)<sup>1.3</sup> for 0.56 &lt; f/f<sub>p</sub> &lt; 0.95,
+        2.28 (f/f<sub>p</sub>)<sup>−1.3</sup> for 0.95 ≤ f/f<sub>p</sub> &lt; 1.6, 1.24 otherwise.
+        Donelan, M. A., Hamilton, J. &amp; Hui, W. H. (1985). Directional spectra of wind-generated waves.
+        <i>Phil. Trans. R. Soc. Lond. A</i> 315, 509–562.</li>
+      <li><b>Banner (1990)</b>, above 1.6 f<sub>p</sub>: β = 10^(−0.4 + 0.8393 exp(−0.567 ln((f/f<sub>p</sub>)²))).
+        Banner, M. L. (1990). Equilibrium spectra of wind waves. <i>J. Phys. Oceanogr.</i> 20, 966–984.</li>
+      <li><b>Goda &amp; Suzuki (1975)</b>: the Mitsuyasu shape with a chosen peak value s<sub>max</sub>: 10 for wind
+        waves, 25 for swell with a short decay distance, 75 for swell with a long decay distance.
+        Goda, Y. &amp; Suzuki, Y. (1975). Computation of refraction and diffraction of sea waves with Mitsuyasu's
+        directional spectrum. <i>Tech. Note Port Harbour Res. Inst.</i> 230 (in Japanese); in English in Goda, Y.,
+        <i>Random Seas and Design of Maritime Structures</i>, World Scientific.</li>
+      <li>Wind of the wind-dependent spreadings, when not given: the wind of a JONSWAP sea with the same H<sub>m0</sub> and
+        T<sub>p</sub>, from the fetch-limited growth laws of Hasselmann, K. et al. (1973). Measurements of wind-wave growth
+        and swell decay during the Joint North Sea Wave Project (JONSWAP). <i>Dtsch. Hydrogr. Z.</i> A8(12).</li>
+    </ul>
   </div>
 </template>
 
@@ -353,5 +385,15 @@ export default {
   color: #3d3c39;
   font-size: x-small;
   margin-top: 8px;
+}
+
+.references {
+  color: #3d3c39;
+  font-size: x-small;
+  padding-left: 18px;
+}
+
+.references li {
+  margin-bottom: 6px;
 }
 </style>

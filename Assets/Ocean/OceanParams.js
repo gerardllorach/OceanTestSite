@@ -56,6 +56,10 @@ export class OceanParameters{
     numComponents: DEFAULT_SEA_SETTINGS.count, // Method 'gerstner'
     choppiness: DEFAULT_SEA_SETTINGS.choppiness, // Method 'fft'
     seed: DEFAULT_SEA_SETTINGS.seed,
+    // Directional spreading (see DirectionalSpreading.js). 'constant' uses Spr1
+    spreadModel: DEFAULT_SEA_SETTINGS.spreadModel,
+    spreadWind: DEFAULT_SEA_SETTINGS.spreadWind, // U10 (m/s) of the wind-dependent spreadings, null: from Hm0 and Tp
+    spreadSmax: DEFAULT_SEA_SETTINGS.spreadSmax, // Goda & Suzuki
   }
 
   numWaves = 0;
@@ -94,6 +98,7 @@ export class OceanParameters{
   getSeaSettings = function(){
     const p = this.oceanParameters;
     return { method: p.method, Hm0: p.Hm0, Tp: p.Tp, gamma: p.gamma, Mdir: p.Mdir, spread: p.Spr1,
+      spreadModel: p.spreadModel, spreadWind: p.spreadWind, spreadSmax: p.spreadSmax,
       count: p.numComponents, choppiness: p.choppiness, seed: p.seed };
   }
 

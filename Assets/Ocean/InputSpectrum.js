@@ -1,5 +1,5 @@
 // Input spectrum of the generated sea: what the three layers put into the surface, before any measurement.
-//   - Sea: the JONSWAP x cos^2s spectrum that the FFT grid samples (Assets/Ocean/SeaSpectrum.js generateFFTSea), from
+//   - Sea: the JONSWAP x spreading spectrum that the FFT grid samples (Assets/Ocean/SeaSpectrum.js generateFFTSea), from
 //     its longest grid wave to where its grid stops (fCut). Without an FFT (fallback), the band of the Gerstner sea.
 //   - Swell: the discrete Gerstner waves. Each one is a line: all its variance at one frequency and one direction.
 //   - Ripples: the saturation-range spectrum that the ripple grid samples (Assets/Ocean/RippleSpectrum.js), from fCut
@@ -11,7 +11,7 @@
 // state = {fft (generateFFTSea output or null), sea (generateSea output or null), swell ([{hm0, T, dir}]),
 //          ripples (generateRipples output or null)}
 
-import { G, spectralDensity, spreadingExponent, spreadingNorm } from '/OceanTestSite/Assets/Ocean/SeaSpectrum.js';
+import { G, spectralDensity, seaSpreading } from '/OceanTestSite/Assets/Ocean/SeaSpectrum.js';
 import { wrappedNormal } from '/OceanTestSite/Assets/Ocean/RippleSpectrum.js';
 
 const DEG2RAD = Math.PI / 180;
@@ -35,13 +35,13 @@ export function rippleBand(state) {
 // Variance of a discrete wave (m^2)
 const lineVariance = w => Math.pow(Math.abs(w.hm0) / 2, 2) / 2;
 
-// SEA: E(f, theta) = S(f) D(theta), m^2/Hz/rad. theta: direction the waves come from (rad, clockwise from north)
+// SEA: E(f, theta) = S(f) D(f, theta), m^2/Hz/rad. theta: direction the waves come from (rad, clockwise from north).
+// D: the directional spreading of the sea (DirectionalSpreading.js), which may change with the frequency
 function seaDensity(state, f, theta, band) {
   if (!band || f < band[0] || f > band[1]) return 0;
-  const s = (state.fft || state.sea).settings;
-  const exponent = spreadingExponent(s.spread);
-  const D = Math.pow(Math.cos(wrapPi(theta - s.Mdir * DEG2RAD) / 2), 2 * exponent) / spreadingNorm(exponent);
-  return spectralDensity(f, s) * D;
+  const sea = state.fft || state.sea, s = sea.settings;
+  const spreading = sea.spreading || seaSpreading(s);
+  return spectralDensity(f, s) * spreading.D(f, wrapPi(theta - s.Mdir * DEG2RAD));
 }
 
 // RIPPLES: E(f, theta) = Psi(k, theta) k dk/df, m^2/Hz/rad, with Psi = scale^2 k^-4 D(theta; sigma(k)) (per unit area of

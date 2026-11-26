@@ -1,6 +1,8 @@
 // Sea state from a wave spectrum: the discrete (Gerstner) waves are a random realisation of a JONSWAP spectrum
-// (Hasselmann et al. 1973; gamma = 1 is the Pierson-Moskowitz spectrum of a fully developed sea) with a cos^2s
-// directional spreading (Longuet-Higgins et al. 1963). Pure module (no three.js): also used by the analysis and in node.
+// (Hasselmann et al. 1973; gamma = 1 is the Pierson-Moskowitz spectrum of a fully developed sea) with a directional
+// spreading: a constant cos^2s (Longuet-Higgins et al. 1963), or one that changes with the frequency after the
+// measurements of Mitsuyasu et al. 1975, Hasselmann et al. 1980, Donelan et al. 1985 (+ Banner 1990) or Goda & Suzuki
+// 1975 (Assets/Ocean/DirectionalSpreading.js). Pure module (no three.js): also used by the analysis and in node.
 //
 // Discretisation ("random frequency, single direction per component"): the frequency range is split into log-spaced
 // bins, each component gets a random frequency inside its bin, an amplitude a = sqrt(2 S(f) df) from the bin width df,
@@ -10,6 +12,8 @@
 // The components stop where the surface ripples (Assets/Ocean/RippleSpectrum.js) start, at RIPPLE_K_MIN.
 
 import { RIPPLE_K_MIN } from '/OceanTestSite/Assets/Ocean/RippleSpectrum.js';
+import { spreadingExponent, createSpreading, windOfSea, SPREAD_MODEL_IDS } from '/OceanTestSite/Assets/Ocean/DirectionalSpreading.js';
+export { spreadingExponent };
 
 export const G = 9.8; // Same gravity as the shader and the analysis
 const DEG2RAD = Math.PI / 180;
@@ -25,7 +29,10 @@ export const DEFAULT_SEA_SETTINGS = {
   Tp: null,     // Peak period (s). null: fully developed sea for Hm0 (Pierson-Moskowitz)
   gamma: 3.3,   // JONSWAP peak enhancement (1 = Pierson-Moskowitz, 3.3 = mean JONSWAP)
   Mdir: 0,      // Mean direction, where the waves come FROM (deg clockwise from north)
-  spread: 30,   // Directional spread sigma1 (deg, Kuik et al. 1988)
+  spread: 30,   // Directional spread sigma1 (deg, Kuik et al. 1988), spreadModel 'constant'
+  spreadModel: 'constant', // Directional spreading, see DirectionalSpreading.js SPREAD_MODELS
+  spreadWind: null,        // U10 (m/s) of the wind-dependent spreadings. null: the wind of a JONSWAP sea with this Hm0, Tp
+  spreadSmax: 10,          // Peak s of the Goda & Suzuki spreading
   count: 40,    // Number of components (Gerstner waves)
   seed: 1,
   choppiness: 1, // FFT: horizontal displacement factor (Tessendorf's lambda). 1: every component is a trochoid
@@ -87,7 +94,17 @@ export function resolveSeaSettings(settings = {}) {
   s.count = Math.max(1, Math.round(s.count));
   s.choppiness = Math.max(0, Number(s.choppiness ?? 1));
   if (!SEA_METHODS.includes(s.method)) s.method = 'fft';
+  if (!SPREAD_MODEL_IDS.includes(s.spreadModel)) s.spreadModel = 'constant';
+  s.spreadWindAuto = !(s.spreadWind > 0);
+  s.spreadWindResolved = s.spreadWindAuto ? windOfSea(s.Hm0, s.Tp) : Number(s.spreadWind);
+  s.spreadSmax = Math.max(1, Number(s.spreadSmax) || 10);
   return s;
+}
+
+// Directional spreading of the sea (DirectionalSpreading.createSpreading): D(f, theta), sigma1(f), draw(f, u)
+export function seaSpreading(settings) {
+  const s = settings.TpAuto === undefined ? resolveSeaSettings(settings) : settings;
+  return createSpreading({ model: s.spreadModel, spread: s.spread, windSpeed: s.spreadWindResolved, smax: s.spreadSmax }, 1 / s.Tp);
 }
 
 // Variance density S(f) (m^2/Hz) of the target spectrum: integrates to (Hm0 / 4)^2
@@ -96,30 +113,6 @@ export function spectralDensity(f, settings) {
   const fp = 1 / s.Tp;
   const m0 = Math.pow(s.Hm0 / 4, 2);
   return m0 * jonswapShape(f, fp, s.gamma) / (shapeIntegral(s.gamma) * Math.pow(fp, -4));
-}
-
-// cos^2s((theta - mean) / 2) spreading. sigma1 = sqrt(2 / (1 + s)) rad, so s = 2 / sigma1^2 - 1 (0: uniform)
-export function spreadingExponent(spreadDeg) {
-  const sigma = Math.max(1, spreadDeg) * DEG2RAD;
-  return Math.min(400, Math.max(0, 2 / (sigma * sigma) - 1));
-}
-
-// Inverse cumulative distribution of the spreading function, to draw directions with a single random number
-function directionSampler(s) {
-  const n = 1440;
-  const theta = new Float64Array(n + 1), cdf = new Float64Array(n + 1);
-  for (let i = 0; i <= n; i++) theta[i] = -Math.PI + 2 * Math.PI * i / n;
-  for (let i = 1; i <= n; i++) {
-    const p0 = Math.pow(Math.cos(theta[i - 1] / 2), 2 * s), p1 = Math.pow(Math.cos(theta[i] / 2), 2 * s);
-    cdf[i] = cdf[i - 1] + 0.5 * (p0 + p1);
-  }
-  return u => {
-    const target = u * cdf[n];
-    let lo = 0, hi = n;
-    while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (cdf[mid] < target) lo = mid; else hi = mid; }
-    const t = (target - cdf[lo]) / Math.max(1e-300, cdf[hi] - cdf[lo]);
-    return (theta[lo] + t * (theta[hi] - theta[lo])) * RAD2DEG;
-  };
 }
 
 
@@ -132,7 +125,7 @@ export function generateSea(settings = {}) {
   const fHi = Math.max(SPLIT_FREQUENCY, 3 * fp);
   // Independent random streams, so that changing one setting does not reshuffle everything else
   const randF = mulberry32(s.seed), randDir = mulberry32(s.seed + 7919), randPhase = mulberry32(s.seed + 104729);
-  const drawDirection = directionSampler(spreadingExponent(s.spread));
+  const spreading = seaSpreading(s); // Each component draws its direction from the spreading at its frequency
 
   const waves = [], bins = [];
   let variance = 0, steepnessSum = 0;
@@ -142,7 +135,7 @@ export function generateSea(settings = {}) {
     const f = e0 * Math.pow(e1 / e0, 0.1 + 0.8 * randF()); // Random frequency inside the bin (away from its edges)
     const df = e1 - e0; // Bin width: the Jacobian between the component index and the frequency
     const a = Math.sqrt(2 * spectralDensity(f, s) * df);
-    const dir = wrap360(s.Mdir + drawDirection(randDir()));
+    const dir = wrap360(s.Mdir + spreading.draw(f, randDir()));
     const phase = randPhase() * 360;
     const k = Math.pow(2 * Math.PI * f, 2) / G;
     waves.push({ hm0: 2 * a, T: 1 / f, dir, phase });
@@ -155,6 +148,7 @@ export function generateSea(settings = {}) {
     settings: s,
     fp, fLo, fHi,
     waves, bins,
+    spreading,
     realizedHm0: 4 * Math.sqrt(variance), // Slightly below Hm0: the tail above fHi belongs to the ripples
     // Sum of a k: Gerstner crests can loop where the waves add up if it is over 1
     steepnessSum,
@@ -194,18 +188,6 @@ export function fftTileSize(Tp) {
   return Math.max(FFT_MIN_SIZE, 4 * peakWavelength);
 }
 
-// Integral of cos^2s(theta / 2) over a full turn, to have D(theta) in 1/rad
-const spreadingNormCache = new Map();
-export function spreadingNorm(s) {
-  if (!spreadingNormCache.has(s)) {
-    const n = 2880;
-    let sum = 0;
-    for (let i = 0; i < n; i++) sum += Math.pow(Math.cos((-Math.PI + 2 * Math.PI * (i + 0.5) / n) / 2), 2 * s) * 2 * Math.PI / n;
-    spreadingNormCache.set(s, sum);
-  }
-  return spreadingNormCache.get(s);
-}
-
 // Variance of the target spectrum below fCut (numerical integral)
 function bandVariance(settings, fCut) {
   const n = 4000, lo = Math.log(0.2 / settings.Tp), hi = Math.log(fCut);
@@ -228,8 +210,7 @@ export function generateFFTSea(settings = {}, N = FFT_N) {
   const dk = 2 * Math.PI / L;
   const kCut = FFT_K_FRACTION * Math.PI * N / L;
   const fCut = Math.sqrt(G * kCut) / (2 * Math.PI);
-  const spreadExp = spreadingExponent(s.spread);
-  const dNorm = spreadingNorm(spreadExp);
+  const spreading = seaSpreading(s);
   const meanDir = s.Mdir * DEG2RAD;
   const rand = mulberry32(s.seed + 31337);
 
@@ -246,7 +227,7 @@ export function generateFFTSea(settings = {}, N = FFT_N) {
       const from = Math.atan2(-kx / k, kz / k);
       let rel = from - meanDir;
       rel = Math.atan2(Math.sin(rel), Math.cos(rel));
-      const D = Math.pow(Math.cos(rel / 2), 2 * spreadExp) / dNorm;           // 1/rad
+      const D = spreading.D(f, rel);                                          // 1/rad
       const E = spectralDensity(f, s) * D;                                    // m^2/Hz/rad
       const cg = 0.5 * Math.sqrt(G / k);
       const psi = E * cg / (2 * Math.PI * k);                                 // m^4
@@ -291,7 +272,7 @@ export function generateFFTSea(settings = {}, N = FFT_N) {
   }
 
   return {
-    settings: s, N, L, dk, kCut, fCut,
+    settings: s, N, L, dk, kCut, fCut, spreading,
     amp, phase: phases, omega, choppiness: s.choppiness, components, slopeTensor,
     numComponents: all.length,
     realizedHm0: 4 * Math.sqrt(totalVariance),

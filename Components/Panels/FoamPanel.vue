@@ -24,7 +24,7 @@
 
         <template v-if="settings.mode != 'shape'">
           <p class="derived" v-if="calibration">
-            Wind <b>{{ fmt(calibration.windSpeed, 1) }} m/s</b> (from the ripples): target whitecap coverage
+            Wind <b><wind-speed :value="calibration.windSpeed"></wind-speed></b> (from the ripples): target whitecap coverage
             <b>{{ pct(calibration.coverage) }}</b><template v-if="measured">, drawn <b>{{ pct(measured.coverage + (calibration.small.enabled ? calibration.small.expected : 0)) }}</b></template>
             (adjusted automatically: breaking ×{{ fmt(calibration.gain, 2) }}).
 
@@ -135,6 +135,8 @@
 
 <script>
 
+import WindSpeed from '../WindSpeed.vue';
+
 export default {
   name: "FoamPanel",
   mounted() {
@@ -197,6 +199,9 @@ export default {
       return (v == null || !isFinite(v)) ? '–' : Number(v).toFixed(d);
     },
   },
+  components: {
+    'wind-speed': WindSpeed,
+  }
 }
 </script>
 

@@ -2,7 +2,7 @@
   <div id="sea-state-panel" class="content" :class="{ embedded }">
 
     <p v-if="!embedded">Generates the sea from a wave spectrum: JONSWAP (Hasselmann et al. 1973), which becomes the Pierson–Moskowitz
-      spectrum of a fully developed sea with γ = 1, and a cos<sup>2s</sup> directional spreading.
+      spectrum of a fully developed sea with γ = 1, and a directional spreading: the same at every frequency, or changing with the frequency after buoy measurements.
       <template v-if="s.method == 'gerstner'">Without the FFT (Scene &gt; Quality: Low, or a browser that cannot run it) the
         spectrum is drawn with {{ s.numComponents }} Gerstner waves, computed for every vertex. Fewer waves are faster.</template>
       <template v-else>The spectrum is
@@ -37,9 +37,41 @@
           <span class="knob-value">{{ compass(s.Mdir) }}</span>
         </div>
       </div>
+      <!-- Directional spreading: constant (by hand) or changing with the frequency (DirectionalSpreading.js) -->
       <div class="container-horizontal">
-        <span title="Directional spread sigma1 (Kuik et al. 1988). Over ~80 degrees the waves come from all directions">Directional spread</span>
+        <span title="How the energy of each frequency spreads in direction around the mean direction. Constant: the same spread at every frequency. The others follow buoy measurements: the spread is narrowest near the peak and grows away from it">Directional spreading</span>
+        <div><select :value="s.spreadModel" aria-label="Directional spreading" @change="change({ spreadModel: $event.target.value })">
+            <option v-for="m in spreadModels" :key="m.id" :value="m.id">{{ m.title }}</option>
+          </select></div>
+      </div>
+      <div class="container-horizontal" v-if="s.spreadModel == 'constant'">
+        <span title="Directional spread sigma1 (Kuik et al. 1988), the same at every frequency. Over ~80 degrees the waves come from all directions">Directional spread σ<sub>1</sub></span>
         <div><input type="range" min="5" max="80" step="1" :value="s.Spr1" @input="change({ Spr1: Number($event.target.value) })"><span>{{ fmt(s.Spr1, 0) }}°</span></div>
+      </div>
+      <div class="container-horizontal" v-if="spreadNeedsWind">
+        <span title="Wind 10 m above the sea. These spreadings depend on the inverse wave age U10/cp of the peak: a young, growing sea spreads more than an old one">Wind for the spreading (U<sub>10</sub>)</span>
+        <div class="column">
+          <label class="checkbox-label" title="The wind of a JONSWAP sea with this Hm0 and Tp (fetch-limited growth laws of Hasselmann et al. 1973)">
+            <input type="checkbox" :checked="!(s.spreadWind > 0)" @change="toggleSpreadWindAuto($event.target.checked)"> From Hₘ₀ and Tₚ
+          </label>
+          <div v-if="s.spreadWind > 0"><input type="range" min="0.5" max="25" step="0.1" :value="s.spreadWind" @input="change({ spreadWind: Number($event.target.value) })"><span><wind-speed :value="s.spreadWind"></wind-speed></span></div>
+          <span v-else class="derived"><wind-speed :value="spreadInfo.windSpeed"></wind-speed></span>
+        </div>
+      </div>
+      <div class="container-horizontal" v-if="s.spreadModel == 'goda'">
+        <span title="Value of s at the peak (Goda & Suzuki 1975): 10 for wind waves, 25 for swell with a short decay distance, 75 for swell with a long decay distance. Higher: narrower">Peak s<sub>max</sub></span>
+        <div class="column">
+          <div class="segmented" role="group" aria-label="Typical values of s_max">
+            <button v-for="g in godaSmax" :key="g.value" class="clickable" :class="{ 'button-active': s.spreadSmax == g.value }"
+              :aria-pressed="s.spreadSmax == g.value" @click="change({ spreadSmax: g.value })">{{ g.title }} ({{ g.value }})</button>
+          </div>
+          <div><input type="range" min="1" max="100" step="1" :value="s.spreadSmax" @input="change({ spreadSmax: Number($event.target.value) })"><span>{{ fmt(s.spreadSmax, 0) }}</span></div>
+        </div>
+      </div>
+      <div class="container-horizontal" v-if="spreadInfo.peak != null">
+        <span title="Directional spread sigma1 (Kuik et al. 1988) of the spreading at a few frequencies (fp: peak frequency)">Resulting σ<sub>1</sub></span>
+        <span class="derived">{{ fmt(spreadInfo.low, 0) }}° at 0.8 f<sub>p</sub>, {{ fmt(spreadInfo.peak, 0) }}° at f<sub>p</sub>,
+          {{ fmt(spreadInfo.high, 0) }}° at 2 f<sub>p</sub><template v-if="spreadNeedsWind">;&nbsp;U<sub>10</sub>/c<sub>p</sub>&nbsp;{{ fmt(spreadInfo.iwa, 2) }}</template></span>
       </div>
       <div class="container-horizontal">
         <span title="Horizontal displacement of the components (Tessendorf's lambda). 1: every component is a trochoid (Gerstner wave). 0: sinusoids, no horizontal motion">Choppiness λ</span>
@@ -53,6 +85,11 @@
         </div>
       </div>
     </div>
+
+    <template v-if="spreadInfo.peak != null && s.spreadModel != 'constant'">
+      <p class="chart-title">Directional spread by frequency</p>
+      <div class="chart" ref="chart-spread"></div>
+    </template>
 
     <template v-if="fft">
       <div class="stats">
@@ -96,9 +133,11 @@
 
 <script>
 
+import WindSpeed from '../WindSpeed.vue';
+
 import Knob from '../Knob.vue';
 
-const HM0_MIN = 0.01, HM0_MAX = 8; // m. The sea model floors Hm0 at 0.01 m
+const HM0_MIN = 0.01, HM0_MAX = 10; // m. 10 m: a fully developed sea of 20 m/s (Digital twin). The sea model floors Hm0 at 0.01 m
 
 export default {
   name: "SeaStatePanel",
@@ -107,16 +146,22 @@ export default {
   mounted() {
     window.eventBus.on('OceanEntity_wavesChanged', this.onWavesChanged);
     window.addEventListener('resize', this.drawChart);
+    window.addEventListener('resize', this.drawSpreadChart);
     this.onWavesChanged();
   },
   unmounted() {
     window.eventBus.off('OceanEntity_wavesChanged', this.onWavesChanged);
     window.removeEventListener('resize', this.drawChart);
+    window.removeEventListener('resize', this.drawSpreadChart);
     this.isUnmounted = true;
   },
   data() {
     return {
-      s: { method: 'fft', Hm0: 1, Tp: null, gamma: 3.3, Mdir: 0, Spr1: 30, numComponents: 40, choppiness: 1, seed: 1 },
+      s: { method: 'fft', Hm0: 1, Tp: null, gamma: 3.3, Mdir: 0, Spr1: 30, spreadModel: 'constant', spreadWind: null, spreadSmax: 10,
+        numComponents: 40, choppiness: 1, seed: 1 },
+      spreadModels: window.DirectionalSpreading.SPREAD_MODELS,
+      godaSmax: window.DirectionalSpreading.GODA_SMAX,
+      spreadInfo: {},
       isSpectral: false,
       sea: null,
       fft: null,
@@ -127,10 +172,11 @@ export default {
   },
   computed: {
     tpAuto() { return !(this.s.Tp > 0); },
+    spreadNeedsWind() { return window.DirectionalSpreading.needsWind(this.s.spreadModel); },
     resolvedTp() { return this.sea ? this.sea.settings.Tp : this.fft ? this.fft.Tp : NaN; },
   },
   methods: {
-    // Hm0 slider: square-law scale from 0.01 to 8 m, so the calm seas below 0.1 m get room (0.1 m at 11%, 1 m at 35%)
+    // Hm0 slider: square-law scale from 0.01 to 10 m, so the calm seas below 0.1 m get room (0.1 m at 9%, 1 m at 31%)
     hm0ToSlider: function (Hm0) { return Math.sqrt(Math.max(0, Hm0 - HM0_MIN) / (HM0_MAX - HM0_MIN)); },
     sliderToHm0: function (pos) {
       const h = HM0_MIN + (HM0_MAX - HM0_MIN) * pos * pos;
@@ -141,6 +187,7 @@ export default {
       if (!window.sceneManager) return;
       const p = window.sceneManager.ocean.oceanParams.oceanParameters;
       this.s = { method: p.method, Hm0: p.Hm0, Tp: p.Tp, gamma: p.gamma, Mdir: p.Mdir, Spr1: p.Spr1,
+        spreadModel: p.spreadModel, spreadWind: p.spreadWind, spreadSmax: p.spreadSmax,
         numComponents: p.numComponents, choppiness: p.choppiness, seed: p.seed };
       const sea = window.sceneManager.getSea();
       this.isSpectral = !!sea;
@@ -154,7 +201,34 @@ export default {
       this.discreteWaves = discrete;
       this.numDiscrete = fft ? discrete.length : 0;
       this.discreteHm0 = 4 * Math.sqrt(discrete.reduce((m, w) => m + Math.pow(w.hm0 / 2, 2) / 2, 0));
-      this.$nextTick(() => this.drawChart());
+      // Directional spreading of the sea that was generated
+      const src = fft || sea, sp = src && src.spreading;
+      this.spreadingFull = sp || null; // Not reactive: functions
+      this.spreadInfo = sp ? { windSpeed: src.settings.spreadWindResolved, iwa: sp.inverseWaveAge,
+        low: sp.sigma1(0.8 * sp.fp), peak: sp.sigma1(sp.fp), high: sp.sigma1(2 * sp.fp), fCutRatio: fft ? fft.fCut * fft.settings.Tp : NaN } : {};
+      this.$nextTick(() => { this.drawChart(); this.drawSpreadChart(); });
+    },
+    // Wind of the spreading: from Hm0 and Tp (null), or by hand starting from the current one
+    toggleSpreadWindAuto: function (auto) {
+      this.change({ spreadWind: auto ? null : Math.round((this.spreadInfo.windSpeed || 10) * 10) / 10 });
+    },
+    // sigma1 of the spreading against f / fp
+    drawSpreadChart: function () {
+      const sp = this.spreadingFull, el = this.$refs['chart-spread'];
+      if (!sp || !el || this.isUnmounted) return;
+      const C = window.AnalysisCharts.COLORS;
+      const x = Array.from({ length: 251 }, (_, i) => 0.4 + 2.6 * i / 250);
+      const markers = [{ x: 1, label: 'fp' }];
+      if (this.spreadInfo.fCutRatio > 0.4 && this.spreadInfo.fCutRatio < 3) markers.push({ x: this.spreadInfo.fCutRatio, label: 'Ripples' });
+      window.AnalysisCharts.lineChart(el, {
+        height: 170,
+        x: { label: 'Frequency / peak frequency (f / fp)', domain: [0.4, 3] },
+        y: { label: 'Spread σ1 (°)', domain: [0, 85] },
+        series: [{ name: 'σ1', x, y: x.map(r => sp.sigma1(r * sp.fp)), color: C.series[0], unit: '°', digits: 1 }],
+        markers,
+        directLabels: false,
+        tooltipX: v => `${v.toFixed(2)} fp (${(1 / (v * sp.fp)).toFixed(1)} s)`,
+      });
     },
     toggleTpAuto: function (auto) {
       this.change({ Tp: auto ? null : Math.round((this.resolvedTp || 8) * 10) / 10 });
@@ -227,6 +301,7 @@ export default {
     },
   },
   components: {
+    'wind-speed': WindSpeed,
     'knob': Knob,
   }
 }
@@ -321,6 +396,12 @@ export default {
 
 .derived {
   font-weight: 600;
+}
+
+select {
+  border-radius: 5px;
+  font-size: small;
+  max-width: 100%;
 }
 
 .note {

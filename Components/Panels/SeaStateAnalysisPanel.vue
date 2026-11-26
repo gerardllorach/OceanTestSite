@@ -269,7 +269,7 @@
     <div v-if="hasResult && hasRipples" v-show="tab == 'ripples'">
       <div class="stats">
         <span>Source <b>{{ rippleInfo.source }}</b></span>
-        <span>Wind <b>{{ fmt(rippleInfo.windSpeed, 1) }} m/s</b> from <b>{{ fmt(rippleInfo.windDir, 0) }}° {{ compass(rippleInfo.windDir) }}</b></span>
+        <span>Wind <b><wind-speed :value="rippleInfo.windSpeed"></wind-speed></b> from <b>{{ fmt(rippleInfo.windDir, 0) }}° {{ compass(rippleInfo.windDir) }}</b></span>
         <span>Ripples <b>{{ rippleInfo.numRipples }}</b> ({{ rippleInfo.numInBand }} in the buoy band)</span>
         <span>Buoy band <b>&lt; {{ fmt(rippleInfo.cutoff, 2) }} Hz</b></span>
       </div>
@@ -336,6 +336,8 @@
 
 
 <script>
+
+import WindSpeed from '../WindSpeed.vue';
 
 export default {
   name: "SeaStateAnalysisPanel",
@@ -894,6 +896,9 @@ export default {
       this.resizeFrame = requestAnimationFrame(() => this.drawActiveTab());
     },
 
+  },
+  components: {
+    'wind-speed': WindSpeed,
   },
 }
 

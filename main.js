@@ -18,6 +18,29 @@ import { OceanAnalysis } from "./Assets/Scripts/OceanAnalysis/OceanAnalysis.js";
 window.OceanAnalysis = OceanAnalysis;
 import * as AnalysisCharts from "./Assets/Scripts/OceanAnalysis/AnalysisCharts.js";
 window.AnalysisCharts = AnalysisCharts;
+// Wind sea (Pierson-Moskowitz, JONSWAP) for the digital twin
+import * as WindSea from "./Assets/Ocean/WindSea.js";
+window.WindSea = WindSea;
+// Directional spreading models (constant, Mitsuyasu, Hasselmann, Donelan, Banner, Goda)
+import * as DirectionalSpreading from "./Assets/Ocean/DirectionalSpreading.js";
+window.DirectionalSpreading = DirectionalSpreading;
+// Digital twin: shared state of Sea State > Digital twin and of its overlay (bottom-left)
+import * as DigitalTwin from "./Assets/Scripts/DigitalTwin.js";
+window.DigitalTwin = DigitalTwin;
+window.digitalTwin = Vue.reactive({ ...DigitalTwin.DEFAULT_TWIN_STATE });
+
+// Unit of every wind speed in the app (WindSea.WIND_UNITS), as in VISOC: a click on a wind unit goes to the next one,
+// everywhere. Remembered in this browser (when storage is available)
+const WIND_UNIT_KEY = 'OceanTestSite.windUnit';
+let windUnitIndex = 0;
+try { windUnitIndex = Math.max(0, WindSea.WIND_UNITS.findIndex(u => u.unit == localStorage.getItem(WIND_UNIT_KEY))); } catch (e) { }
+window.windUnit = Vue.reactive({
+  index: windUnitIndex,
+  cycle() {
+    this.index = (this.index + 1) % WindSea.WIND_UNITS.length;
+    try { localStorage.setItem(WIND_UNIT_KEY, WindSea.WIND_UNITS[this.index].unit); } catch (e) { }
+  },
+});
 
 
 // Declare event emitter

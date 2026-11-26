@@ -11,6 +11,9 @@
     <!-- Menu, sections and side panel (right), camera buttons (bottom right) -->
     <side-panel></side-panel>
 
+    <!-- Forcing of the digital twin (bottom left), while it is on -->
+    <digital-twin-overlay></digital-twin-overlay>
+
   </div>
 </template>
 
@@ -21,6 +24,7 @@
 // Import components
 import Canvas3D from "./Canvas3D.vue"
 import SidePanel from "./SidePanel.vue"
+import DigitalTwinOverlay from "./DigitalTwinOverlay.vue"
 
 export default {
   name: "AppManager",
@@ -45,6 +49,7 @@ export default {
   components: {
     "canvas3D": Canvas3D,
     "side-panel": SidePanel,
+    "digital-twin-overlay": DigitalTwinOverlay,
   }
 }
 </script>

@@ -77,6 +77,7 @@ import RenderHeightPanel from './Panels/RenderHeightPanel.vue';
 import EnvironmentPanel from './Panels/EnvironmentPanel.vue';
 import QualityPanel from './Panels/QualityPanel.vue';
 import SeaStateGenerationPanel from './Panels/SeaStateGenerationPanel.vue';
+import DigitalTwinPanel from './Panels/DigitalTwinPanel.vue';
 
 // Options of a section hide again if none is clicked within this time
 const COLLAPSE_MS = 4000;
@@ -109,6 +110,7 @@ export default {
         {
           id: 'seastate', title: 'Sea State', icon: '',
           children: [
+            { title: 'Digital twin', icon: '\uf72e', component: 'digital-twin' },
             { title: 'Generation', icon: '', component: 'sea-state-generation' },
             { title: 'Analysis', icon: '', component: 'sea-state-analysis' },
           ]
@@ -293,6 +295,7 @@ export default {
     'environment': EnvironmentPanel,
     'quality': QualityPanel,
     'sea-state-generation': SeaStateGenerationPanel,
+    'digital-twin': DigitalTwinPanel,
   }
 }
 </script>
