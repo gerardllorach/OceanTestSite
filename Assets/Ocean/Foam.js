@@ -61,7 +61,7 @@ import * as THREE from 'three';
 
 export const DEFAULT_FOAM_SETTINGS = {
   enabled: true,
-  mode: 'wind',          // 'wind': threshold from the wind (Monahan). 'shape': fixed threshold on the Jacobian
+  mode: 'shape',         // 'shape' (default): fixed threshold on the Jacobian. 'wind': threshold from the wind (Monahan)
   amount: 1,             // 'wind': multiplies the target whitecap coverage
   scaleSplit: 'quantile', // 'wind': 'quantile' (same fraction per scale) or 'phillips' (Lambda(c) ~ c^-6)
   threshold: 0.6,        // 'shape': Jacobian below which a crest breaks
@@ -156,7 +156,7 @@ function divergenceSigmas(grid, lambdas) {
 // gain: multiplies the breaking fractions of the FFT sea scales in 'wind' mode (feedback from the coverage drawn)
 export function foamCalibration(fftSea, windSpeed, settings = DEFAULT_FOAM_SETTINGS, ripples = null, gain = 1) {
   const s = { ...DEFAULT_FOAM_SETTINGS, ...settings };
-  const mode = FOAM_MODES.includes(s.mode) ? s.mode : 'wind';
+  const mode = FOAM_MODES.includes(s.mode) ? s.mode : 'shape';
   const scaleSplit = FOAM_SCALE_SPLITS.includes(s.scaleSplit) ? s.scaleSplit : 'quantile';
   const U = Math.max(0, Number(windSpeed) || 0);
   const choppiness = fftSea ? (fftSea.choppiness ?? 1) : 1;
