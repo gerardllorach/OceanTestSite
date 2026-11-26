@@ -10,6 +10,7 @@ import { DEFAULT_RIPPLE_SETTINGS, RIPPLE_N, generateRipples, travelVector } from
 import { FFT_N } from '/OceanTestSite/Assets/Ocean/SeaSpectrum.js';
 import { FFTOcean } from '/OceanTestSite/Assets/Ocean/FFTOcean.js';
 import { FoamSimulation, DEFAULT_FOAM_SETTINGS, FOAM_DETAIL_N, FOAM_DETAIL_SIZE, foamCalibration, foamDetailTexture, foamRadiusLod } from '/OceanTestSite/Assets/Ocean/Foam.js';
+import { Spray } from '/OceanTestSite/Assets/Ocean/Spray.js';
 import { RippleLoop, RIPPLE_LOOP_N, RIPPLE_LOOP_FRAMES, RIPPLE_LOOP_PERIOD } from '/OceanTestSite/Assets/Ocean/RippleLoop.js';
 import { QUALITY_PRESETS, SHADING_OPTIONS, initialQuality, loadShadingOptions } from '/OceanTestSite/Assets/Ocean/Quality.js';
 
@@ -38,6 +39,8 @@ class OceanEntity {
   
   // Constructor
   constructor(scene){
+
+    this.scene = scene; // The spray droplets are added to it (setupFFT)
 
     // Rendering quality (Assets/Ocean/Quality.js): grid size, FFT or Gerstner sea, FFT grids
     this.qualityName = initialQuality();
@@ -139,9 +142,19 @@ class OceanEntity {
         u_smallThreshold: {value: new THREE.Vector2(-1e3, -1e3)},
         u_smallWidth: {value: new THREE.Vector2(1, 1)},
         u_smallExpected: {value: 0},
+        u_smallFoam: {value: DEFAULT_FOAM_SETTINGS.smallFoam},           // Ripple whitecaps drawn (0: off)
+        u_smallFoamScale: {value: DEFAULT_FOAM_SETTINGS.smallFoamScale}, // Their lace pattern scale
+        u_sprayFoamScale: {value: DEFAULT_FOAM_SETTINGS.sprayFoamScale}, // Lace pattern scale of the spray foam
+        u_sprayFoamFull: {value: DEFAULT_FOAM_SETTINGS.sprayFoamFull},   // Droplet area for the maximum foam
+        u_sprayFoamLog: {value: DEFAULT_FOAM_SETTINGS.sprayFoamLog},     // Steepness of the logarithm
+        u_sprayFoamMax: {value: DEFAULT_FOAM_SETTINGS.sprayFoamMax},     // Maximum of the spray foam
         u_seaSigmaJ: {value: 0.1},
         u_foamSurge: {value: DEFAULT_FOAM_SETTINGS.surge},           // Forward surge of a collapsing crest
         u_seaDirection: {value: new THREE.Vector2(0, 1)},            // Mean travel direction of the FFT sea
+        // Spray foam (Assets/Ocean/Spray.js): the landed droplets, around the camera
+        u_sprayFoamEnabled: {value: false},
+        u_sprayFoam: {value: null},
+        u_sprayFoamWindow: {value: new THREE.Vector3(0, 0, 64)},     // (min x, min z, side) in metres
         // Debug views: 0 final, 1 Fresnel, 2 normal, 3 roughness, 4 ripple slopes, 5 long-wave stretch, 6 foam,
         // 7 Jacobian of the FFT sea, 8 foam by breaking scale
         u_debugView: {value: 0},
@@ -223,11 +236,13 @@ class OceanEntity {
   // Regenerates the sea (the FFT grid size depends on the quality); the caller updates the textures
   setupFFT() {
     const u = this.oceanTile.material.uniforms;
-    [this.fft, this.rippleFFT, this.foam].forEach(f => f && f.dispose());
-    this.fft = this.rippleFFT = this.foam = null;
+    [this.fft, this.rippleFFT, this.foam, this.spray].forEach(f => f && f.dispose());
+    this.fft = this.rippleFFT = this.foam = this.spray = null;
     u.u_fftEnabled.value = u.u_rippleEnabled.value = u.u_foamEnabled.value = false;
     u.u_foam.value = u.u_foamCollapse.value = null;
     u.u_smallEnabled.value = false;
+    u.u_sprayFoamEnabled.value = false;
+    u.u_sprayFoam.value = null;
     ['u_fftDisplacement', 'u_fftSlopes', 'u_fftExtra', 'u_rippleDisplacement', 'u_rippleSlopes', 'u_rippleExtra']
       .forEach(name => u[name].value = null);
 
@@ -266,6 +281,9 @@ class OceanEntity {
     u.u_foam.value = this.foam.texture;
     u.u_foamCollapse.value = this.foam.collapseTexture;
     u.u_foamDetail.value = foamDetailTexture();
+    // Spray droplets from the breakers (float state where the device can render to it)
+    this.spray = new Spray(renderer, q.sprayN || 64, q.sprayFoamN || 512, u, FFTOcean.isSupported(renderer, false));
+    this.scene.add(this.spray.points);
 
     if (params.oceanParameters.method == 'gerstner') {
       params.setSeaSettings({ method: 'fft' }, true);
@@ -348,6 +366,7 @@ class OceanEntity {
     if (sea) this.fft.update(this.time);
     // New waves: the old foam belongs to waves that no longer exist (recalibrated with the ripples, see updateFoam)
     if (this.foam) this.foam.reset();
+    if (this.spray) this.spray.reset();
   }
 
 
@@ -506,7 +525,9 @@ class OceanEntity {
   foamGainClock = 0;     // s since the last adjustment
 
   // partial: {enabled, mode ('wind' | 'shape'), amount, scaleSplit ('quantile' | 'phillips'), threshold, lead,
-  // persistence, collapse, radius (x wavelength), trailDamping, surge, small (small breakers from the ripples)}
+  // persistence, collapse, radius (x wavelength), trailDamping, surge, small (small breakers from the ripples), spray,
+  // smallFoam, smallFoamScale, sprayAmount, sprayLarge, sprayFoam, sprayFoamPatch, sprayFoamLifetime, sprayFoamScale,
+  // sprayFoamRadius, sprayFoamFull, sprayFoamLog, sprayFoamMax (Assets/Ocean/Spray.js)}
   setFoamSettings(partial) {
     const wasEnabled = this.foamSettings.enabled;
     Object.assign(this.foamSettings, partial);
@@ -533,7 +554,9 @@ class OceanEntity {
     if (this.foam.age < 2 * c.tauFoam[1]) return;
     const m = await this.foam.measureCoverage();
     if (!m || this.foamCalibration !== c) return;
-    const target = Math.max(1e-5, (c.coverage || 0) - (c.small.enabled ? c.small.expected : 0));
+    // The ripple whitecaps are drawn at smallFoam (0.75 when their expected coverage was estimated)
+    const smallDrawn = c.small.enabled ? c.small.expected * (this.foamSettings.smallFoam ?? 0.5) / 0.75 : 0;
+    const target = Math.max(1e-5, (c.coverage || 0) - smallDrawn);
     if (!(c.coverage > 1e-5)) return;
     const ratio = Math.min(2, Math.max(0.5, Math.sqrt(target / Math.max(m.coverage, 1e-5))));
     const gain = Math.min(100, Math.max(0.05, this.foamGain * ratio));
@@ -576,6 +599,20 @@ class OceanEntity {
       u.u_smallExpected.value = small.expected;
     }
     u.u_foamSurge.value = c ? c.surge : 0;
+    u.u_smallFoam.value = this.foamSettings.smallFoam ?? DEFAULT_FOAM_SETTINGS.smallFoam;
+    u.u_smallFoamScale.value = this.foamSettings.smallFoamScale ?? DEFAULT_FOAM_SETTINGS.smallFoamScale;
+    u.u_sprayFoamScale.value = this.foamSettings.sprayFoamScale ?? DEFAULT_FOAM_SETTINGS.sprayFoamScale;
+    u.u_sprayFoamFull.value = Math.max(0.01, this.foamSettings.sprayFoamFull ?? DEFAULT_FOAM_SETTINGS.sprayFoamFull);
+    u.u_sprayFoamMax.value = this.foamSettings.sprayFoamMax ?? DEFAULT_FOAM_SETTINGS.sprayFoamMax;
+    u.u_sprayFoamLog.value = Math.max(0.1, this.foamSettings.sprayFoamLog ?? DEFAULT_FOAM_SETTINGS.sprayFoamLog);
+    if (this.spray) {
+      this.spray.windSpeed = windSpeed;
+      if (small) this.spray.setSmallWavelengths(small.lambdas);
+      const fs = this.foamSettings, d = DEFAULT_FOAM_SETTINGS;
+      this.spray.setSettings({ enabled: !!(fs.spray && u.u_foamEnabled.value), amount: fs.sprayAmount ?? 1,
+        fromLarge: !!fs.sprayLarge, foam: fs.sprayFoam !== false, foamPatch: fs.sprayFoamPatch ?? d.sprayFoamPatch,
+        foamLifetime: fs.sprayFoamLifetime ?? d.sprayFoamLifetime, foamRadius: fs.sprayFoamRadius ?? d.sprayFoamRadius });
+    }
     if (sea) u.u_seaDirection.value.fromArray(travelVector(sea.settings.Mdir));
     if (window.eventBus) window.eventBus.emit('OceanEntity_foamChanged', { settings: this.getFoamSettings(), calibration: c,
       available: !!this.foam });
@@ -621,7 +658,8 @@ class OceanEntity {
     if (color) u.u_sunColor.value.set(color.r, color.g, color.b);
   }
 
-  // 0 final, 1 Fresnel, 2 normal, 3 roughness, 4 ripple slopes, 5 long-wave stretch, 6 foam, 7 Jacobian
+  // 0 final, 1 Fresnel, 2 normal, 3 roughness, 4 ripple slopes, 5 long-wave stretch, 6 foam, 7 Jacobian, 8 foam by
+  // scale (yellow: spray foam)
   setDebugView(view) {
     if (this.oceanTile) this.oceanTile.material.uniforms.u_debugView.value = Number(view) || 0;
   }
@@ -727,7 +765,8 @@ class OceanEntity {
 
 
   // Update
-  update(dt){
+  // camera: the camera that draws the scene (the spray is only made where its droplets are visible)
+  update(dt, camera){
     this.time += dt;
 
     // Update shader parameters
@@ -744,6 +783,14 @@ class OceanEntity {
         if (this.foamGainClock > 2) { this.foamGainClock = 0; this.adjustFoamGain(); }
         oceanTile.material.uniforms.u_foam.value = this.foam.texture;
         oceanTile.material.uniforms.u_foamCollapse.value = this.foam.collapseTexture;
+      }
+      // Spray: one step of the droplets near the camera, and the foam of those that landed
+      if (this.spray) {
+        this.spray.update(dt, camera);
+        const u = oceanTile.material.uniforms;
+        u.u_sprayFoamEnabled.value = this.spray.foamActive;
+        u.u_sprayFoam.value = this.spray.foamTexture;
+        u.u_sprayFoamWindow.value.copy(this.spray.window);
       }
       // Ripple field loop: the two frames to blend at this time
       if (this.rippleLoop && oceanTile.material.uniforms.u_rippleLoopEnabled.value)

@@ -10,7 +10,7 @@ import { createSpreading, needsWind } from '/OceanTestSite/Assets/Ocean/Directio
 import { lightWindFactor } from '/OceanTestSite/Assets/Ocean/RippleSpectrum.js';
 
 export const DEFAULT_TWIN_STATE = {
-  enabled: false,      // On: the twin drives Generation, and the overlay shows the forcing
+  enabled: true,       // On (default): the twin drives Generation, and the overlay shows the forcing
   driver: 'wind',      // 'wind' (the others are not available yet: 'waves', 'buoy', 'model')
   initialised: false,  // Started from what Generation had
   model: 'jonswap',    // 'jonswap' (fetch-limited, default) or 'pm' (Pierson-Moskowitz, fully developed)
@@ -72,6 +72,15 @@ export function targetOf(st) {
     ripples: Object.keys(ripples).length ? ripples : null,
     foam: st.driveStrainFoam ? { mode: 'shape', threshold: breakingThresholdFor(U) } : null,
   };
+}
+
+// The first time: start from what Generation has (wind direction and spread of the sea, wind of the ripples), so that
+// turning the twin on changes the sea as little as possible
+export function initialiseFrom(st, sceneManager) {
+  if (st.initialised || !sceneManager) return;
+  const p = sceneManager.ocean.oceanParams.oceanParameters, r = sceneManager.getRipples();
+  Object.assign(st, { initialised: true, windDir: Math.round(p.Mdir) || 0, spread: Math.min(80, Math.max(5, Math.round(p.Spr1) || 30)),
+    windSpeed: r ? Math.round(r.windSpeed * 10) / 10 : st.windSpeed });
 }
 
 // Send the target to Generation (its panels and the ocean follow these events)

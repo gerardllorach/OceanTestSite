@@ -1,8 +1,9 @@
 // Rendering quality presets. Phones and tablets start in 'low', desktops in 'high'. The choice can be changed in
 // Scene > Quality (remembered in this browser) or forced with ?quality=low|medium|high
 //
-//   high     FFT sea 512, ripple FFT 256, float32 FFT, 1M-vertex grid
-//   medium   FFT sea 256 (shortest sea wave 8 m instead of 4 m), ripple FFT 256, half-float FFT, 500k-vertex grid
+//   high     FFT sea 512, ripple FFT 256, float32 FFT, 1M-vertex grid, 262k spray droplets and a 1024^2 spray foam texture
+//   medium   FFT sea 256 (shortest sea wave 8 m instead of 4 m), ripple FFT 256, half-float FFT, 500k-vertex grid,
+//            65k spray droplets and a 512^2 spray foam texture
 //   low      no FFT: the pipeline of the first version, 10 Gerstner components and simple shading (SIMPLE_SHADING in
 //            OceanProjectedGridShader.js: Schlick Fresnel against a sky gradient, Phong sun highlight, mediump),
 //            ripples from the looping field, 300k-vertex grid. Options add realism back step by step on phones
@@ -20,8 +21,8 @@
 //   surface always faces the camera and only the folds turn away
 export const QUALITY_PRESETS = {
   low: { label: 'Low', fft: false, simpleShading: true, gerstnerCount: 10, gridVertices: 300000, opaque: true, rippleLoop: true },
-  medium: { label: 'Medium', fft: true, seaN: 256, rippleN: 256, halfFloat: true, gridVertices: 500000 },
-  high: { label: 'High', fft: true, seaN: 512, rippleN: 256, halfFloat: false, gridVertices: 1000000 },
+  medium: { label: 'Medium', fft: true, seaN: 256, rippleN: 256, halfFloat: true, gridVertices: 500000, sprayN: 256, sprayFoamN: 512 },
+  high: { label: 'High', fft: true, seaN: 512, rippleN: 256, halfFloat: false, gridVertices: 1000000, sprayN: 512, sprayFoamN: 1024 },
 };
 
 // Options of the simple shading ('low'), switched on one by one to add realism on phones. Each one is a shader

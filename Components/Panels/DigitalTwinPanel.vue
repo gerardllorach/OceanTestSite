@@ -237,12 +237,7 @@ export default {
     window.eventBus.on('OceanEntity_ripplesChanged', this.refresh);
     window.eventBus.on('OceanEntity_foamChanged', this.refresh);
     // The first time: start from what Generation has, so that turning the twin on changes the sea as little as possible
-    const st = window.digitalTwin;
-    if (!st.initialised && window.sceneManager) {
-      const p = window.sceneManager.ocean.oceanParams.oceanParameters, r = window.sceneManager.getRipples();
-      Object.assign(st, { initialised: true, windDir: Math.round(p.Mdir) || 0, spread: Math.min(80, Math.max(5, Math.round(p.Spr1) || 30)),
-        windSpeed: r ? Math.round(r.windSpeed * 10) / 10 : st.windSpeed });
-    }
+    window.DigitalTwin.initialiseFrom(window.digitalTwin, window.sceneManager);
     this.refresh();
   },
   unmounted() {

@@ -89,12 +89,96 @@
               @input="change({ radius: Number($event.target.value) })"><span>×{{ settings.radius.toFixed(2) }} wavelength</span></div>
         </div>
         <div class="container-horizontal">
-          <span title="Waves of about 1 to 4 m (the ripple grid) break too, mostly on the front faces of the long waves. Their foam is drawn while they break, without a trail">Small breakers</span>
+          <span title="Waves of about 1 to 4 m (the ripple grid) break too, mostly on the front faces of the long waves. Their foam (ripple whitecaps) is drawn while they break, without a trail, and they throw spray">Small breakers</span>
           <div>
             <label class="checkbox-label"><input type="checkbox" :checked="settings.small !== false"
                 @change="change({ small: $event.target.checked })"> From the ripples</label>
           </div>
         </div>
+        <template v-if="settings.small !== false">
+          <div class="container-horizontal">
+            <span title="How dense the foam of the small breakers is drawn (a lace, at most this fraction of the pattern). Off: not drawn, but the small breakers still throw spray (and its foam, below)">Ripple whitecaps</span>
+            <div><input type="range" min="0" max="1" step="0.05" :value="settings.smallFoam ?? 0.5"
+                @input="change({ smallFoam: Number($event.target.value) })"><span>{{ (settings.smallFoam ?? 0.5) > 0 ? Math.round((settings.smallFoam ?? 0.5) * 100) + '%' : 'Off' }}</span></div>
+          </div>
+          <div class="container-horizontal" v-if="(settings.smallFoam ?? 0.5) > 0">
+            <span title="Scale of the lace pattern of the ripple whitecaps (x1: the same as the large whitecaps). Coarser: larger holes, which stay visible further away; finer: smaller holes, which blend into a uniform white sooner">Ripple foam lace</span>
+            <div><input type="range" min="0.25" max="6" step="0.05" :value="settings.smallFoamScale ?? 2.5"
+                @input="change({ smallFoamScale: Number($event.target.value) })"><span>{{ laceLabel(settings.smallFoamScale ?? 2.5) }}</span></div>
+          </div>
+        </template>
+
+        <!-- SPRAY -->
+        <div class="container-horizontal">
+          <span title="Droplets thrown off by the breaking crests, more by the large ones (energy ~ c^5), with the crest speed and carried by the wind (light droplets further). Above 7.5 m/s the wind also tears spume off the crests. They fall back into the sea as foam: droplets landing close together merge into one patch. Only made near the camera, where a droplet is at least a pixel wide">Spray</span>
+          <div>
+            <label class="checkbox-label"><input type="checkbox" :checked="settings.spray !== false"
+                @change="change({ spray: $event.target.checked })"> Droplets</label>
+          </div>
+        </div>
+        <template v-if="settings.spray !== false">
+          <div class="container-horizontal">
+            <span title="Multiplies the emission of droplets from the breakers. The wind sets how far they fly: in a light wind they barely leave the surface">Spray amount</span>
+            <div><input type="range" min="0" max="3" step="0.1" :value="settings.sprayAmount ?? 1"
+                @input="change({ sprayAmount: Number($event.target.value) })"><span>×{{ (settings.sprayAmount ?? 1).toFixed(1) }}</span></div>
+          </div>
+          <div class="container-horizontal">
+            <span title="Spray from the breaking crests of the large waves too, not only from the small breakers">Spray from</span>
+            <div>
+              <label class="checkbox-label"><input type="checkbox" :checked="!!settings.sprayLarge"
+                  @change="change({ sprayLarge: $event.target.checked })"> Large breakers too</label>
+            </div>
+          </div>
+          <div class="container-horizontal">
+            <span title="A droplet falling into the sea leaves a small patch of bubbles. Droplets landing close together merge into one patch of foam, drawn with the same lace as the whitecaps">Spray foam</span>
+            <div>
+              <label class="checkbox-label"><input type="checkbox" :checked="settings.sprayFoam !== false"
+                  @change="change({ sprayFoam: $event.target.checked })"> Landed droplets</label>
+            </div>
+          </div>
+          <template v-if="settings.sprayFoam !== false">
+            <div class="container-horizontal">
+              <span title="Size of the bubble patch a landed droplet leaves, times the droplet's diameter (its area grows with the square). About 1.25 is realistic; larger exaggerates it">Spray foam size</span>
+              <div><input type="range" min="0.5" max="8" step="0.25" :value="settings.sprayFoamPatch ?? 4"
+                  @input="change({ sprayFoamPatch: Number($event.target.value) })"><span>×{{ (settings.sprayFoamPatch ?? 4).toFixed(2) }} droplet</span></div>
+            </div>
+            <div class="container-horizontal">
+              <span title="How long the spray foam lasts (e-folding time: thick patches stay visible longer than thin ones)">Spray foam lifetime</span>
+              <div><input type="range" min="0.1" max="3" step="0.05" :value="settings.sprayFoamLifetime ?? 0.6"
+                  @input="change({ sprayFoamLifetime: Number($event.target.value) })"><span>{{ (settings.sprayFoamLifetime ?? 0.6).toFixed(2) }} s</span></div>
+            </div>
+            <div class="container-horizontal">
+              <span title="The foam of each landed droplet is spread over this radius, so the landings of a breaker group into one patch (like the foam of a breaking wave) instead of separate spots">Spray foam radius</span>
+              <div><input type="range" min="0.05" max="1" step="0.05" :value="settings.sprayFoamRadius ?? 0.25"
+                  @input="change({ sprayFoamRadius: Number($event.target.value) })"><span>{{ (settings.sprayFoamRadius ?? 0.25).toFixed(2) }} m</span></div>
+            </div>
+            <div class="container-horizontal">
+              <span title="Summed area of the landed droplets (per unit area) that makes the maximum foam. Higher: more droplets are needed to whiten the sea">Spray foam full at</span>
+              <div><input type="range" min="0.2" max="10" step="0.1" :value="settings.sprayFoamFull ?? 3"
+                  @input="change({ sprayFoamFull: Number($event.target.value) })"><span>{{ (settings.sprayFoamFull ?? 3).toFixed(1) }}× area</span></div>
+            </div>
+            <div class="container-horizontal">
+              <span title="Logarithmic growth: foam = max log(1 + k area / full) / log(1 + k). Higher k: the first droplets already make a good deal of foam, and the rest adds slowly; k near 1: almost linear">Spray foam first drops</span>
+              <div><input type="range" min="1" max="200" step="1" :value="settings.sprayFoamLog ?? 30"
+                  @input="change({ sprayFoamLog: Number($event.target.value) })"><span>k = {{ settings.sprayFoamLog ?? 30 }} ({{ pct(firstDrops) }} at 1/30 of full)</span></div>
+            </div>
+            <div class="container-horizontal">
+              <span title="Maximum of the spray foam (cap), however many droplets land">Spray foam max</span>
+              <div><input type="range" min="0.1" max="1" step="0.05" :value="settings.sprayFoamMax ?? 0.85"
+                  @input="change({ sprayFoamMax: Number($event.target.value) })"><span>{{ Math.round((settings.sprayFoamMax ?? 0.85) * 100) }}%</span></div>
+            </div>
+            <div class="container-horizontal">
+              <span title="Scale of the lace pattern of the spray foam (x1: the same as the large whitecaps). Coarser: larger holes; finer: smaller holes">Spray foam lace</span>
+              <div><input type="range" min="0.25" max="6" step="0.05" :value="settings.sprayFoamScale ?? 2.5"
+                  @input="change({ sprayFoamScale: Number($event.target.value) })"><span>{{ laceLabel(settings.sprayFoamScale ?? 2.5) }}</span></div>
+            </div>
+          </template>
+          <p class="derived" v-if="spray">
+            <template v-if="spray.active && spray.distance">Droplets drawn within <b>{{ fmt(spray.distance, 0) }} m</b> of the camera.</template>
+            <template v-else-if="spray.active">Droplets drawn in this view.</template>
+            <template v-else>No droplets now: the camera is too far from the sea to see them<template v-if="spray.distance"> (closer than {{ fmt(spray.distance, 0) }} m)</template>.</template>
+          </p>
+        </template>
       </template>
       <p v-else class="hint-low">No whitecaps at this quality: they need the FFT sea (Scene &gt; Quality: medium or high).</p>
     </div>
@@ -156,13 +240,21 @@ export default {
   data() {
     return {
       settings: { enabled: true, mode: 'shape', amount: 1, scaleSplit: 'quantile', threshold: 0.6, lead: 0.3, persistence: 1,
-        collapse: 0.6, radius: 0.75, trailDamping: 0.5, surge: 2, small: true },
+        collapse: 0.6, radius: 0.75, trailDamping: 0.5, surge: 2, small: true, smallFoam: 0.5, smallFoamScale: 2.5,
+        spray: true, sprayAmount: 1, sprayLarge: true, sprayFoam: true, sprayFoamPatch: 4, sprayFoamLifetime: 0.6,
+        sprayFoamScale: 2.5, sprayFoamRadius: 0.25, sprayFoamFull: 3, sprayFoamLog: 30, sprayFoamMax: 0.85 },
       calibration: null,
       available: true,
       measured: null,
+      spray: null,
     }
   },
   computed: {
+    // Spray foam made by 1/30 of the droplets that whiten the sea (logarithmic growth)
+    firstDrops() {
+      const k = this.settings.sprayFoamLog ?? 30;
+      return Math.log(1 + k / 30) / Math.log(1 + k);
+    },
     // Scales of breakers: the small ones (ripples) and the FFT sea, from the shortest
     scaleRows() {
       const c = this.calibration;
@@ -182,6 +274,8 @@ export default {
     measure: async function () {
       if (!window.sceneManager || !this.available || !this.settings.enabled) { this.measured = null; return; }
       try {
+        const ocean = window.sceneManager.ocean;
+        this.spray = ocean && ocean.spray ? { ...ocean.spray.status } : null;
         this.measured = await window.sceneManager.measureFoamCoverage();
       } catch (e) {
         this.measured = null;
@@ -194,6 +288,10 @@ export default {
     pct: function (v) {
       if (v == null || !isFinite(v)) return '–';
       return (v * 100).toFixed(v < 0.01 ? 2 : 1) + '%';
+    },
+    // Scale of a lace pattern, relative to the large whitecaps'
+    laceLabel: function (v) {
+      return v < 1 ? `×${(1 / v).toFixed(1)} coarser` : v > 1 ? `×${v.toFixed(2)} finer` : 'as the whitecaps';
     },
     fmt: function (v, d = 2) {
       return (v == null || !isFinite(v)) ? '–' : Number(v).toFixed(d);

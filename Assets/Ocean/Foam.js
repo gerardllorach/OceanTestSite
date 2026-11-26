@@ -71,7 +71,21 @@ export const DEFAULT_FOAM_SETTINGS = {
   radius: 0.75,          // Radius of the collapse and of the trail damping, times the breaking wavelength
   trailDamping: 0.5,     // How much the foam trail damps the waves that pass through it (0: off)
   surge: 2,              // Forward surge of a collapsing crest, times its height (0: off)
-  small: true,           // Small breakers from the ripples (waves of ~1-4 m)
+  small: true,           // Small breakers from the ripples (waves of ~1-4 m): their foam and their spray
+  smallFoam: 0.5,        // Ripple whitecaps drawn: 0 off (the small breakers still throw spray) .. 1 dense
+  smallFoamScale: 2.5,   // Their lace pattern, finer than the large whitecaps' (x scale of the detail)
+  spray: true,           // Spray droplets from the breakers (Assets/Ocean/Spray.js), near the camera
+  sprayAmount: 1,        // Multiplies the emission (which grows with the wind)
+  sprayLarge: true,      // Spray from the large breakers too (not only the small ones)
+  sprayFoam: true,       // The droplets that land turn into foam (merged where they land close together)
+  sprayFoamPatch: 4,     // Their bubble patch, times the droplet's diameter (exaggerated; ~1.25 is realistic)
+  sprayFoamLifetime: 0.6, // s, how long the spray foam lasts (e-folding)
+  sprayFoamScale: 2.5,   // Its lace pattern (x scale of the detail)
+  sprayFoamRadius: 0.25, // m: the foam of each landed droplet is spread over this radius (groups the landings)
+  sprayFoamFull: 3,      // Summed droplet area (per unit area) that makes the maximum foam
+  sprayFoamLog: 30,      // foam = max log(1 + k v / full) / log(1 + k): the first droplets make some foam (k higher:
+                         // more), many are needed to whiten the sea
+  sprayFoamMax: 0.85,    // Its maximum (cap)
 };
 export const FOAM_MODES = ['wind', 'shape'];
 export const FOAM_SCALE_SPLITS = ['quantile', 'phillips'];

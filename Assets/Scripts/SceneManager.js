@@ -636,7 +636,7 @@ class SceneManager{
 
         // Update ocean grid
         this.ocean.gridEntity.update(this.ocean.oceanTile, this.selectedCamera);
-        this.ocean.update(dt);
+        this.ocean.update(dt, this.selectedCamera);
 
       }
     }

@@ -1,3 +1,5 @@
+import { FOAM_STATE_GLSL, FOAM_DISPLACEMENT_GLSL, SMALL_BREAKERS_GLSL } from '/OceanTestSite/Assets/Ocean/OceanShaderChunks.js';
+
 // https://threejs.org/docs/index.html#api/en/materials/ShaderMaterial
 // https://threejs.org/docs/#api/en/renderers/webgl/WebGLProgram -- cameraPosition matrices etc...
 // https://webglfundamentals.org/webgl/lessons/webgl-shaders-and-glsl.html
@@ -198,18 +200,8 @@ export const OceanProjectedGridVertShader = /* glsl */ `
   }
 
 
-  // Collapse around a point (Assets/Ocean/Foam.js): each scale l of breakers read at its own radius (mip
-  // u_foamRadiusLod + l, not finer than minLod), the strongest
-  float foamCollapse(vec2 uv, float minLod) {
-    float c = textureLod(u_foamCollapse, uv, max(minLod, u_foamRadiusLod)).x;
-    c = max(c, textureLod(u_foamCollapse, uv, max(minLod, u_foamRadiusLod + 1.0)).y);
-    c = max(c, textureLod(u_foamCollapse, uv, max(minLod, u_foamRadiusLod + 2.0)).z);
-    return max(c, textureLod(u_foamCollapse, uv, max(minLod, u_foamRadiusLod + 3.0)).w);
-  }
-  // Scale (0..1: breakers of scale 0..3) of the foam of a foam state (foam, breaking, bubbles, foam x scale)
-  float foamScaleOf(vec4 state) {
-    return state.r > 1e-3 ? clamp(state.a / state.r, 0.0, 1.0) : 0.0;
-  }
+${FOAM_STATE_GLSL}
+${FOAM_DISPLACEMENT_GLSL}
 
   // Displacement of an FFT cascade at rest position xz. Mip level from the size of the mesh: where the mesh is coarser
   // than the texels, it takes the filtered displacement instead of aliasing it
@@ -301,26 +293,10 @@ export const OceanProjectedGridVertShader = /* glsl */ `
     #ifndef SIMPLE_SHADING
     if (u_fftEnabled) {
       vec3 seaDisplacement = cascadeDisplacement(u_fftDisplacement, u_fftSize, u_fftN, intersectionPoint.xz, footprint);
-      // Waves damped where they have broken (Assets/Ocean/Foam.js; same expressions as its foam pass), each at the
-      // radius of its breakers (radiusFactor x their wavelength), ahead, behind and to the sides:
-      //  - trail: the foam and bubbles left behind (not the crest breaking now) damp the crests that pass through them
-      //  - collapse: the crest that has just broken drops (up to 80% at the top, the water around it rises a little)
-      //    and squeezes less; its water surges forward (the mean direction of the sea) by u_foamSurge times the crest
-      //    height while the collapse grows, then drifts back as it recovers (both in fractions of the wave period)
-      if (u_foamEnabled) {
-        vec2 foamUV = intersectionPoint.xz / u_fftSize + 0.5 / u_fftN;
-        float footLod = cascadeLod(u_fftSize, u_fftN, footprint);
-        float foamScale = foamScaleOf(textureLod(u_foam, foamUV, footLod));
-        vec4 around = textureLod(u_foam, foamUV, max(footLod, u_foamRadiusLod + 3.0 * foamScale));
-        float trail = max(around.r, around.b) * (1.0 - around.g);
-        float collapseAround = foamCollapse(foamUV, footLod);
-        float collapse = u_collapseStrength * collapseAround;
-        float crestHeight = max(seaDisplacement.y, 0.0);
-        seaDisplacement *= 1.0 - u_trailDamping * trail;
-        seaDisplacement.y -= collapse * (0.4 * seaDisplacement.y + 0.4 * max(seaDisplacement.y, 0.0));
-        seaDisplacement.xz *= 1.0 - 0.6 * collapse;
-        seaDisplacement.xz += u_seaDirection * (u_foamSurge * collapseAround * crestHeight);
-      }
+      // Waves damped where they have broken (OceanShaderChunks.js)
+      if (u_foamEnabled)
+        seaDisplacement = dampedSeaDisplacement(seaDisplacement, intersectionPoint.xz / u_fftSize + 0.5 / u_fftN,
+                                                cascadeLod(u_fftSize, u_fftN, footprint));
       modPos += seaDisplacement;
     }
     if (u_rippleEnabled)
@@ -411,7 +387,18 @@ export const OceanProjectedGridFragShader = /* glsl */`
   uniform vec2 u_smallThreshold;   // Jacobian below which they break
   uniform vec2 u_smallWidth;       // From no foam to full foam
   uniform float u_smallExpected;   // Their mean coverage, where they are finer than the pixel
+  uniform float u_smallFoam;       // Ripple whitecaps drawn: 0 off .. 1 dense (their foam value is source x this)
+  uniform float u_smallFoamScale;  // Their lace pattern, x the scale of the detail
+  uniform float u_sprayFoamScale;  // Lace pattern of the spray foam, x the scale of the detail
+  uniform float u_sprayFoamFull;   // Summed droplet area that makes the maximum foam
+  uniform float u_sprayFoamLog;    // Steepness of the logarithm: how much foam the first droplets make
+  uniform float u_sprayFoamMax;    // Maximum of the spray foam
   uniform float u_seaSigmaJ;       // Standard deviation of the Jacobian of the FFT sea (gate of the small breakers)
+  // Spray foam (Assets/Ocean/Spray.js): the droplets that landed, merged (fraction of the surface covered), around the
+  // camera, at the rest position
+  uniform bool u_sprayFoamEnabled;
+  uniform sampler2D u_sprayFoam;
+  uniform vec3 u_sprayFoamWindow;  // (min x, min z, side) in metres
 
   // 0: final colour, 1: Fresnel, 2: normal, 3: roughness (red upwind, green crosswind), 4: resolved ripple slopes,
   // 5: stretch of the surface by the long waves (red squeezed, blue stretched), 6: foam (red drawn foam, green
@@ -544,26 +531,8 @@ export const OceanProjectedGridFragShader = /* glsl */`
   // of the squeeze: their wavenumber and their amplitude both scale by 1 / J, so their slope by 1 / J^2. Steeper and
   // shorter on the crests, longer and smoother in the troughs; ripples whose crests lie along the stretch do not change.
   //
-  // Principal stretches of the symmetric matrix I + e, e = (xx, zz, xz): (largest, smallest)
-  vec2 principalStretch(vec3 e) {
-    float m = 1.0 + 0.5 * (e.x + e.y);
-    float r = sqrt(0.25 * (e.x - e.y) * (e.x - e.y) + e.z * e.z);
-    return vec2(m + r, m - r);
-  }
-
-  // Inverse of I + e, with the principal stretches clamped to >= 0.6. Where the long waves squeeze the surface to
-  // nothing (the crest of a Gerstner wave about to loop) the ripples would grow without limit; in the sea they break
-  // (micro-breaking). 0.6 caps the ripple slope gain at ~2.8 (1 / 0.6^2)
-  // Spectral decomposition without angles: with P1 = (M - l2 I) / (l1 - l2) the projector on the largest stretch,
-  // f(M) = f(l1) P1 + f(l2) (I - P1)
-  mat2 inverseStretch(vec3 e) {
-    vec2 p = principalStretch(e);
-    float i1 = 1.0 / max(p.x, 0.6), i2 = 1.0 / max(p.y, 0.6);
-    float gap = p.x - p.y;
-    if (gap < 1e-6) return mat2(i1); // Isotropic
-    mat2 P1 = (mat2(1.0 + e.x, e.z, e.z, 1.0 + e.y) - mat2(p.y)) / gap;
-    return i2 * mat2(1.0) + (i1 - i2) * P1;
-  }
+  // principalStretch, inverseStretch, hash12, valueNoise, smallBreakerSource
+${SMALL_BREAKERS_GLSL}
 
   // RIPPLE FIELD LOOP (Assets/Ocean/RippleLoop.js), 'low' quality (SIMPLE_SHADING): the ripples precomputed as a looping
   // animation in a texture array, two frames blended. Texels (su, sc, su^2, sc^2) in the wind frame, slopes mapped to
@@ -595,30 +564,7 @@ export const OceanProjectedGridFragShader = /* glsl */`
   }
 
 
-  // Collapse around a point (Assets/Ocean/Foam.js): each scale l of breakers read at its own radius (mip
-  // u_foamRadiusLod + l, not finer than minLod), the strongest
-  float foamCollapse(vec2 uv, float minLod) {
-    float c = textureLod(u_foamCollapse, uv, max(minLod, u_foamRadiusLod)).x;
-    c = max(c, textureLod(u_foamCollapse, uv, max(minLod, u_foamRadiusLod + 1.0)).y);
-    c = max(c, textureLod(u_foamCollapse, uv, max(minLod, u_foamRadiusLod + 2.0)).z);
-    return max(c, textureLod(u_foamCollapse, uv, max(minLod, u_foamRadiusLod + 3.0)).w);
-  }
-  // Scale (0..1: breakers of scale 0..3) of the foam of a foam state (foam, breaking, bubbles, foam x scale)
-  float foamScaleOf(vec4 state) {
-    return state.r > 1e-3 ? clamp(state.a / state.r, 0.0, 1.0) : 0.0;
-  }
-
-  // Smooth value noise (period-free), for the small breakers
-  float hash12(vec2 p) {
-    vec3 p3 = fract(vec3(p.xyx) * 0.1031);
-    p3 += dot(p3, p3.yzx + 33.33);
-    return fract((p3.x + p3.y) * p3.z);
-  }
-  float valueNoise(vec2 x) {
-    vec2 i = floor(x), f = fract(x);
-    f = f * f * (3.0 - 2.0 * f);
-    return mix(mix(hash12(i), hash12(i + vec2(1.0, 0.0)), f.x), mix(hash12(i + vec2(0.0, 1.0)), hash12(i + 1.0), f.x), f.y);
-  }
+${FOAM_STATE_GLSL}
 
   // Foam at rest position xz for a foam value (mean coverage): (fraction of the pixel covered, thickness 0..1). Near
   // the camera the detail texture draws it: foam where detail < foam, so as the foam ages it breaks into a network of
@@ -761,37 +707,31 @@ export const OceanProjectedGridFragShader = /* glsl */`
     }
     unresolved += toWindFrame(transformTensor(rippleT, rippleTensor * (rippleDamp * rippleDamp)), windU); // Ripples finer than the pixel + tail
 
-    // SMALL BREAKERS (waves of ~1-4 m, Assets/Ocean/Foam.js): the Jacobian of the ripples longer than ~1 m and ~2 m
-    // (mip levels of the ripple maps), strained by the long waves like the ripples. No state: foam while the crest
-    // breaks. Where they are finer than the pixel, their mean coverage. The ripple tile repeats every few metres and a
-    // threshold picks the same extreme in every tile (a lattice of breakers), so:
-    //  - the long waves modulate their steepness (short waves steepen on the crests and front faces of the long waves,
-    //    Phillips & Banner 1974): the squeeze 1 - J of the ripples is scaled by 1 + 0.6 (1 - J_sea) / sigma_sea
-    //    (up to x2.8 on the steepest long-wave crests, down to x0.4 in their troughs), and they do not break where
-    //    the long waves stretch the surface
-    //  - their threshold varies smoothly from tile to tile (period-free noise, +-1 ramp width)
+    // SMALL BREAKERS (waves of ~1-4 m, Assets/Ocean/Foam.js; smallBreakerSource in OceanShaderChunks.js): the
+    // strained ripples while their crest breaks. Where they are finer than the pixel, their mean coverage
     float smallSource = 0.0, smallCoverage = 0.0;
     if (u_smallEnabled && u_rippleEnabled) {
-      float longSqueeze = (1.0 - seaJ) / u_seaSigmaJ;
-      float modulation = 1.0 + 0.6 * clamp(longSqueeze, -1.0, 3.0);
-      float gate = smoothstep(-0.5, 0.5, longSqueeze);
-      float jitter = 2.0 * (valueNoise(xz / u_rippleSize + 17.0) - 0.5);
+      smallSource = smallBreakerSource(xz, seaJ, rippleT, rippleDamp);
       vec2 ruv = xz / u_rippleSize + 0.5 / u_rippleN;
       float pixelLod = log2(max(max(length(dFdx(ruv)), length(dFdy(ruv))) * u_rippleN, 1e-6));
-      for (int i = 0; i < 2; i++) {
-        float level = i == 0 ? u_smallLevels.x : u_smallLevels.y;
-        vec4 a = textureLod(u_rippleSlopes, ruv, level);
-        float dxz = textureLod(u_rippleExtra, ruv, level).x;
-        mat2 rJ = rippleT * mat2(a.z, dxz, dxz, a.w) * rippleDamp;
-        float offDiagonal = 0.5 * (rJ[0][1] + rJ[1][0]);
-        float j = 1.0 - modulation * (1.0 - ((1.0 + rJ[0][0]) * (1.0 + rJ[1][1]) - offDiagonal * offDiagonal));
-        float width = 2.0 * (i == 0 ? u_smallWidth.x : u_smallWidth.y); // Soft: thin foam at the edges
-        float threshold = (i == 0 ? u_smallThreshold.x : u_smallThreshold.y) + jitter * width;
-        smallSource = max(smallSource, clamp((threshold - j) / width, 0.0, 1.0));
+      // Small whitecaps are thin and lacy: a finer lace than the large ones, at most u_smallFoam of the pattern
+      smallCoverage = mix(foamPattern(xz * u_smallFoamScale, windU, u_smallFoam * smallSource).x,
+                          u_smallExpected * u_smallFoam / 0.75, clamp(pixelLod - u_smallLevels.y, 0.0, 1.0));
+    }
+    // SPRAY FOAM: the droplets that fell back (Assets/Ocean/Spray.js), merged where they landed close together. Drawn
+    // with the same lacy pattern as the whitecaps, finer (u_sprayFoamScale), fading out at the edges of its window
+    float sprayFoam = 0.0, sprayCoverage = 0.0;
+    if (u_sprayFoamEnabled) {
+      vec2 suv = (xz - u_sprayFoamWindow.xy) / u_sprayFoamWindow.z;
+      float edge = min(min(suv.x, suv.y), min(1.0 - suv.x, 1.0 - suv.y));
+      if (edge > 0.0) {
+        // Logarithmic: the first droplets make some foam at once, many more are needed to whiten the sea; capped at
+        // the maximum, reached at u_sprayFoamFull
+        float landed = texture2D(u_sprayFoam, suv).r / u_sprayFoamFull;
+        float grown = min(1.0, log(1.0 + u_sprayFoamLog * landed) / log(1.0 + u_sprayFoamLog));
+        sprayFoam = u_sprayFoamMax * grown * smoothstep(0.0, 0.05, edge);
+        sprayCoverage = foamPattern(xz * u_sprayFoamScale, windU, sprayFoam).x;
       }
-      smallSource *= gate;
-      // Small whitecaps are thin and lacy: at most 75% of the detail pattern, never a solid sheet
-      smallCoverage = mix(foamPattern(xz, windU, 0.75 * smallSource).x, u_smallExpected, clamp(pixelLod - u_smallLevels.y, 0.0, 1.0));
     }
     vec3 cT = vec3(1.0 + cs.z, cs.x, cDxz);
     vec3 cB = vec3(cDxz, cs.y, 1.0 + cs.w);
@@ -842,8 +782,8 @@ export const OceanProjectedGridFragShader = /* glsl */`
     // Whitecaps: foam is a diffuse scatterer, lit by the sky (blurred sky cube) and the sun (wrapped: light goes
     // through the foam). Under it, the bubble cloud brightens the water, seen along the refracted ray at a depth of
     // ~0.15 the wavelength of the breakers (0.3 to 4 m). Large and small foam add up
-    float allFoam = 1.0 - (1.0 - foamCoverage) * (1.0 - smallCoverage);
-    foamThickness = max(foamThickness, 0.5 * smallSource);
+    float allFoam = 1.0 - (1.0 - foamCoverage) * (1.0 - smallCoverage) * (1.0 - sprayCoverage);
+    foamThickness = max(foamThickness, max(0.6 * u_smallFoam * smallSource, 0.6 * sprayFoam));
     vec3 foamColor = vec3(0.0);
     if (u_foamEnabled) {
       vec3 skyAmbient = skyReflection(vec3(0.0, 1.0, 0.0), 1.5);
@@ -887,7 +827,7 @@ export const OceanProjectedGridFragShader = /* glsl */`
     }
     if (u_debugView == 8) {
       vec3 c = vec3(0.05, 0.08, 0.15) + foamCoverage * mix(vec3(0.1, 0.5, 1.0), vec3(1.0, 0.25, 0.1), foamScale)
-        + smallCoverage * vec3(0.2, 1.0, 0.3);
+        + smallCoverage * vec3(0.2, 1.0, 0.3) + sprayCoverage * vec3(1.0, 0.9, 0.2);
       gl_FragColor = vec4(c, 1.0);
       return;
     }
