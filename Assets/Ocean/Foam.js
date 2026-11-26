@@ -68,9 +68,9 @@ export const DEFAULT_FOAM_SETTINGS = {
   lead: 0.3,             // s: the breaking zone is the Jacobian predicted this time ahead (ahead of the crest)
   persistence: 1,        // Multiplies the foam lifetimes (about the period of the breaking wave)
   collapse: 0.6,         // How much a crest that has broken loses height (0: off)
-  radius: 0.3,           // Radius of the collapse and of the trail damping, times the breaking wavelength
+  radius: 0.75,          // Radius of the collapse and of the trail damping, times the breaking wavelength
   trailDamping: 0.5,     // How much the foam trail damps the waves that pass through it (0: off)
-  surge: 0.8,            // Forward surge of a collapsing crest, times its height (0: off)
+  surge: 2,              // Forward surge of a collapsing crest, times its height (0: off)
   small: true,           // Small breakers from the ripples (waves of ~1-4 m)
 };
 export const FOAM_MODES = ['wind', 'shape'];

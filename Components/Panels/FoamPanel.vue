@@ -156,7 +156,7 @@ export default {
   data() {
     return {
       settings: { enabled: true, mode: 'shape', amount: 1, scaleSplit: 'quantile', threshold: 0.6, lead: 0.3, persistence: 1,
-        collapse: 0.6, radius: 0.3, trailDamping: 0.5, surge: 0.8, small: true },
+        collapse: 0.6, radius: 0.75, trailDamping: 0.5, surge: 2, small: true },
       calibration: null,
       available: true,
       measured: null,

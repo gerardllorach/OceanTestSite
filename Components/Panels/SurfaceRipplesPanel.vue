@@ -73,6 +73,20 @@
         <div><input type="range" min="0" max="100" step="5" :value="Math.round((settings.strength ?? 1) * 100)"
             @input="change({ strength: Number($event.target.value) / 100 })"><span>{{ Math.round((settings.strength ?? 1) * 100) }}%</span></div>
       </div>
+      <!-- Light wind: Cox-Munk at any wind, or no ripples before the wind can raise them -->
+      <div class="container-horizontal">
+        <span title="Cox & Munk: their fit keeps some slope even with no wind. Calm in light wind: 5% of the Cox & Munk slopes up to 1.3 m/s (onset of wind waves on clean water, Kahma & Donelan 1988), the full Cox & Munk slopes from 3 m/s, a smooth step between">Light wind</span>
+        <div class="column">
+          <div class="segmented" role="group" aria-label="Ripples in light wind">
+            <button class="clickable" :class="{ 'button-active': settings.lightWind != 'onset' }" :aria-pressed="settings.lightWind != 'onset'"
+              @click="change({ lightWind: 'coxMunk' })">Cox &amp; Munk</button>
+            <button class="clickable" :class="{ 'button-active': settings.lightWind == 'onset' }" :aria-pressed="settings.lightWind == 'onset'"
+              @click="change({ lightWind: 'onset' })">Calm in light wind</button>
+          </div>
+          <span v-if="settings.lightWind == 'onset' && ripples" class="derived-value">×{{ fmt(ripples.lightWindFactor, 2) }} of
+            Cox &amp; Munk at this wind (0.05 up to <wind-speed :value="1.3"></wind-speed>, 1 from <wind-speed :value="3"></wind-speed>)</span>
+        </div>
+      </div>
 
       <!-- STRAIN BY THE LONG WAVES -->
       <div class="container-horizontal">
@@ -166,7 +180,7 @@ export default {
   },
   data() {
     return {
-      settings: { mode: 'seaState', windSpeed: 7, windDir: 0, enabled: true, directionMode: 'wind', direction: 0, spreadMode: 'auto', spread: 30, strength: 1, strain: 1 },
+      settings: { mode: 'seaState', windSpeed: 7, windDir: 0, enabled: true, directionMode: 'wind', direction: 0, spreadMode: 'auto', spread: 30, strength: 1, strain: 1, lightWind: 'coxMunk' },
       ripples: null,
       rippleGrid: true,  // Ripples drawn (FFT or loop)
       rippleFFT: true,   // Ripple FFT (the strain needs it)

@@ -100,6 +100,13 @@
         </label>
       </div>
       <div class="container-horizontal">
+        <span title="Cox & Munk keep some slope even with no wind. On: 5% of the Cox & Munk slopes up to 1.3 m/s (onset of wind waves on clean water, Kahma & Donelan 1988), the full Cox & Munk slopes from 3 m/s, a smooth step between">Ripples in light wind</span>
+        <label class="checkbox-label">
+          <input type="checkbox" :checked="st.calmLightWind" @change="set({ calmLightWind: $event.target.checked })"> Calm
+          <span class="derived-inline" v-if="st.calmLightWind">(×{{ fmt(lightFactor, 2) }} of Cox &amp; Munk)</span>
+        </label>
+      </div>
+      <div class="container-horizontal">
         <span title="Ripples strained by the waves: x1 up to 5 kn, x10 from 25 kn. Breaking threshold of the whitecaps: J < 0.6 up to 5 kn, J < 0.8 from 25 kn. Linear in knots between">Strain and breaking</span>
         <label class="checkbox-label">
           <input type="checkbox" :checked="st.driveStrainFoam" @change="set({ driveStrainFoam: $event.target.checked })"> From the wind
@@ -183,6 +190,12 @@
           <td colspan="2" class="active">{{ st.driveRipples ? 'Wind, U10 and the wind direction. The whitecaps take the wind of the ripples' : 'Not changed (“Same wind” off)' }}</td>
           <td><wind-speed v-if="st.driveRipples" :value="st.windSpeed"></wind-speed><template v-else>–</template></td>
         </tr>
+        <tr>
+          <td>Ripples &gt; Light wind</td>
+          <td colspan="2" class="active">{{ st.calmLightWind ? 'Calm in light wind: ×0.05 up to 1.3 m/s, ×1 (Cox & Munk) from 3 m/s, smooth step between'
+            : 'Cox & Munk at every wind' }}</td>
+          <td>{{ st.calmLightWind ? '×' + fmt(lightFactor, 2) : '×1' }}</td>
+        </tr>
         <tr :class="{ off: !st.driveStrainFoam }">
           <td>Ripples &gt; Strained by the waves</td>
           <td colspan="2" class="active">×1 at 5 kn or less, ×10 at 25 kn or more, linear in knots between
@@ -228,7 +241,6 @@ export default {
     if (!st.initialised && window.sceneManager) {
       const p = window.sceneManager.ocean.oceanParams.oceanParameters, r = window.sceneManager.getRipples();
       Object.assign(st, { initialised: true, windDir: Math.round(p.Mdir) || 0, spread: Math.min(80, Math.max(5, Math.round(p.Spr1) || 30)),
-        spreadModel: p.spreadModel || 'constant', smax: p.spreadSmax || 10,
         windSpeed: r ? Math.round(r.windSpeed * 10) / 10 : st.windSpeed });
     }
     this.refresh();
@@ -259,6 +271,7 @@ export default {
     fdFetch() { return window.WindSea.fullyDevelopedFetchKm(this.st.windSpeed); },
     strain() { return window.DigitalTwin.strainFor(this.st.windSpeed); },
     threshold() { return window.DigitalTwin.breakingThresholdFor(this.st.windSpeed); },
+    lightFactor() { return window.DigitalTwin.lightWindFactorOf(this.st); },
     spreadUsesWind() { return window.DirectionalSpreading.needsWind(this.st.spreadModel); },
     spreadTitle() {
       const m = this.spreadModels.find(m => m.id == this.st.spreadModel);

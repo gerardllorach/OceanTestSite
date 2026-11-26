@@ -41,6 +41,9 @@ export const DEFAULT_RIPPLE_SETTINGS = {
   spreadMode: 'auto',    // 'auto': spread from the Cox-Munk cross/up slope ratio, broader for shorter ripples. 'custom'
   spread: 30,            // Custom directional spread (deg, width of the wrapped normal distribution), the same for all
   strength: 1,           // Custom only: fraction of the slope budget given to the ripples and the tail (0: glassy surface)
+  // Light wind: 'coxMunk' keeps the Cox-Munk slopes at any wind (their fit has slopes even at 0 m/s); 'onset' keeps
+  // LIGHT_WIND_FLOOR of them up to LIGHT_WIND[0] and the full Cox-Munk slopes from LIGHT_WIND[1] on (lightWindFactor)
+  lightWind: 'coxMunk',
   // Rendering only (no new spectrum): ripples strained by the long waves, steeper on the crests and smoother in the
   // troughs (Longuet-Higgins & Stewart 1960). 0: off, 1: physical, up to 10: exaggerated
   strain: 1,
@@ -83,8 +86,23 @@ export function travelVector(dirDeg) {
 
 
 // Mean square slope of a clean sea surface (Cox & Munk 1954), upwind and crosswind components, for wind speed U (m/s)
+// (12.5 m above the sea in their measurements, ~U10 here). A linear fit of sun glitter photographs between ~1 and 14 m/s,
+// +-0.004: the 0.003 crosswind intercept is a slope at no wind, from the waves (swell, the longer wind waves), not a
+// statement that ripples exist without wind.
 export function coxMunk(U) {
   return { up: 0.00316 * U, cross: 0.003 + 0.00192 * U };
+}
+
+// Light wind ('onset'): the ripples need wind to grow. On clean water waves start at a friction velocity of ~5 cm/s,
+// ~1.3 m/s (Kahma & Donelan 1988, theory for aerodynamically smooth flow; their flume needed a bit more): only a
+// trace of ripples below (LIGHT_WIND_FLOOR: the sea is never a perfect mirror, there are always some puffs). From 3 m/s the wind sea has left the ripple band (Pierson-Moskowitz Tp ~ 2.2 s, longer than the shortest FFT
+// wave ~1.6 s) and the Cox-Munk slopes apply in full. Smooth step between the two
+export const LIGHT_WIND = [1.3, 3]; // m/s
+export const LIGHT_WIND_FLOOR = 0.05; // Share of the Cox-Munk slopes kept at no wind
+export function lightWindFactor(U, mode = 'onset') {
+  if (mode != 'onset') return 1;
+  const t = clamp((U - LIGHT_WIND[0]) / (LIGHT_WIND[1] - LIGHT_WIND[0]), 0, 1);
+  return LIGHT_WIND_FLOOR + (1 - LIGHT_WIND_FLOOR) * t * t * (3 - 2 * t);
 }
 
 
@@ -157,7 +175,9 @@ export function generateRipples(waves, settings = {}, fft = null, N = RIPPLE_N) 
   const target = coxMunk(windSpeed);
   const gerstner = slopeVariance(waves, windDir);
   const fftSlopes = fftSlopeVariance(fft, windDir);
-  const strength = s.spreadMode == 'custom' ? clamp(Number(s.strength ?? 1), 0, 1) : 1;
+  // Light wind ('onset'): fewer ripples below 3 m/s, 5% of Cox-Munk up to 1.3 m/s, in both Auto and custom
+  const onset = lightWindFactor(windSpeed, s.lightWind);
+  const strength = onset * (s.spreadMode == 'custom' ? clamp(Number(s.strength ?? 1), 0, 1) : 1);
   const budget = { up: strength * Math.max(0, target.up - gerstner.up - fftSlopes.up),
     cross: strength * Math.max(0, target.cross - gerstner.cross - fftSlopes.cross) };
 
@@ -255,6 +275,7 @@ export function generateRipples(waves, settings = {}, fft = null, N = RIPPLE_N) 
     settings: s,
     enabled: s.enabled && all.length > 0,
     windSpeed,
+    lightWindFactor: onset, // Share of the Cox-Munk budget left by the light-wind onset (1 with 'coxMunk')
     windDir,       // Direction of the ripples (from): the wind, or the custom direction
     sourceWindDir, // Wind direction (or mean wave direction in 'seaState' mode)
     spread: sigmaTheta * RAD2DEG, // Directional spread of the longest ripples (deg)

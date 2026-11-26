@@ -7,19 +7,21 @@
 
 import * as WindSea from '/OceanTestSite/Assets/Ocean/WindSea.js';
 import { createSpreading, needsWind } from '/OceanTestSite/Assets/Ocean/DirectionalSpreading.js';
+import { lightWindFactor } from '/OceanTestSite/Assets/Ocean/RippleSpectrum.js';
 
 export const DEFAULT_TWIN_STATE = {
   enabled: false,      // On: the twin drives Generation, and the overlay shows the forcing
   driver: 'wind',      // 'wind' (the others are not available yet: 'waves', 'buoy', 'model')
   initialised: false,  // Started from what Generation had
-  model: 'pm',         // 'pm' (Pierson-Moskowitz, fully developed) or 'jonswap' (fetch-limited)
+  model: 'jonswap',    // 'jonswap' (fetch-limited, default) or 'pm' (Pierson-Moskowitz, fully developed)
   windSpeed: 8,        // U10, m/s
   windDir: 0,          // Where the wind comes FROM, deg clockwise from north
   fetchKm: 100,        // JONSWAP
   gamma: 3.3,          // JONSWAP peak enhancement
-  spreadModel: 'constant', spread: 30, smax: 10, // Directional spreading (see DirectionalSpreading.js)
+  spreadModel: 'goda', spread: 30, smax: 10, // Directional spreading (see DirectionalSpreading.js): Goda & Suzuki, wind waves
   driveRipples: true,  // The ripples (and so the whitecaps) take the same wind
   driveStrainFoam: true, // Ripple strain and breaking threshold from the wind (strainFor, breakingThresholdFor)
+  calmLightWind: true,   // Ripples: 'onset' in light wind (5% of Cox-Munk up to 1.3 m/s, all of it from 3 m/s), see RippleSpectrum
 };
 
 // RIPPLE STRAIN AND BREAKING THRESHOLD FROM THE WIND
@@ -36,6 +38,9 @@ function ramp(U10, [lo, hi]) {
 }
 export const strainFor = U10 => Math.round(ramp(U10, STRAIN_RANGE) * 100) / 100;
 export const breakingThresholdFor = U10 => Math.round(ramp(U10, THRESHOLD_RANGE) * 1000) / 1000;
+
+// Share of the Cox-Munk ripple slopes at the wind of the state (1 unless calm in light wind)
+export const lightWindFactorOf = st => lightWindFactor(st.windSpeed, st.calmLightWind ? 'onset' : 'coxMunk');
 
 // Wind sea of the state: {Hm0, Tp, dimensionlessFetch, fullyDeveloped}
 export function windSeaOf(st) {
@@ -57,6 +62,7 @@ export function targetOf(st) {
   const ripples = {};
   if (st.driveRipples) Object.assign(ripples, { mode: 'wind', windSpeed: U, windDir: st.windDir });
   if (st.driveStrainFoam) ripples.strain = strainFor(U);
+  ripples.lightWind = st.calmLightWind ? 'onset' : 'coxMunk';
   return {
     sea: { Hm0: Math.max(0.01, Number(sea.Hm0.toFixed(3))), Tp: pm ? null : Math.max(0.5, Number(sea.Tp.toFixed(2))),
       gamma: pm ? 1 : st.gamma, Mdir: st.windDir, Spr1: st.spread,
@@ -89,6 +95,7 @@ export function inSync(st, sceneManager) {
     const r = sceneManager.getRippleSettings();
     if (t.ripples.mode) ok = r.mode == 'wind' && close(r.windSpeed, t.ripples.windSpeed, 0.01) && close(r.windDir, t.ripples.windDir, 0.5);
     if (ok && t.ripples.strain != null) ok = close(r.strain ?? 1, t.ripples.strain, 0.005);
+    if (ok) ok = (r.lightWind || 'coxMunk') == t.ripples.lightWind;
   }
   if (ok && t.foam) {
     const f = sceneManager.getFoamSettings();

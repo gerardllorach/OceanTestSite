@@ -3,11 +3,10 @@
   <div v-if="tw.enabled && tw.driver == 'wind'" class="twin-overlay" role="status" aria-label="Digital twin: wind driven">
     <div class="twin-title">Digital twin · wind driven</div>
     <div class="twin-main">
-      <!-- Compass in the view: north and the bearings turn with the camera. Wedge: where the waves come from (±σ1 at the
-           peak), arrow: where the wind blows to -->
+      <!-- Compass, north up. Wedge: where the waves come from (±σ1 at the peak), arrow: where the wind blows to -->
       <svg class="twin-compass" viewBox="-30 -30 60 60" width="60" height="60" aria-hidden="true">
         <circle r="27" class="ring"></circle>
-        <g :transform="'rotate(' + viewAngle + ')'">
+        <g>
           <text class="north" x="0" y="-18.5" text-anchor="middle" dominant-baseline="middle">N</text>
           <path class="wedge" :d="wedgePath"></path>
           <g :transform="'rotate(' + (tw.windDir + 180) + ')'">
@@ -42,19 +41,15 @@ import WindSpeed from './WindSpeed.vue';
 export default {
   name: "DigitalTwinOverlay",
   mounted() {
-    window.eventBus.on('Canvas3D_cameraChange', this.onCameraChange);
     ['OceanEntity_wavesChanged', 'OceanEntity_ripplesChanged', 'OceanEntity_foamChanged'].forEach(e => window.eventBus.on(e, this.refresh));
-    if (window.sceneManager) this.onCameraChange(window.sceneManager);
     this.refresh();
   },
   unmounted() {
-    window.eventBus.off('Canvas3D_cameraChange', this.onCameraChange);
     ['OceanEntity_wavesChanged', 'OceanEntity_ripplesChanged', 'OceanEntity_foamChanged'].forEach(e => window.eventBus.off(e, this.refresh));
   },
   data() {
     return {
       tw: window.digitalTwin,
-      viewAngle: 0,
       inSync: true,
     }
   },
@@ -82,11 +77,6 @@ export default {
     'tw.enabled'() { this.$nextTick(this.refresh); },
   },
   methods: {
-    // Same rotation as the compass of the side panel
-    onCameraChange(sceneManager) {
-      const target = sceneManager.controls.target, camPos = sceneManager.camera.position;
-      this.viewAngle = Math.atan2(camPos.x - target.x, camPos.z - target.z) * 180 / Math.PI;
-    },
     refresh() {
       this.inSync = !this.tw.enabled || window.DigitalTwin.inSync(this.tw, window.sceneManager);
     },
