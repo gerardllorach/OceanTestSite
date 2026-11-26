@@ -104,8 +104,8 @@ export default {
   max-width: calc(100vw - 32px);
   padding: 8px 12px 8px 10px;
   border-radius: 14px;
-  background: rgba(0, 28, 48, 0.55);
-  backdrop-filter: blur(4px);
+  /* No backdrop-filter: over the canvas, which changes every frame, the browser would blur that region every frame */
+  background: rgba(0, 28, 48, 0.75);
   color: white;
   text-shadow: 0 0 4px black;
   font-size: 0.8rem;
