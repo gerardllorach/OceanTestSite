@@ -1,9 +1,10 @@
 <template>
   <div id="digital-twin-panel" class="content">
 
-    <p>The digital twin drives the sliders of <b>Sea State &gt; Generation</b> from what forces the sea: the wind, measured
+    <p>The digital twin drives the sliders of <b>Generation &gt; Advanced</b> from what forces the sea: the wind, measured
       waves, a buoy or a wave model. Changing an option here moves those sliders; you can still adjust them by hand
-      afterwards.</p>
+      afterwards. <b>Generation &gt; Quick</b> sets the wind and, through the fetch, the wave height of this
+      panel.</p>
 
     <!-- ON / OFF -->
     <div class="twin-switch">
@@ -12,8 +13,8 @@
         <button class="clickable" :class="{ 'button-active': st.enabled }" :aria-pressed="st.enabled" @click="setEnabled(true)">On</button>
         <button class="clickable" :class="{ 'button-active': !st.enabled }" :aria-pressed="!st.enabled" @click="setEnabled(false)">Off</button>
       </div>
-      <span class="switch-hint">{{ st.enabled ? 'Generation follows the options below. The forcing is shown at the bottom-left of the screen.'
-        : 'Generation is not changed. Turn it on to drive it from the options below.' }}</span>
+      <span class="switch-hint">{{ st.enabled ? 'Advanced follows the options below. The forcing is shown at the bottom-left of the screen.'
+        : 'Advanced is not changed. Turn it on to drive it from the options below.' }}</span>
     </div>
 
     <!-- DRIVER -->
@@ -89,7 +90,7 @@
       </template>
       <!-- Directional spreading -->
       <div class="container-horizontal">
-        <span title="How the energy of each frequency spreads in direction. Neither spectrum defines it (references at the end of Generation)">Directional spreading</span>
+        <span title="How the energy of each frequency spreads in direction. Neither spectrum defines it (references at the end of Advanced)">Directional spreading</span>
         <div><select :value="st.spreadModel" aria-label="Directional spreading" @change="set({ spreadModel: $event.target.value })">
             <option v-for="m in spreadModels" :key="m.id" :value="m.id">{{ m.title }}</option>
           </select></div>
@@ -149,14 +150,14 @@
       T<sub>p</sub> is shorter than the shortest wave of the FFT sea ({{ fmt(fftShortestT, 1) }} s): most of this sea is in
       the range of the ripples, so the FFT sea is nearly flat.</p>
     <p v-if="!st.enabled" class="note out-of-sync">
-      The digital twin is off: Generation does not follow these options.
+      The digital twin is off: Advanced does not follow these options.
       <button class="clickable" @click="setEnabled(true)">Turn it on</button></p>
     <p v-else-if="!inSync" class="note out-of-sync">
-      The sliders of Generation have been changed since (by hand or from a file).
+      The sliders of Advanced have been changed since (by hand or from a file).
       <button class="clickable" @click="apply">Apply the wind again</button></p>
 
     <!-- WHAT IS DRIVEN -->
-    <h3 class="layer-title">What it sets in Generation</h3>
+    <h3 class="layer-title">What it sets in Advanced</h3>
     <table class="driven">
       <thead>
         <tr>
@@ -317,7 +318,7 @@ export default {
       this.st.enabled = on;
       if (on) this.apply();
     },
-    // Drive the sliders of Generation (they follow the events of the ocean)
+    // Drive the sliders of Advanced (they follow the events of the ocean)
     apply: function () {
       window.DigitalTwin.apply(this.st);
     },

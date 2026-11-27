@@ -3,7 +3,8 @@
 
     <p>The sea surface is the sum of three layers: the <b>FFT sea</b> (a wave spectrum), up to two <b>swells</b>
       (discrete Gerstner waves) and the <b>ripples</b> (the short waves, down to a few centimetres). The spectra at the
-      end of the page show the three together.</p>
+      end of the page show the three together. While the <b>Digital twin</b> is on, it sets these sliders (and
+      <b>Quick</b> sets the Digital twin); you can still adjust them by hand.</p>
 
     <!-- FFT SEA -->
     <h3 class="layer-title"><i class="layer-key" :style="{ background: colors[0] }"></i>FFT sea</h3>

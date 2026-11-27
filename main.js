@@ -24,7 +24,7 @@ window.WindSea = WindSea;
 // Directional spreading models (constant, Mitsuyasu, Hasselmann, Donelan, Banner, Goda)
 import * as DirectionalSpreading from "./Assets/Ocean/DirectionalSpreading.js";
 window.DirectionalSpreading = DirectionalSpreading;
-// Digital twin: shared state of Sea State > Digital twin and of its overlay (bottom-left)
+// Digital twin: shared state of Generation > Quick, Generation > Digital twin and of the overlay (bottom-left)
 import * as DigitalTwin from "./Assets/Scripts/DigitalTwin.js";
 window.DigitalTwin = DigitalTwin;
 window.digitalTwin = Vue.reactive({ ...DigitalTwin.DEFAULT_TWIN_STATE });

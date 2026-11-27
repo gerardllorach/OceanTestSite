@@ -1,5 +1,5 @@
 <template>
-  <!-- Forcing of the digital twin (Sea State > Digital twin), bottom-left of the screen while it is on -->
+  <!-- Forcing of the digital twin (Generation > Digital twin), bottom-left of the screen while it is on -->
   <div v-if="tw.enabled && tw.driver == 'wind'" class="twin-overlay" role="status" aria-label="Digital twin: wind driven">
     <div class="twin-title">Digital twin · wind driven</div>
     <div class="twin-main">
@@ -27,8 +27,8 @@
       {{ tw.model == 'pm' ? 'Pierson–Moskowitz' : tw.model == 'tma' ? 'TMA, ' + fmtFetch(tw.fetchKm) + ' km, ' + (tw.depthM ?? 30) + ' m deep'
         : (tw.model == 'elfouhaily' ? 'Elfouhaily, ' : 'JONSWAP, ') + fmtFetch(tw.fetchKm) + ' km' }}
     </div>
-    <div v-if="!inSync" class="twin-derived twin-warning" title="Sea State > Generation was changed by hand since: the sea does not follow this wind">
-      Generation edited by hand
+    <div v-if="!inSync" class="twin-derived twin-warning" title="Generation > Advanced was changed by hand since: the sea does not follow this wind">
+      Advanced edited by hand
     </div>
   </div>
 </template>

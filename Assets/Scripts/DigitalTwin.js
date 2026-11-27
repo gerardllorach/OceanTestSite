@@ -1,4 +1,4 @@
-// Digital twin (Sea State > Digital twin): drives the sliders of Sea State > Generation from what forces the sea.
+// Digital twin (Generation > Digital twin): drives the sliders of Generation > Advanced from what forces the sea.
 // For now only from the wind ("Wind driven"): a Pierson-Moskowitz, JONSWAP, TMA (JONSWAP in water of finite depth) or
 // Elfouhaily wind sea (Assets/Ocean/WindSea.js, Elfouhaily.js), a directional spreading
 // (Assets/Ocean/DirectionalSpreading.js), and the wind of the ripples and the whitecaps.
@@ -71,6 +71,37 @@ export function windSeaOf(st) {
   return { ...WindSea.piersonMoskowitz(U), dimensionlessFetch: NaN };
 }
 const depthOf = st => Math.max(1, Number(st.depthM) || 30);
+
+// H_M0 <-> FETCH (Generation > Quick: the wave height sets the fetch)
+// Hm0 grows with the fetch (JONSWAP, TMA, Elfouhaily) and stops growing once the sea is fully developed; a
+// Pierson-Moskowitz sea has no fetch: its Hm0 is the wind's.
+export const QUICK_FETCH_KM = [1, 1000];
+export const hasFetch = st => st.model != 'pm';
+// Hm0 (of the spectrum drawn) of the state with this fetch
+export const hm0ForFetch = (st, km) => windSeaOf({ ...st, fetchKm: km }).Hm0;
+// Hm0 reachable with a fetch of 1 to 1000 km: [lowest, highest]
+export function hm0RangeOf(st) {
+  return [hm0ForFetch(st, QUICK_FETCH_KM[0]), hm0ForFetch(st, QUICK_FETCH_KM[1])];
+}
+// Shortest fetch (km, 1..1000) whose sea reaches Hm0, clamped: past full development a longer fetch adds nothing.
+// Bisection on log(fetch); 0.01 km resolution.
+export function fetchForHm0(st, Hm0) {
+  const [lo, hi] = QUICK_FETCH_KM;
+  const [hLo, hHi] = hm0RangeOf(st);
+  if (!(Hm0 > hLo)) return lo;
+  const target = Math.min(Hm0, hHi * (1 - 1e-6));
+  let a = Math.log(lo), b = Math.log(hi);
+  for (let i = 0; i < 50; i++) {
+    const m = (a + b) / 2;
+    if (hm0ForFetch(st, Math.exp(m)) < target) a = m; else b = m;
+  }
+  return Math.min(hi, Math.max(lo, Math.round(Math.exp(b) * 100) / 100));
+}
+// Fetch past which the sea is fully developed (km), or null (Elfouhaily, PM: it keeps growing, or no fetch)
+export function fullyDevelopedFetchOf(st) {
+  if (st.model != 'jonswap' && st.model != 'tma') return null;
+  return WindSea.fullyDevelopedFetchKm(st.windSpeed);
+}
 
 // Directional spreading of the state for its wind sea (sigma1(f), ...)
 export function spreadingOf(st) {

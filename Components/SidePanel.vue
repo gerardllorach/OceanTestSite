@@ -17,7 +17,7 @@
           <span class="section-text">{{ section.title }}</span>
           <span class="fa section-icon">{{ section.icon }}</span>
         </div>
-        <div class="sub-buttons" :class="{ expanded: isExpanded(section) }">
+        <div v-if="!section.direct" class="sub-buttons" :class="{ expanded: isExpanded(section) }">
           <div class="sub-buttons-inner">
             <div v-for="child in section.children" :key="child.title" class="sub-button" role="button"
               :class="[child.unavailable ? 'sub-unavailable' : 'clickable', { selected: item === child }]"
@@ -78,6 +78,7 @@ import EnvironmentPanel from './Panels/EnvironmentPanel.vue';
 import QualityPanel from './Panels/QualityPanel.vue';
 import SeaStateGenerationPanel from './Panels/SeaStateGenerationPanel.vue';
 import DigitalTwinPanel from './Panels/DigitalTwinPanel.vue';
+import QuickSeaPanel from './Panels/QuickSeaPanel.vue';
 
 // Options of a section hide again if none is clicked within this time
 const COLLAPSE_MS = 4000;
@@ -90,11 +91,14 @@ export default {
     document.body.addEventListener('drop', this.onDropFile);
     // Compass follows the camera orientation
     window.eventBus.on('Canvas3D_cameraChange', this.onCameraChange);
+    // Links between panels: {section, title}
+    window.eventBus.on('SidePanel_open', this.onOpenRequest);
   },
   unmounted() {
     document.body.removeEventListener('dragover', this.onDragOver);
     document.body.removeEventListener('drop', this.onDropFile);
     window.eventBus.off('Canvas3D_cameraChange', this.onCameraChange);
+    window.eventBus.off('SidePanel_open', this.onOpenRequest);
     clearTimeout(this.collapseTimer);
   },
   data() {
@@ -107,30 +111,43 @@ export default {
       expandedId: '',
       isWide: false,
       sections: [
+        // Three levels of detail, each driving the next: Quick -> Digital twin -> Advanced
         {
-          id: 'seastate', title: 'Sea State', icon: '',
+          id: 'generation', title: 'Generation', icon: '\uf773',
           children: [
-            { title: 'Digital twin', icon: '\uf72e', component: 'digital-twin' },
-            { title: 'Generation', icon: '', component: 'sea-state-generation' },
-            { title: 'Analysis', icon: '', component: 'sea-state-analysis' },
+            { title: 'Quick', icon: '\uf72e', component: 'quick-sea' },
+            { title: 'Digital twin', icon: '\uf0ac', component: 'digital-twin' },
+            { title: 'Advanced', icon: '\uf1de', component: 'sea-state-generation' },
+          ]
+        },
+        // direct: the section button opens its only option
+        {
+          id: 'analysis', title: 'Analysis', icon: '\uf201', direct: true,
+          children: [
+            { title: 'Analysis', component: 'sea-state-analysis' },
           ]
         },
         {
-          id: 'export', title: 'Export', icon: '',
+          id: 'environment', title: 'Environment', icon: '\uf185',
+          children: [
+            { title: 'Sky & light', component: 'environment' },
+            { title: 'Objects', unavailable: true },
+            { title: 'Colors', unavailable: true },
+          ]
+        },
+        {
+          id: 'quality', title: 'Quality', icon: '\uf625', direct: true,
+          children: [
+            { title: 'Quality', component: 'quality' },
+          ]
+        },
+        {
+          id: 'export', title: 'Export', icon: '\uf56e',
           children: [
             { title: 'Export discrete waves (.json)', isClickEvent: true,
               event: () => window.eventBus.emit('SidePanel_ExportWavesClicked') },
-            { title: 'Render heights (.png)', icon: '', component: 'render-heights' },
-            { title: 'Render stereo cameras (.png)', icon: '', component: 'render-stereo' },
-          ]
-        },
-        {
-          id: 'scene', title: 'Scene', icon: '',
-          children: [
-            { title: 'Add/Remove objects', unavailable: true },
-            { title: 'Colors', unavailable: true },
-            { title: 'Environment', component: 'environment' },
-            { title: 'Quality', icon: '\uf625', component: 'quality' },
+            { title: 'Render heights (.png)', icon: '\uf302', component: 'render-heights' },
+            { title: 'Render stereo cameras (.png)', icon: '\uf302', component: 'render-stereo' },
           ]
         },
       ],
@@ -172,6 +189,7 @@ export default {
       return this.expandedId == section.id || (this.item != null && this.openId == section.id);
     },
     sectionClicked: function (section) {
+      if (section.direct) { this.collapse(); return this.optionSelected(section, section.children[0]); }
       if (this.item != null && this.openId == section.id) return this.collapse(); // Its options stay open anyway
       if (this.expandedId == section.id) {
         this.collapse();
@@ -191,6 +209,9 @@ export default {
       if (!child || child.unavailable) return;
       if (child.isClickEvent) return child.event();
       this.open(section.id, child.title);
+    },
+    onOpenRequest: function (e) {
+      if (e) this.open(e.section, e.title);
     },
     // Back arrow: from an option to the menu
     back: function () {
@@ -279,7 +300,7 @@ export default {
           alert(file.name + ' has ' + waves.length + ' waves. The sea is the FFT sea plus up to 2 discrete Gerstner waves: the 2 highest are used.');
         // Same event as editing the discrete waves table: the scene, the table and the analysis update
         window.eventBus.emit('DiscreteWavesPanel_setDiscreteWaves', waves);
-        this.open('seastate', 'Generation');
+        this.open('generation', 'Advanced');
       });
       reader.addEventListener('error', e => {
         console.error('Could not read file ' + file.name, e);
@@ -296,6 +317,7 @@ export default {
     'quality': QualityPanel,
     'sea-state-generation': SeaStateGenerationPanel,
     'digital-twin': DigitalTwinPanel,
+    'quick-sea': QuickSeaPanel,
   }
 }
 </script>

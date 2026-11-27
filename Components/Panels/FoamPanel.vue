@@ -224,7 +224,7 @@
           </p>
         </template>
       </template>
-      <p v-else class="hint-low">No whitecaps at this quality: they need the FFT sea (Scene &gt; Quality: medium or high).</p>
+      <p v-else class="hint-low">No whitecaps at this quality: they need the FFT sea (Quality: medium or high).</p>
     </div>
 
     <!-- SCALES -->
