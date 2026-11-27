@@ -59,12 +59,17 @@
       <div class="container-horizontal">
         <span title="Width of the directional distribution of the ripples. Narrow: long-crested ripples aligned with their direction. Wide: short-crested, from all directions">Directional spread</span>
         <div class="column">
-          <label class="checkbox-label" title="From the ratio of crosswind to upwind slopes of Cox & Munk, and broader for shorter ripples">
-            <input type="checkbox" :checked="settings.spreadMode != 'custom'" @change="toggleAutoSpread($event.target.checked)"> Auto (Cox–Munk)
-          </label>
+          <div class="segmented" role="group" aria-label="Directional spread of the ripples">
+            <button class="clickable" :class="{ 'button-active': spreadModeShown == 'wind' }" :aria-pressed="spreadModeShown == 'wind'"
+              title="Narrower with more wind: 60° at 7 kn, 15° from 30 kn (linear in knots)" @click="change({ spreadMode: 'wind' })">Wind</button>
+            <button class="clickable" :class="{ 'button-active': spreadModeShown == 'auto' }" :aria-pressed="spreadModeShown == 'auto'"
+              title="From the ratio of crosswind to upwind slopes of Cox & Munk" @click="change({ spreadMode: 'auto' })">Cox–Munk</button>
+            <button class="clickable" :class="{ 'button-active': spreadModeShown == 'custom' }" :aria-pressed="spreadModeShown == 'custom'"
+              @click="setCustomSpread()">Custom</button>
+          </div>
           <div v-if="settings.spreadMode == 'custom'"><input type="range" min="5" max="150" step="1" :value="settings.spread"
               @input="change({ spread: Number($event.target.value) })"><span>{{ settings.spread }}°</span></div>
-          <span v-else-if="ripples" class="derived-value">{{ fmt(ripples.spread, 0) }}°, broader for shorter ripples</span>
+          <span v-else-if="ripples" class="derived-value">{{ fmt(ripples.spread, 0) }}°<template v-if="ripples.spreadMode == 'sea'"> (spreading of the sea)</template></span>
         </div>
       </div>
       <!-- Strength: only without Auto (Cox-Munk); Auto keeps the full Cox-Munk slope -->
@@ -86,6 +91,34 @@
           <span v-if="settings.lightWind == 'onset' && ripples" class="derived-value">×{{ fmt(ripples.lightWindFactor, 2) }} of
             Cox &amp; Munk at this wind (0.05 up to <wind-speed :value="1.3"></wind-speed>, 1 from <wind-speed :value="3"></wind-speed>)</span>
         </div>
+      </div>
+
+      <!-- SHAPE OF THE SPECTRUM -->
+      <div class="container-horizontal">
+        <span title="Sea spectrum (strict, set by the digital twin): the ripples continue the spectrum of the FFT sea (JONSWAP, TMA, Pierson-Moskowitz or Elfouhaily) in absolute units, not scaled to Cox &amp; Munk. Wind dependent (Elfouhaily et al. 1997, scaled to Cox &amp; Munk): in strong wind the short sharp ripples carry most of the slope, the mid-sized waves are few. Constant: the same slope per octave at any wind (Phillips 1958), scaled to Cox &amp; Munk">Spectrum shape</span>
+        <div class="column">
+          <div class="segmented" role="group" aria-label="Shape of the ripple spectrum">
+            <button class="clickable" :class="{ 'button-active': settings.spectrum == 'sea' }" :aria-pressed="settings.spectrum == 'sea'"
+              :disabled="!rippleFFT" @click="change({ spectrum: 'sea' })">Sea spectrum</button>
+            <button class="clickable" :class="{ 'button-active': settings.spectrum == 'elfouhaily' }" :aria-pressed="settings.spectrum == 'elfouhaily'"
+              @click="change({ spectrum: 'elfouhaily' })">Wind dependent</button>
+            <button class="clickable" :class="{ 'button-active': !settings.spectrum || settings.spectrum == 'saturation' }" :aria-pressed="!settings.spectrum || settings.spectrum == 'saturation'"
+              @click="change({ spectrum: 'saturation' })">Constant</button>
+          </div>
+          <span v-if="ripples && ripples.explicitFraction != null" class="derived-value">{{ Math.round(ripples.explicitFraction * 100) }}% of
+            the ripple slope in the grid, the rest finer (roughness)<template v-if="ripples.strict && ripples.slopes">; total slope
+            {{ Math.round((ripples.slopes.total.up + ripples.slopes.total.cross) / Math.max(1e-9, ripples.slopes.coxMunk.up + ripples.slopes.coxMunk.cross) * 100) }}% of Cox &amp; Munk</template></span>
+        </div>
+      </div>
+      <div class="container-horizontal">
+        <span title="On: each ripple gets a Rayleigh-distributed amplitude (as the FFT sea): groups and occasional sharper ripples. Off: the expected amplitude">Random amplitudes</span>
+        <label class="checkbox-label"><input type="checkbox" :checked="settings.randomAmplitudes !== false"
+            @change="change({ randomAmplitudes: $event.target.checked })"> Rayleigh</label>
+      </div>
+      <div class="container-horizontal">
+        <span title="The ripples finer than the ripple grid (~9 cm down to a few mm, the capillary-gravity waves) drawn as a looping normal texture near the camera, at their real speed; farther, they are roughness as before. Off: roughness only. Their slope is taken from the roughness: the total stays the same">Centimetre ripples</span>
+        <label class="checkbox-label"><input type="checkbox" :checked="settings.detail !== false"
+            @change="change({ detail: $event.target.checked })"> Drawn near the camera</label>
       </div>
 
       <!-- STRAIN BY THE LONG WAVES -->
@@ -180,7 +213,7 @@ export default {
   },
   data() {
     return {
-      settings: { mode: 'seaState', windSpeed: 7, windDir: 0, enabled: true, directionMode: 'wind', direction: 0, spreadMode: 'auto', spread: 30, strength: 1, strain: 1, lightWind: 'coxMunk' },
+      settings: { mode: 'seaState', windSpeed: 7, windDir: 0, enabled: true, directionMode: 'wind', direction: 0, spreadMode: 'wind', spread: 30, strength: 1, strain: 1, lightWind: 'coxMunk', spectrum: 'saturation', randomAmplitudes: true, detail: true },
       ripples: null,
       rippleGrid: true,  // Ripples drawn (FFT or loop)
       rippleFFT: true,   // Ripple FFT (the strain needs it)
@@ -202,6 +235,8 @@ export default {
     }
   },
   computed: {
+    // Spread mode as resolved by the ripples ('sea' under the twin shows none active)
+    spreadModeShown() { return this.ripples ? this.ripples.spreadMode : (this.settings.spreadMode || 'wind'); },
     slopeRows() {
       const s = this.ripples.slopes;
       return [
@@ -254,9 +289,10 @@ export default {
       if (this.settings.directionMode == 'custom') return;
       this.change({ directionMode: 'custom', direction: this.ripples ? Math.round(this.ripples.windDir) : 0 });
     },
-    // Custom spread, starting from the current (auto) one
-    toggleAutoSpread: function (auto) {
-      this.change(auto ? { spreadMode: 'auto' } : { spreadMode: 'custom', spread: this.ripples ? Math.round(this.ripples.spread) : 30 });
+    // Custom spread, starting from the current one
+    setCustomSpread: function () {
+      if (this.settings.spreadMode == 'custom') return;
+      this.change({ spreadMode: 'custom', spread: this.ripples ? Math.round(this.ripples.spread) : 30 });
     },
     change: function (partial) {
       Object.assign(this.settings, partial);

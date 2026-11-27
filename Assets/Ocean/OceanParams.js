@@ -60,6 +60,12 @@ export class OceanParameters{
     spreadModel: DEFAULT_SEA_SETTINGS.spreadModel,
     spreadWind: DEFAULT_SEA_SETTINGS.spreadWind, // U10 (m/s) of the wind-dependent spreadings, null: from Hm0 and Tp
     spreadSmax: DEFAULT_SEA_SETTINGS.spreadSmax, // Goda & Suzuki
+    // Shape of the spectrum (see SeaSpectrum.js): 'jonswap' or 'elfouhaily' (its wind and inverse wave age), depth (TMA)
+    spectrum: DEFAULT_SEA_SETTINGS.spectrum,
+    spectrumWind: DEFAULT_SEA_SETTINGS.spectrumWind,
+    Omega: DEFAULT_SEA_SETTINGS.Omega,
+    depth: DEFAULT_SEA_SETTINGS.depth,
+    randomAmplitudes: DEFAULT_SEA_SETTINGS.randomAmplitudes,
   }
 
   numWaves = 0;
@@ -99,7 +105,8 @@ export class OceanParameters{
     const p = this.oceanParameters;
     return { method: p.method, Hm0: p.Hm0, Tp: p.Tp, gamma: p.gamma, Mdir: p.Mdir, spread: p.Spr1,
       spreadModel: p.spreadModel, spreadWind: p.spreadWind, spreadSmax: p.spreadSmax,
-      count: p.numComponents, choppiness: p.choppiness, seed: p.seed };
+      count: p.numComponents, choppiness: p.choppiness, seed: p.seed, spectrum: p.spectrum, spectrumWind: p.spectrumWind,
+      Omega: p.Omega, depth: p.depth, randomAmplitudes: p.randomAmplitudes };
   }
 
   // Generate the sea from the spectrum of the sea state, with the current method

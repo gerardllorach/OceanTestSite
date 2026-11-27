@@ -12,7 +12,7 @@
 //          ripples (generateRipples output or null)}
 
 import { G, spectralDensity, seaSpreading } from '/OceanTestSite/Assets/Ocean/SeaSpectrum.js';
-import { wrappedNormal } from '/OceanTestSite/Assets/Ocean/RippleSpectrum.js';
+import { wrappedNormal, rippleSaturation } from '/OceanTestSite/Assets/Ocean/RippleSpectrum.js';
 
 const DEG2RAD = Math.PI / 180;
 const TWO_PI = 2 * Math.PI;
@@ -44,14 +44,14 @@ function seaDensity(state, f, theta, band) {
   return spectralDensity(f, s) * spreading.D(f, wrapPi(theta - s.Mdir * DEG2RAD));
 }
 
-// RIPPLES: E(f, theta) = Psi(k, theta) k dk/df, m^2/Hz/rad, with Psi = scale^2 k^-4 D(theta; sigma(k)) (per unit area of
-// the wavevector plane, see generateRipples) and dk/df = 4 pi sqrt(k / g).
+// RIPPLES: E(f, theta) = Psi(k, theta) k dk/df, m^2/Hz/rad, with Psi = scale^2 B(k) k^-4 D(theta; sigma(k)) (per unit
+// area of the wavevector plane, see generateRipples; B: rippleSaturation) and dk/df = 4 pi sqrt(k / g).
 // The grid carries a bit more variance than this integral over [kMin, kCut] (~30%): its first ring of wavevectors,
 // at kMin, also stands for the cells just below it, where k^-4 is largest. The spectrum is scaled to the variance of
 // the grid, the one rendered and analysed.
 function rippleS(r, f) {
   const sp = r.spectrum, k = kOf(f);
-  return sp.scale * sp.scale * Math.pow(k, -3) * 4 * Math.PI * Math.sqrt(k / G);
+  return sp.scale * sp.scale * rippleSaturation(k, sp) * Math.pow(k, -3) * 4 * Math.PI * Math.sqrt(k / G);
 }
 const rippleNormCache = new WeakMap();
 function rippleNorm(r, band) {
@@ -65,8 +65,7 @@ function rippleDensity(state, f, theta, band) {
   if (!band || f < band[0] || f > band[1]) return 0;
   const r = state.ripples, sp = r.spectrum;
   const k = kOf(f);
-  const sigma = r.autoSpread ? Math.min(1.6, sp.sigmaTheta * (1 + sp.spreadGrowth * Math.log(k / r.kMin) / sp.logRange)) : sp.sigmaTheta;
-  const D = wrappedNormal(wrapPi(theta - r.windDir * DEG2RAD), sigma);
+  const D = wrappedNormal(wrapPi(theta - r.windDir * DEG2RAD), sp.sigmaTheta);
   return rippleNorm(r, band) * rippleS(r, f) * D;
 }
 

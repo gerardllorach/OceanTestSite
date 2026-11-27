@@ -276,6 +276,12 @@ export default {
         'WDIR': 180,
       }
       updateData(params);
+      // Digital twin (on by default): drives Generation from the start
+      const twin = window.digitalTwin;
+      if (twin && twin.enabled) {
+        window.DigitalTwin.initialiseFrom(twin, this.sceneManager);
+        window.DigitalTwin.apply(twin);
+      }
     });
 
     

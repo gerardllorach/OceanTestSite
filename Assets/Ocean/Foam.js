@@ -70,14 +70,39 @@ export const DEFAULT_FOAM_SETTINGS = {
   collapse: 0.6,         // How much a crest that has broken loses height (0: off)
   radius: 0.75,          // Radius of the collapse and of the trail damping, times the breaking wavelength
   trailDamping: 0.5,     // How much the foam trail damps the waves that pass through it (0: off)
+  rippleDamping: 0.8,    // How much the foam smooths the ripples under it (0: off, the ripples stay sharp)
   surge: 2,              // Forward surge of a collapsing crest, times its height (0: off)
-  small: true,           // Small breakers from the ripples (waves of ~1-4 m)
+  small: true,           // Small breakers from the ripples (waves of ~1-4 m): their foam and their spray
+  smallThreshold: null,  // Jacobian below which a small breaker (ripple) breaks; null: the same as the whitecaps
+  smallShape: 0.25,      // 0: foam on thin breaking ripple crests (fine Jacobian, sharp threshold) .. 1: patches (the
+                         // Jacobian of the ~1-2 m waves, soft threshold)
+  smallCrest: 1,         // Breaking crest of the small breakers (while it breaks): 0 off .. 1 dense
+  smallFoam: 1,          // Their foam trail (RippleFoam.js): 0 off .. 1 dense
+  smallFoamScale: 2.5,   // Their lace pattern, finer than the large whitecaps' (x scale of the detail)
+  smallFoamGrow: 14,     // 1/s: how fast ripple foam builds up where a crest breaks (it saturates; RippleFoam.js)
+  smallFoamLifetime: 1.5, // s: how long it lasts (e-folding), so it leaves a trail behind the crest
+  smallFoamVariation: 0.5, // 0..1: the fading time varies in space and time (x0.5 to x2 at 0.5): it changes shape
+  smallFoamSpread: 0.01, // m^2/s: it spreads a little as it fades
+  spray: false,          // Spray droplets from the breakers (Assets/Ocean/Spray.js), near the camera (off for now)
+  sprayAmount: 1,        // Multiplies the emission (which grows with the wind)
+  sprayLarge: true,      // Spray from the large breakers too (not only the small ones)
+  sprayFoam: true,       // The droplets that land turn into foam (merged where they land close together)
+  sprayFoamPatch: 4,     // Their bubble patch, times the droplet's diameter (exaggerated; ~1.25 is realistic)
+  sprayFoamLifetime: 0.6, // s, how long the spray foam lasts (e-folding)
+  sprayFoamScale: 2.5,   // Its lace pattern (x scale of the detail)
+  sprayFoamRadius: 0.25, // m: the foam of each landed droplet is spread over this radius (groups the landings)
+  sprayFoamFull: 3,      // Summed droplet area (per unit area) that makes the maximum foam
+  sprayFoamLog: 30,      // foam = max log(1 + k v / full) / log(1 + k): the first droplets make some foam (k higher:
+                         // more), many are needed to whiten the sea
+  sprayFoamMax: 0.85,    // Its maximum (cap)
 };
 export const FOAM_MODES = ['wind', 'shape'];
 export const FOAM_SCALE_SPLITS = ['quantile', 'phillips'];
 export const FOAM_LEVELS = 4;         // Scales of the FFT sea: mip levels 0..3 of its maps
 const SMALL_LEVELS = 2;               // Scales of the ripples: waves of ~1 m and ~2 m
 const SMALL_SHORTEST = 1;             // m, the shortest small breaker
+const SMALL_CREST_SHORTEST = 0.25;    // m: the crest lines inside a breaking patch are those of the ripples of ~25-50 cm
+const SMALL_CREST_LINE = [1.0, 0.5];  // A crest line where their Jacobian is below -1 sigma (full at -1.5 sigma): ~16%
 
 const G = 9.8;
 const ACTIVE_SHARE = 0.2;             // Share of the whitecap coverage that is actively breaking (stage A)
@@ -218,9 +243,28 @@ export function foamCalibration(fftSea, windSpeed, settings = DEFAULT_FOAM_SETTI
     b.sigmaJ = b.sigma;
   });
   const seaBands = bands.filter(b => !b.small);
+  // Small breakers: their own threshold, when set (both modes)
+  const smallThreshold = Number(s.smallThreshold);
+  if (s.smallThreshold != null && isFinite(smallThreshold))
+    bands.filter(b => b.small).forEach(b => {
+      b.threshold = smallThreshold;
+      b.fraction = b.sigma > 1e-6 ? normalCdf((b.threshold - 1) / b.sigma) : 0;
+    });
   if (mode == 'shape') activeFraction = Math.min(1, bands.reduce((a, b) => Math.max(a, b.fraction), 0));
   if (small.enabled) {
     small.scales = bands.filter(b => b.small);
+    small.threshold = small.scales.length ? small.scales[0].threshold : null;
+    // 'Crests' end (smallShape 0): inside a breaking patch, only the crest lines of the shorter ripples turn white:
+    // where the Jacobian of the ripples of one octave (~25-50 cm: mip level l minus level l + 1) is below
+    // -SMALL_CREST_LINE[0] of its standard deviation (the octaves are independent: sigma^2 = s(l)^2 - s(l + 1)^2)
+    const rdx = ripples.L / ripples.N;
+    const crestFirst = Math.max(0, Math.min(small.levels[0] - 1, Math.round(Math.log2(SMALL_CREST_SHORTEST / (4 * rdx)))));
+    small.crestLevels = [crestFirst, crestFirst + 1];
+    const [sA, sB] = divergenceSigmas(ripples, small.crestLevels.map(l => 4 * rdx * Math.pow(2, l)));
+    const bandSigma = Math.sqrt(Math.max(0, sA * sA - sB * sB));
+    small.crestOffset = [SMALL_CREST_LINE[0] * bandSigma, SMALL_CREST_LINE[0] * bandSigma];
+    small.crestWidth = [Math.max(1e-3, SMALL_CREST_LINE[1] * bandSigma), Math.max(1e-3, SMALL_CREST_LINE[1] * bandSigma)];
+    small.shape = Math.min(1, Math.max(0, Number(s.smallShape ?? DEFAULT_FOAM_SETTINGS.smallShape)));
     // Mean coverage of the small breakers where they are finer than the pixel: P(J below the middle of the ramp)
     small.expected = Math.min(0.5, small.scales.reduce((a, b) =>
       Math.max(a, b.sigma > 1e-6 ? normalCdf((b.threshold - 0.5 * b.width - 1) / b.sigma) : 0), 0));
