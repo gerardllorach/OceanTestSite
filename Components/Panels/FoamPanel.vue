@@ -110,32 +110,24 @@
           </div>
           <div class="container-horizontal">
             <span title="Where a ripple breaks, which part turns white. Crests: inside a breaking patch only the crest lines of the shorter ripples (from ~25 cm) turn white. Patches: the whole zone of the ~1-2 m wave that breaks, as before. Which patches break does not change (Ripple breaking threshold)">Ripple foam shape</span>
-            <div><input type="range" min="0" max="1" step="0.05" :value="settings.smallShape ?? 1"
-                @input="change({ smallShape: Number($event.target.value) })"><span>{{ shapeLabel(settings.smallShape ?? 1) }}</span></div>
+            <div><input type="range" min="0" max="1" step="0.05" :value="settings.smallShape ?? 0.25"
+                @input="change({ smallShape: Number($event.target.value) })"><span>{{ shapeLabel(settings.smallShape ?? 0.25) }}</span></div>
           </div>
           <div class="container-horizontal">
-            <span title="How far ahead of the breaking crest the ripple foam is made (both the white crest and the trail it leaves), as a time: the crest travels this long before the foam appears there. By default (auto) the Breaking lead of the whitecaps; ↺ goes back to it">Ripple foam lead</span>
-            <div><input type="range" min="0" max="1.5" step="0.05" :value="smallLeadShown"
-                @input="change({ smallLead: Number($event.target.value) })"><span>{{ fmt(smallLeadShown, 2) }} s<template
-                v-if="calibration && calibration.small && calibration.small.speed"> ≈ {{ fmt(smallLeadShown * calibration.small.speed, 2) }} m</template><template
-                v-if="settings.smallLead == null"> (auto)</template></span><button v-if="settings.smallLead != null"
-                class="clickable" title="Back to the Breaking lead of the whitecaps" @click="change({ smallLead: null })">↺</button></div>
-          </div>
-          <div class="container-horizontal">
-            <span title="The breaking crest of the small breakers: dense white foam while the crest breaks, a little ahead of it (Breaking lead x their speed), travelling with it. Drawn over the whole sea">Ripple breaking crest</span>
-            <div><input type="range" min="0" max="1" step="0.05" :value="settings.smallCrest ?? 0.05"
-                @input="change({ smallCrest: Number($event.target.value) })"><span>{{ (settings.smallCrest ?? 0.05) > 0 ? Math.round((settings.smallCrest ?? 0.05) * 100) + '%' : 'Off' }}</span></div>
+            <span title="The breaking crest of the small breakers: dense white foam while the crest breaks, travelling with it. Drawn over the whole sea">Ripple breaking crest</span>
+            <div><input type="range" min="0" max="1" step="0.05" :value="settings.smallCrest ?? 1"
+                @input="change({ smallCrest: Number($event.target.value) })"><span>{{ (settings.smallCrest ?? 1) > 0 ? Math.round((settings.smallCrest ?? 1) * 100) + '%' : 'Off' }}</span></div>
           </div>
           <div class="container-horizontal">
             <span title="The foam trail the small breakers leave: it builds up on the crest, stays with the water and fades (a lace, at most this fraction of the pattern). Near the camera it is tracked; further away the sea gets its mean whitening. Off: no trail">Ripple foam trail</span>
-            <div><input type="range" min="0" max="1" step="0.05" :value="settings.smallFoam ?? 0.7"
-                @input="change({ smallFoam: Number($event.target.value) })"><span>{{ (settings.smallFoam ?? 0.7) > 0 ? Math.round((settings.smallFoam ?? 0.7) * 100) + '%' : 'Off' }}</span></div>
+            <div><input type="range" min="0" max="1" step="0.05" :value="settings.smallFoam ?? 1"
+                @input="change({ smallFoam: Number($event.target.value) })"><span>{{ (settings.smallFoam ?? 1) > 0 ? Math.round((settings.smallFoam ?? 1) * 100) + '%' : 'Off' }}</span></div>
           </div>
-          <template v-if="(settings.smallFoam ?? 0.7) > 0">
+          <template v-if="(settings.smallFoam ?? 1) > 0">
             <div class="container-horizontal">
               <span title="How fast ripple foam builds up where a crest breaks. It saturates: the same spot does not pile up foam">Ripple foam growth</span>
-              <div><input type="range" min="0.5" max="30" step="0.5" :value="settings.smallFoamGrow ?? 6"
-                  @input="change({ smallFoamGrow: Number($event.target.value) })"><span>{{ (settings.smallFoamGrow ?? 6).toFixed(1) }} /s</span></div>
+              <div><input type="range" min="0.5" max="30" step="0.5" :value="settings.smallFoamGrow ?? 14"
+                  @input="change({ smallFoamGrow: Number($event.target.value) })"><span>{{ (settings.smallFoamGrow ?? 14).toFixed(1) }} /s</span></div>
             </div>
             <div class="container-horizontal">
               <span title="How long the ripple foam lasts after the crest has passed (e-folding time): it stays with the water and leaves a trail behind the crest">Ripple foam lifetime</span>
@@ -153,7 +145,7 @@
                   @input="change({ smallFoamSpread: Number($event.target.value) })"><span>{{ (settings.smallFoamSpread ?? 0.01).toFixed(3) }} m²/s</span></div>
             </div>
           </template>
-          <div class="container-horizontal" v-if="(settings.smallFoam ?? 0.7) > 0">
+          <div class="container-horizontal" v-if="(settings.smallFoam ?? 1) > 0">
             <span title="Scale of the lace pattern of the ripple whitecaps (x1: the same as the large whitecaps). Coarser: larger holes, which stay visible further away; finer: smaller holes, which blend into a uniform white sooner">Ripple foam lace</span>
             <div><input type="range" min="0.25" max="6" step="0.05" :value="settings.smallFoamScale ?? 2.5"
                 @input="change({ smallFoamScale: Number($event.target.value) })"><span>{{ laceLabel(settings.smallFoamScale ?? 2.5) }}</span></div>
@@ -292,7 +284,7 @@ export default {
   data() {
     return {
       settings: { enabled: true, mode: 'shape', amount: 1, scaleSplit: 'quantile', threshold: 0.6, lead: 0.3, persistence: 1,
-        collapse: 0.6, radius: 0.75, trailDamping: 0.5, rippleDamping: 0.8, surge: 2, small: true, smallThreshold: null, smallShape: 1, smallLead: null, smallCrest: 0.05, smallFoam: 0.7, smallFoamScale: 2.5, smallFoamGrow: 6, smallFoamLifetime: 1.5,
+        collapse: 0.6, radius: 0.75, trailDamping: 0.5, rippleDamping: 0.8, surge: 2, small: true, smallThreshold: null, smallShape: 0.25, smallCrest: 1, smallFoam: 1, smallFoamScale: 2.5, smallFoamGrow: 14, smallFoamLifetime: 1.5,
         smallFoamVariation: 0.5, smallFoamSpread: 0.01, spray: false, sprayAmount: 1, sprayLarge: true, sprayFoam: true, sprayFoamPatch: 4, sprayFoamLifetime: 0.6,
         sprayFoamScale: 2.5, sprayFoamRadius: 0.25, sprayFoamFull: 3, sprayFoamLog: 30, sprayFoamMax: 0.85 },
       calibration: null,
@@ -308,7 +300,6 @@ export default {
       const c = this.calibration;
       return c && c.small && c.small.threshold != null && c.small.threshold > -100 ? c.small.threshold : (this.settings.threshold ?? 0.6);
     },
-    smallLeadShown() { return this.settings.smallLead != null ? this.settings.smallLead : (this.settings.lead ?? 0.3); },
     // Spray foam made by 1/30 of the droplets that whiten the sea (logarithmic growth)
     firstDrops() {
       const k = this.settings.sprayFoamLog ?? 30;

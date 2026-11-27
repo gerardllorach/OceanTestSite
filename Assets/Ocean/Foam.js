@@ -74,13 +74,12 @@ export const DEFAULT_FOAM_SETTINGS = {
   surge: 2,              // Forward surge of a collapsing crest, times its height (0: off)
   small: true,           // Small breakers from the ripples (waves of ~1-4 m): their foam and their spray
   smallThreshold: null,  // Jacobian below which a small breaker (ripple) breaks; null: the same as the whitecaps
-  smallShape: 1,         // 0: foam on thin breaking ripple crests (fine Jacobian, sharp threshold) .. 1: patches (the
+  smallShape: 0.25,      // 0: foam on thin breaking ripple crests (fine Jacobian, sharp threshold) .. 1: patches (the
                          // Jacobian of the ~1-2 m waves, soft threshold)
-  smallLead: null,       // s: their foam is made this far ahead of the crest (x their speed); null: the Breaking lead
-  smallCrest: 0.05,      // Breaking crest of the small breakers (while it breaks, a little ahead): 0 off .. 1 dense
-  smallFoam: 0.7,        // Their foam trail (RippleFoam.js): 0 off .. 1 dense
+  smallCrest: 1,         // Breaking crest of the small breakers (while it breaks): 0 off .. 1 dense
+  smallFoam: 1,          // Their foam trail (RippleFoam.js): 0 off .. 1 dense
   smallFoamScale: 2.5,   // Their lace pattern, finer than the large whitecaps' (x scale of the detail)
-  smallFoamGrow: 6,      // 1/s: how fast ripple foam builds up where a crest breaks (it saturates; RippleFoam.js)
+  smallFoamGrow: 14,     // 1/s: how fast ripple foam builds up where a crest breaks (it saturates; RippleFoam.js)
   smallFoamLifetime: 1.5, // s: how long it lasts (e-folding), so it leaves a trail behind the crest
   smallFoamVariation: 0.5, // 0..1: the fading time varies in space and time (x0.5 to x2 at 0.5): it changes shape
   smallFoamSpread: 0.01, // m^2/s: it spreads a little as it fades
@@ -254,11 +253,6 @@ export function foamCalibration(fftSea, windSpeed, settings = DEFAULT_FOAM_SETTI
   if (mode == 'shape') activeFraction = Math.min(1, bands.reduce((a, b) => Math.max(a, b.fraction), 0));
   if (small.enabled) {
     small.scales = bands.filter(b => b.small);
-    // Their phase speed (deep water, mean of the two scales) and how far ahead their foam is made: lead x speed
-    small.speed = Math.sqrt(9.81 * (small.lambdas[0] + small.lambdas[1]) / 2 / (2 * Math.PI));
-    const smallLead = Number(s.smallLead);
-    small.leadSeconds = s.smallLead != null && isFinite(smallLead) ? Math.max(0, smallLead) : Math.max(0, Number(s.lead) || 0);
-    small.leadDistance = small.leadSeconds * small.speed;
     small.threshold = small.scales.length ? small.scales[0].threshold : null;
     // 'Crests' end (smallShape 0): inside a breaking patch, only the crest lines of the shorter ripples turn white:
     // where the Jacobian of the ripples of one octave (~25-50 cm: mip level l minus level l + 1) is below
@@ -270,7 +264,7 @@ export function foamCalibration(fftSea, windSpeed, settings = DEFAULT_FOAM_SETTI
     const bandSigma = Math.sqrt(Math.max(0, sA * sA - sB * sB));
     small.crestOffset = [SMALL_CREST_LINE[0] * bandSigma, SMALL_CREST_LINE[0] * bandSigma];
     small.crestWidth = [Math.max(1e-3, SMALL_CREST_LINE[1] * bandSigma), Math.max(1e-3, SMALL_CREST_LINE[1] * bandSigma)];
-    small.shape = Math.min(1, Math.max(0, Number(s.smallShape ?? 1)));
+    small.shape = Math.min(1, Math.max(0, Number(s.smallShape ?? DEFAULT_FOAM_SETTINGS.smallShape)));
     // Mean coverage of the small breakers where they are finer than the pixel: P(J below the middle of the ramp)
     small.expected = Math.min(0.5, small.scales.reduce((a, b) =>
       Math.max(a, b.sigma > 1e-6 ? normalCdf((b.threshold - 0.5 * b.width - 1) / b.sigma) : 0), 0));

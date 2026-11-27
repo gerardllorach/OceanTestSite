@@ -23,7 +23,7 @@ const RIPPLE_FOAM_SUPPRESS = [0.05, 0.3]; // Large-breaker foam (Foam.js state .
 // Uniforms of the ocean material read here: shared objects, so the pass follows every change of the ocean
 const OCEAN_UNIFORMS = ['u_fftEnabled', 'u_fftSlopes', 'u_fftExtra', 'u_fftSize', 'u_fftN', 'u_rippleEnabled',
   'u_rippleSlopes', 'u_rippleExtra', 'u_rippleSize', 'u_rippleN', 'u_rippleStrain', 'u_foamEnabled', 'u_foam',
-  'u_smallLevels', 'u_smallThreshold', 'u_smallWidth', 'u_seaSigmaJ', 'u_windDirection', 'u_smallLead',
+  'u_smallLevels', 'u_smallThreshold', 'u_smallWidth', 'u_seaSigmaJ',
   'u_smallShape', 'u_smallCrestLevels', 'u_smallCrestOffset', 'u_smallCrestWidth'];
 
 const quadVertex = /* glsl */`
@@ -54,8 +54,6 @@ const updateFragment = /* glsl */`
   uniform vec2 u_smallCrestOffset;
   uniform vec2 u_smallCrestWidth;
   uniform float u_seaSigmaJ;
-  uniform vec2 u_windDirection; // Direction the ripples travel
-  uniform float u_smallLead;    // m: the foam is made this far ahead of the breaking crest (as the crest drawn)
 
   uniform sampler2D u_previous;
   uniform ivec2 u_shift;     // Texels the window moved
@@ -102,8 +100,7 @@ const updateFragment = /* glsl */`
         seaJ = (1.0 + a.z) * (1.0 + a.w) - dxz * dxz;
       }
       mat2 rippleT = u_rippleStrain > 0.0 ? inverseStretch(u_rippleStrain * longStrain) : mat2(1.0);
-      // The crest that breaks u_smallLead behind: the foam is made ahead of it (the ocean shader draws the crest there)
-      float source = smallBreakerSource(x0 - u_windDirection * u_smallLead, seaJ, rippleT, 1.0);
+      float source = smallBreakerSource(x0, seaJ, rippleT, 1.0);
       if (u_foamEnabled)
         source *= 1.0 - smoothstep(${RIPPLE_FOAM_SUPPRESS[0].toFixed(2)}, ${RIPPLE_FOAM_SUPPRESS[1].toFixed(2)}, textureLod(u_foam, uv, 0.0).r);
       v += (1.0 - exp(-u_grow * u_dt * source)) * (1.0 - v);
@@ -119,7 +116,7 @@ export class RippleFoam {
     this.renderer = renderer;
     this.texels = texels;
     this.extent = extent;
-    this.settings = { grow: 6, lifetime: 1.5, variation: 0.5, spread: 0.01 };
+    this.settings = { grow: 14, lifetime: 1.5, variation: 0.5, spread: 0.01 };
     this.window = new THREE.Vector3(0, 0, extent); // (min x, min z, side) in metres
     this.windowTexel = null;
     this.needsReset = true;
@@ -141,7 +138,7 @@ export class RippleFoam {
       uniforms: { ...shared, u_previous: { value: null }, u_shift: { value: new THREE.Vector2() },
         u_texels: { value: texels }, u_window: { value: this.window }, u_reset: { value: true },
         u_spread: { value: 0 }, u_dt: { value: 0 }, u_lifetime: { value: 1.5 }, u_variation: { value: 0.5 },
-        u_grow: { value: 6 }, u_time: { value: 0 } } });
+        u_grow: { value: 14 }, u_time: { value: 0 } } });
     this.quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), this.material);
     this.quad.frustumCulled = false;
     this.scene = new THREE.Scene();

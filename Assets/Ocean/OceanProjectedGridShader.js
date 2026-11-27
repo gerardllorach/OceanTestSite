@@ -402,7 +402,6 @@ export const OceanProjectedGridFragShader = /* glsl */`
   uniform vec3 u_rippleFoamWindow; // (min x, min z, side) in metres
   uniform float u_rippleFoamMeanLod; // Its last mip level: the mean over the window
   uniform float u_smallCrest;      // Breaking crest of the small breakers drawn: 0 off .. 1 dense
-  uniform float u_smallLead;       // m: their crest foam is this far ahead (along the wind: the ripples travel with it)
   uniform float u_sprayFoamFull;   // Summed droplet area that makes the maximum foam
   uniform float u_sprayFoamLog;    // Steepness of the logarithm: how much foam the first droplets make
   uniform float u_sprayFoamMax;    // Maximum of the spray foam
@@ -766,7 +765,7 @@ ${FOAM_STATE_GLSL}
 
     // SMALL BREAKERS (waves of ~1-4 m, Assets/Ocean/Foam.js; smallBreakerSource in OceanShaderChunks.js): the
     // strained ripples where their crest breaks. Two stages, like the whitecaps:
-    //  - breaking crest: while it breaks, a little ahead of the crest (u_smallLead), dense white; everywhere, no memory
+    //  - breaking crest: while it breaks, dense white; everywhere, no memory
     //  - trail: the foam left behind (RippleFoam.js, with memory, around the camera): it fades and changes shape. Beyond
     //    its window, its mean over the window: the far sea is as whitish as the near sea
     // Drawn with a finer lace than the large whitecaps; where they are finer than the pixel, their mean coverage. None
@@ -774,7 +773,7 @@ ${FOAM_STATE_GLSL}
     float smallSource = 0.0, smallCoverage = 0.0;
     if (u_smallEnabled && u_rippleEnabled) {
       float largeMask = 1.0 - smoothstep(0.05, 0.3, foamState.r);
-      float crest = smallBreakerSource(xz - windU * u_smallLead, seaJ, rippleT, rippleDamp) * largeMask;
+      float crest = smallBreakerSource(xz, seaJ, rippleT, rippleDamp) * largeMask;
       float trail = 0.0, trailMean = 0.0;
       if (u_rippleFoamEnabled) {
         vec2 fuv = (xz - u_rippleFoamWindow.xy) / u_rippleFoamWindow.z;

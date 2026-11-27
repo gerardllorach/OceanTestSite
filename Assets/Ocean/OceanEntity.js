@@ -158,7 +158,6 @@ class OceanEntity {
         u_smallExpected: {value: 0},
         u_smallFoam: {value: DEFAULT_FOAM_SETTINGS.smallFoam},           // Ripple foam trail drawn (0: off)
         u_smallCrest: {value: DEFAULT_FOAM_SETTINGS.smallCrest},         // Their breaking crest drawn (0: off)
-        u_smallLead: {value: 0.4},                                       // m: the crest foam is this far ahead
         u_rippleFoamMeanLod: {value: 10},                                // Last mip of the ripple foam (its mean)
         u_smallFoamScale: {value: DEFAULT_FOAM_SETTINGS.smallFoamScale}, // Their lace pattern scale
         u_sprayFoamScale: {value: DEFAULT_FOAM_SETTINGS.sprayFoamScale}, // Lace pattern scale of the spray foam
@@ -555,7 +554,7 @@ class OceanEntity {
 
   // partial: {enabled, mode ('wind' | 'shape'), amount, scaleSplit ('quantile' | 'phillips'), threshold, lead,
   // persistence, collapse, radius (x wavelength), trailDamping, rippleDamping, surge, small (small breakers from the ripples), spray,
-  // smallThreshold, smallShape, smallLead, smallCrest, smallFoam, smallFoamScale, smallFoamGrow, smallFoamLifetime, smallFoamVariation, smallFoamSpread, sprayAmount, sprayLarge, sprayFoam, sprayFoamPatch, sprayFoamLifetime, sprayFoamScale,
+  // smallThreshold, smallShape, smallCrest, smallFoam, smallFoamScale, smallFoamGrow, smallFoamLifetime, smallFoamVariation, smallFoamSpread, sprayAmount, sprayLarge, sprayFoam, sprayFoamPatch, sprayFoamLifetime, sprayFoamScale,
   // sprayFoamRadius, sprayFoamFull, sprayFoamLog, sprayFoamMax (Assets/Ocean/Spray.js)}
   setFoamSettings(partial) {
     const wasEnabled = this.foamSettings.enabled;
@@ -635,9 +634,6 @@ class OceanEntity {
     u.u_foamSurge.value = c ? c.surge : 0;
     u.u_smallFoam.value = this.foamSettings.smallFoam ?? DEFAULT_FOAM_SETTINGS.smallFoam;
     u.u_smallCrest.value = this.foamSettings.smallCrest ?? DEFAULT_FOAM_SETTINGS.smallCrest;
-    // The breaking crest of the small breakers is ahead of the crest by its phase speed x the breaking lead (as the
-    // large breakers): they travel with the wind (the ripples)
-    if (small) u.u_smallLead.value = small.leadDistance; // Their own lead (or the Breaking lead) x their speed
     u.u_smallFoamScale.value = this.foamSettings.smallFoamScale ?? DEFAULT_FOAM_SETTINGS.smallFoamScale;
     u.u_sprayFoamScale.value = this.foamSettings.sprayFoamScale ?? DEFAULT_FOAM_SETTINGS.sprayFoamScale;
     u.u_sprayFoamFull.value = Math.max(0.01, this.foamSettings.sprayFoamFull ?? DEFAULT_FOAM_SETTINGS.sprayFoamFull);
