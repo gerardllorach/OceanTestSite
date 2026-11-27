@@ -3,12 +3,12 @@
 
     <p v-if="!embedded">Generates the sea from a wave spectrum: JONSWAP (Hasselmann et al. 1973), which becomes the Pierson–Moskowitz
       spectrum of a fully developed sea with γ = 1, and a directional spreading: the same at every frequency, or changing with the frequency after buoy measurements.
-      <template v-if="s.method == 'gerstner'">Without the FFT (Scene &gt; Quality: Low, or a browser that cannot run it) the
+      <template v-if="s.method == 'gerstner'">Without the FFT (Quality: Low, or a browser that cannot run it) the
         spectrum is drawn with {{ s.numComponents }} Gerstner waves, computed for every vertex. Fewer waves are faster.</template>
       <template v-else>The spectrum is
       rendered with an FFT (Tessendorf): tens of thousands of trochoidal (Gerstner) components on a grid of wavevectors,
       computed on the GPU and added at the rest position of the surface. Up to two discrete Gerstner waves
-      (Sea State &gt; Generation &gt; Swell) can be added on top, e.g. swells from other directions. The spectrum stops where the
+      (Generation &gt; Advanced &gt; Swell) can be added on top, e.g. swells from other directions. The spectrum stops where the
       surface ripples take over (the shortest wave of the FFT grid).</template></p>
 
     <div class="container-vertical options">

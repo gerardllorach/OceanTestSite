@@ -136,7 +136,7 @@
               @change="change({ enabled: $event.target.checked })"> Drawn</label>
         </div>
       </div>
-      <p v-if="rippleLoop" class="hint-low">Low quality (Scene &gt; Quality): the ripples are a precomputed
+      <p v-if="rippleLoop" class="hint-low">Low quality (Quality): the ripples are a precomputed
         loop ({{ loopFrames }} frames, {{ loopPeriod }} s, {{ ripples ? ripples.N : '' }}² grid), rebuilt when they
         change. They are not strained by the waves.</p>
       <p v-else-if="!rippleGrid" class="hint-low">No ripple grid at this quality: the ripples are roughness only.</p>

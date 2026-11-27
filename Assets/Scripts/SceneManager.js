@@ -170,7 +170,7 @@ class SceneManager{
 
 
   // SUN
-  // The sun moves on a vertical semicircle (Scene > Environment): arcAngle 0 = horizon at bearing `azimuth`,
+  // The sun moves on a vertical semicircle (Environment > Sky & light): arcAngle 0 = horizon at bearing `azimuth`,
   // 90 = zenith, 180 = horizon at the opposite bearing. Bearings in degrees clockwise from north (north = -z, east = +x).
   sunSettings = { arcAngle: 90, azimuth: 90 };
   sunDirection = new THREE.Vector3(0, 1, 0);
