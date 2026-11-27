@@ -1,11 +1,11 @@
-// Digital twin (Generation > Digital twin): drives the sliders of Generation > Advanced from what forces the sea.
+// Physics-based sea (Generation > Physics-based): drives the sliders of Generation > Graphics-based from what forces the sea.
 // For now only from the wind ("Wind driven"): a Pierson-Moskowitz, JONSWAP, TMA (JONSWAP in water of finite depth) or
 // Elfouhaily wind sea (Assets/Ocean/WindSea.js, Elfouhaily.js), a directional spreading
 // (Assets/Ocean/DirectionalSpreading.js), and the wind of the ripples and the whitecaps.
 // Ripples: the constant spectrum scaled to Cox & Munk (RippleSpectrum.js spectrum 'saturation', default), or with
 // strictRipples the spectrum of the sea continued (spectrum 'sea'), with no Cox & Munk scaling.
 //
-// The state is shared (main.js makes it reactive as window.digitalTwin): the panel edits it, the overlay at the
+// The state is shared (main.js makes it reactive as window.physicsBased): the panel edits it, the overlay at the
 // bottom-left of the screen shows it while the twin is on. Pure module: the conversions and what Generation should have.
 
 import * as WindSea from '/OceanTestSite/Assets/Ocean/WindSea.js';
@@ -14,9 +14,9 @@ import { lightWindFactor } from '/OceanTestSite/Assets/Ocean/RippleSpectrum.js';
 import { resolveSeaSettings } from '/OceanTestSite/Assets/Ocean/SeaSpectrum.js';
 import { omegaFromFetch } from '/OceanTestSite/Assets/Ocean/Elfouhaily.js';
 
-export const TWIN_MODELS = ['pm', 'jonswap', 'tma', 'elfouhaily'];
+export const PHYSICS_MODELS = ['pm', 'jonswap', 'tma', 'elfouhaily'];
 
-export const DEFAULT_TWIN_STATE = {
+export const DEFAULT_PHYSICS_STATE = {
   enabled: true,       // On (default): the twin drives Generation, and the overlay shows the forcing
   driver: 'wind',      // 'wind' (the others are not available yet: 'waves', 'buoy', 'model')
   initialised: false,  // Started from what Generation had

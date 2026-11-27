@@ -28,10 +28,10 @@
         </div>
       </div>
       <div class="container-horizontal">
-        <label class="checkbox-label" title="Include the FFT sea (Generation > Advanced) in the surface the buoy follows">
+        <label class="checkbox-label" title="Include the FFT sea (Generation > Graphics-based) in the surface the buoy follows">
           <input type="checkbox" :checked="includeFFT" @change="includeFFT = $event.target.checked; update()"> Include FFT sea
         </label>
-        <label class="checkbox-label" title="Include the surface ripples (Generation > Advanced) in the surface the buoy follows">
+        <label class="checkbox-label" title="Include the surface ripples (Generation > Graphics-based) in the surface the buoy follows">
           <input type="checkbox" :checked="includeRipples" @change="includeRipples = $event.target.checked; update()"> Include surface ripples
         </label>
       </div>
@@ -217,7 +217,7 @@
       <p class="footnote">Area: what the buoy measured. Lines and points: what the buoy can see of each layer of the sea
         (theoretical: the variance of its components inside the buoy band, after the hull response, in the same bins):
         the FFT sea, the discrete Gerstner waves (single frequencies, so single bins) and the ripples. Dashed line:
-        target spectrum of Generation &gt; Advanced. Discrete waves are spikier than the bands of the spectrum.
+        target spectrum of Generation &gt; Graphics-based. Discrete waves are spikier than the bands of the spectrum.
         The area under the curve is the variance m0, so Hs = 4·√m0. Click the y-axis to switch between
         m²/Hz against frequency and m²/s against period (S(T) = S(f)/T²).</p>
     </div>
@@ -752,7 +752,7 @@ export default {
           color: C.series[2], type: 'points', unit: a.unit, digits: 4 });
         if (L.ripples) series.push({ name: 'Ripples', x: a.x, y: toUnits(L.ripples.density), color: C.series[3], width: 1.5, unit: a.unit, digits: 4 });
       }
-      // Target spectrum of the generated sea (Generation > Advanced), when the waves come from one
+      // Target spectrum of the generated sea (Generation > Graphics-based), when the waves come from one
       const freqs = a.ks.map(k => r.spectrum.freq[k]);
       const target = window.sceneManager ? window.sceneManager.getSeaSpectralDensity(freqs) : null;
       if (target)

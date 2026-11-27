@@ -8,7 +8,7 @@
       <template v-else>The spectrum is
       rendered with an FFT (Tessendorf): tens of thousands of trochoidal (Gerstner) components on a grid of wavevectors,
       computed on the GPU and added at the rest position of the surface. Up to two discrete Gerstner waves
-      (Generation &gt; Advanced &gt; Swell) can be added on top, e.g. swells from other directions. The spectrum stops where the
+      (Generation &gt; Graphics-based &gt; Swell) can be added on top, e.g. swells from other directions. The spectrum stops where the
       surface ripples take over (the shortest wave of the FFT grid).</template></p>
 
     <div class="container-vertical options">
@@ -30,7 +30,7 @@
         <span title="Peak enhancement: 1 = Pierson-Moskowitz (fully developed), 3.3 = mean JONSWAP (growing sea)">Peak enhancement γ</span>
         <div><input type="range" min="1" max="7" step="0.1" :value="s.gamma" @input="change({ gamma: Number($event.target.value) })"><span>{{ fmt(s.gamma, 1) }}</span></div>
       </div>
-      <p v-if="s.spectrum == 'elfouhaily'" class="note">Elfouhaily spectrum (set by the digital twin, U<sub>10</sub>
+      <p v-if="s.spectrum == 'elfouhaily'" class="note">Elfouhaily spectrum (set by Physics-based, U<sub>10</sub>
         {{ fmt(s.spectrumWind, 1) }} m/s, Ω {{ fmt(s.Omega || 0.84, 2) }}): H<sub>m0</sub>, T<sub>p</sub> and γ come from it.
         <button class="clickable" @click="change({ spectrum: 'jonswap' })">Back to JONSWAP</button></p>
       <div class="container-horizontal">
@@ -150,7 +150,7 @@ import WindSpeed from '../WindSpeed.vue';
 
 import Knob from '../Knob.vue';
 
-const HM0_MIN = 0.01, HM0_MAX = 10; // m. 10 m: a fully developed sea of 20 m/s (Digital twin). The sea model floors Hm0 at 0.01 m
+const HM0_MIN = 0.01, HM0_MAX = 10; // m. 10 m: a fully developed sea of 20 m/s (Physics-based). The sea model floors Hm0 at 0.01 m
 
 export default {
   name: "SeaStatePanel",

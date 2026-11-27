@@ -102,7 +102,7 @@
         </div>
         <template v-if="settings.small !== false">
           <div class="container-horizontal">
-            <span title="A ripple crest breaks (and makes foam) where the surface is squeezed below this Jacobian J: higher, more ripples break and more foam (J < 1: any squeeze; the Stokes limit of a single wave is J = 0.56). By default (auto) the same threshold as the whitecaps, which the digital twin sets from the wind; ↺ goes back to it">Ripple breaking threshold</span>
+            <span title="A ripple crest breaks (and makes foam) where the surface is squeezed below this Jacobian J: higher, more ripples break and more foam (J < 1: any squeeze; the Stokes limit of a single wave is J = 0.56). By default (auto) the same threshold as the whitecaps, which Physics-based sets from the wind; ↺ goes back to it">Ripple breaking threshold</span>
             <div><input type="range" min="0.3" max="1" step="0.01" :value="smallThresholdShown"
                 @input="change({ smallThreshold: Number($event.target.value) })"><span>J &lt; {{ fmt(smallThresholdShown, 2) }}<template
                 v-if="settings.smallThreshold == null"> (auto)</template></span><button v-if="settings.smallThreshold != null"

@@ -11,8 +11,8 @@
     <!-- Menu, sections and side panel (right), camera buttons (bottom right) -->
     <side-panel></side-panel>
 
-    <!-- Forcing of the digital twin (bottom left), while it is on -->
-    <digital-twin-overlay></digital-twin-overlay>
+    <!-- Forcing of the physics-based sea (bottom left), while it is on; the place of the Digital twin -->
+    <physics-based-overlay></physics-based-overlay>
 
   </div>
 </template>
@@ -24,7 +24,7 @@
 // Import components
 import Canvas3D from "./Canvas3D.vue"
 import SidePanel from "./SidePanel.vue"
-import DigitalTwinOverlay from "./DigitalTwinOverlay.vue"
+import PhysicsBasedOverlay from "./PhysicsBasedOverlay.vue"
 
 export default {
   name: "AppManager",
@@ -49,7 +49,7 @@ export default {
   components: {
     "canvas3D": Canvas3D,
     "side-panel": SidePanel,
-    "digital-twin-overlay": DigitalTwinOverlay,
+    "physics-based-overlay": PhysicsBasedOverlay,
   }
 }
 </script>

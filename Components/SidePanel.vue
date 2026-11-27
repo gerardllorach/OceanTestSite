@@ -76,9 +76,10 @@ import RenderStereoPanel from './Panels/RenderStereoPanel.vue';
 import RenderHeightPanel from './Panels/RenderHeightPanel.vue';
 import EnvironmentPanel from './Panels/EnvironmentPanel.vue';
 import QualityPanel from './Panels/QualityPanel.vue';
-import SeaStateGenerationPanel from './Panels/SeaStateGenerationPanel.vue';
+import GraphicsBasedPanel from './Panels/GraphicsBasedPanel.vue';
+import PhysicsBasedPanel from './Panels/PhysicsBasedPanel.vue';
+import QuickPanel from './Panels/QuickPanel.vue';
 import DigitalTwinPanel from './Panels/DigitalTwinPanel.vue';
-import QuickSeaPanel from './Panels/QuickSeaPanel.vue';
 
 // Options of a section hide again if none is clicked within this time
 const COLLAPSE_MS = 4000;
@@ -111,13 +112,15 @@ export default {
       expandedId: '',
       isWide: false,
       sections: [
-        // Three levels of detail, each driving the next: Quick -> Digital twin -> Advanced
+        // Four levels, each driving the next: Digital twin (the real world) -> Quick (easy) -> Physics-based
+        // (moderate) -> Graphics-based (advanced: every slider of the sea)
         {
           id: 'generation', title: 'Generation', icon: '\uf773',
           children: [
-            { title: 'Quick', icon: '\uf72e', component: 'quick-sea' },
             { title: 'Digital twin', icon: '\uf0ac', component: 'digital-twin' },
-            { title: 'Advanced', icon: '\uf1de', component: 'sea-state-generation' },
+            { title: 'Quick', icon: '\uf72e', component: 'quick' },
+            { title: 'Physics-based', icon: '\uf1ec', component: 'physics-based' },
+            { title: 'Graphics-based', icon: '\uf1de', component: 'graphics-based' },
           ]
         },
         // direct: the section button opens its only option
@@ -300,7 +303,7 @@ export default {
           alert(file.name + ' has ' + waves.length + ' waves. The sea is the FFT sea plus up to 2 discrete Gerstner waves: the 2 highest are used.');
         // Same event as editing the discrete waves table: the scene, the table and the analysis update
         window.eventBus.emit('DiscreteWavesPanel_setDiscreteWaves', waves);
-        this.open('generation', 'Advanced');
+        this.open('generation', 'Graphics-based');
       });
       reader.addEventListener('error', e => {
         console.error('Could not read file ' + file.name, e);
@@ -315,9 +318,10 @@ export default {
     'render-stereo': RenderStereoPanel,
     'environment': EnvironmentPanel,
     'quality': QualityPanel,
-    'sea-state-generation': SeaStateGenerationPanel,
+    'graphics-based': GraphicsBasedPanel,
+    'physics-based': PhysicsBasedPanel,
+    'quick': QuickPanel,
     'digital-twin': DigitalTwinPanel,
-    'quick-sea': QuickSeaPanel,
   }
 }
 </script>

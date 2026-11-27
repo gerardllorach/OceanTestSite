@@ -1,10 +1,10 @@
 <template>
-  <div id="sea-state-generation-panel" class="content">
+  <div id="graphics-based-panel" class="content">
 
     <p>The sea surface is the sum of three layers: the <b>FFT sea</b> (a wave spectrum), up to two <b>swells</b>
       (discrete Gerstner waves) and the <b>ripples</b> (the short waves, down to a few centimetres). The spectra at the
-      end of the page show the three together. While the <b>Digital twin</b> is on, it sets these sliders (and
-      <b>Quick</b> sets the Digital twin); you can still adjust them by hand.</p>
+      end of the page show the three together. While <b>Physics-based</b> is on, it sets these sliders (and
+      <b>Quick</b> sets Physics-based, the <b>Digital twin</b> sets Quick); you can still adjust them by hand.</p>
 
     <!-- FFT SEA -->
     <h3 class="layer-title"><i class="layer-key" :style="{ background: colors[0] }"></i>FFT sea</h3>
@@ -128,7 +128,7 @@ import SurfaceRipplesPanel from './SurfaceRipplesPanel.vue';
 import FoamPanel from './FoamPanel.vue';
 
 export default {
-  name: "SeaStateGenerationPanel",
+  name: "GraphicsBasedPanel",
   mounted() {
     // The waves change the ripples too (slope budget), which come right after: one refresh for both
     window.eventBus.on('OceanEntity_wavesChanged', this.scheduleRefresh);

@@ -1,17 +1,17 @@
 <template>
-  <div id="quick-sea-panel" class="content">
+  <div id="quick-panel" class="content">
 
-    <p>The sea from three numbers: the wind and the wave height. They set the options of the <b>Digital twin</b>
-      (wind driven), which set every slider of <b>Advanced</b>.
-      <a href="#" @click.prevent="openPanel('Digital twin')">Spectrum and spreading: Digital twin</a>.</p>
+    <p>The sea from three numbers: the wind and the wave height. They set the options of <b>Physics-based</b>
+      (wind driven), which set every slider of <b>Graphics-based</b>. The <b>Digital twin</b> sets them from a real
+      place. <a href="#" @click.prevent="openPanel('Physics-based')">Spectrum and spreading: Physics-based</a>.</p>
 
     <p v-if="st.driver != 'wind'" class="note">
-      The digital twin is not driven by the wind.
+      Physics-based is not driven by the wind.
       <button class="clickable" @click="set({ driver: 'wind' })">Switch to wind driven</button></p>
     <p v-else-if="!st.enabled" class="note">
-      The digital twin is off: the sea is set by hand in Advanced. Moving a slider here turns it on.</p>
+      Physics-based is off: the sea is set by hand in Graphics-based. Moving a slider here turns it on.</p>
     <p v-else-if="!inSync" class="note">
-      Advanced has been changed since (by hand or from a file): the sea does not follow these values.
+      Graphics-based has been changed since (by hand or from a file): the sea does not follow these values.
       <button class="clickable" @click="set({})">Apply them again</button></p>
 
     <div class="container-vertical options">
@@ -52,7 +52,7 @@
 
     <p v-if="!fetchy" class="note">
       Pierson–Moskowitz: a fully developed sea, so the wave height is set by the wind.
-      To choose it, change the spectrum in <a href="#" @click.prevent="openPanel('Digital twin')">Digital twin</a>.</p>
+      To choose it, change the spectrum in <a href="#" @click.prevent="openPanel('Physics-based')">Physics-based</a>.</p>
     <p v-else-if="st.windSpeed > 0" class="band-text">
       At <wind-speed :value="st.windSpeed"></wind-speed>: H<sub>m0</sub> {{ fmt(band[0], 2) }}–{{ fmt(band[1], 2) }} m
       (fetch 1–{{ fdFetch != null && fdFetch < 1000 ? fmtFetch(fdFetch) + ' km; fully developed beyond' : '1000 km' }}).
@@ -78,11 +78,11 @@ import WindSpeed from '../WindSpeed.vue';
 const STEPS = 200;
 
 export default {
-  name: "QuickSeaPanel",
+  name: "QuickPanel",
   mounted() {
     ['OceanEntity_wavesChanged', 'OceanEntity_ripplesChanged', 'OceanEntity_foamChanged'].forEach(e => window.eventBus.on(e, this.refresh));
-    // The first time: start from what Generation has (as the Digital twin panel)
-    window.DigitalTwin.initialiseFrom(window.digitalTwin, window.sceneManager);
+    // The first time: start from what Generation has (as the Physics-based panel)
+    window.PhysicsBased.initialiseFrom(window.physicsBased, window.sceneManager);
     this.setHm0(this.sea.Hm0);
     this.refresh();
   },
@@ -91,7 +91,7 @@ export default {
   },
   data() {
     return {
-      st: window.digitalTwin, // Shared with the Digital twin panel and the overlay (reactive, main.js)
+      st: window.physicsBased, // Shared with the Physics-based and Digital twin panels and the overlay (reactive, main.js)
       STEPS,
       hm0: NaN,    // Wave height chosen, within the band of the wind (the fetch follows it)
       hm0Pos: 0,   // Its slider position (0..STEPS): set by the slider, or when the wind moves the band
@@ -99,33 +99,33 @@ export default {
     }
   },
   computed: {
-    sea() { return window.DigitalTwin.windSeaOf(this.st); },
-    fetchy() { return window.DigitalTwin.hasFetch(this.st); },
-    band() { return window.DigitalTwin.hm0RangeOf(this.st); },
+    sea() { return window.PhysicsBased.windSeaOf(this.st); },
+    fetchy() { return window.PhysicsBased.hasFetch(this.st); },
+    band() { return window.PhysicsBased.hm0RangeOf(this.st); },
     // At the top of the band the fetch is the fully developed one (the bisection stops just short of it)
     fullyDeveloped() { return !this.fetchy || this.sea.fullyDeveloped || (this.fdFetch != null && this.sea.Hm0 >= this.band[1] * 0.999); },
-    fdFetch() { return window.DigitalTwin.fullyDevelopedFetchOf(this.st); },
+    fdFetch() { return window.PhysicsBased.fullyDevelopedFetchOf(this.st); },
     modelTitle() {
       return { pm: 'Pierson–Moskowitz', jonswap: 'JONSWAP', tma: 'TMA, ' + (this.st.depthM ?? 30) + ' m deep', elfouhaily: 'Elfouhaily' }[this.st.model] || '';
     },
-    target() { return window.DigitalTwin.targetOf(this.st); },
+    target() { return window.PhysicsBased.targetOf(this.st); },
   },
   watch: {
     target() { this.$nextTick(this.refresh); },
   },
   methods: {
-    // Every change drives the twin (wind driven, on), which drives Advanced
+    // Every change drives Physics-based (wind driven, on), which drives Graphics-based
     set: function (partial) {
       Object.assign(this.st, { enabled: true, driver: 'wind' }, partial);
-      window.DigitalTwin.apply(this.st);
+      window.PhysicsBased.apply(this.st);
     },
     // Wind: H_m0 stays if this wind can make it, otherwise it moves to the nearest end of the new band; the fetch follows
     windChanged: function (U) {
       const partial = { windSpeed: U };
       if (this.fetchy && U > 0 && isFinite(this.hm0)) {
         const st = { ...this.st, windSpeed: U };
-        this.setHm0(this.hm0, window.DigitalTwin.hm0RangeOf(st));
-        partial.fetchKm = window.DigitalTwin.fetchForHm0(st, this.hm0);
+        this.setHm0(this.hm0, window.PhysicsBased.hm0RangeOf(st));
+        partial.fetchKm = window.PhysicsBased.fetchForHm0(st, this.hm0);
       }
       this.set(partial);
     },
@@ -134,7 +134,7 @@ export default {
       const [lo, hi] = this.band;
       this.hm0Pos = pos;
       this.hm0 = lo + (hi - lo) * pos / STEPS;
-      this.set({ fetchKm: window.DigitalTwin.fetchForHm0(this.st, this.hm0) });
+      this.set({ fetchKm: window.PhysicsBased.fetchForHm0(this.st, this.hm0) });
     },
     // H_m0 clamped to the band, and the slider position that shows it
     setHm0: function (h, [lo, hi] = this.band) {
@@ -142,7 +142,7 @@ export default {
       this.hm0Pos = hi > lo ? Math.round((this.hm0 - lo) / (hi - lo) * STEPS) : 0;
     },
     refresh: function () {
-      this.inSync = !this.st.enabled || window.DigitalTwin.inSync(this.st, window.sceneManager);
+      this.inSync = !this.st.enabled || window.PhysicsBased.inSync(this.st, window.sceneManager);
     },
     openPanel: function (title) {
       window.eventBus.emit('SidePanel_open', { section: 'generation', title });

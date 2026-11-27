@@ -95,7 +95,7 @@
 
       <!-- SHAPE OF THE SPECTRUM -->
       <div class="container-horizontal">
-        <span title="Sea spectrum (strict, set by the digital twin): the ripples continue the spectrum of the FFT sea (JONSWAP, TMA, Pierson-Moskowitz or Elfouhaily) in absolute units, not scaled to Cox &amp; Munk. Wind dependent (Elfouhaily et al. 1997, scaled to Cox &amp; Munk): in strong wind the short sharp ripples carry most of the slope, the mid-sized waves are few. Constant: the same slope per octave at any wind (Phillips 1958), scaled to Cox &amp; Munk">Spectrum shape</span>
+        <span title="Sea spectrum (strict, set by Physics-based): the ripples continue the spectrum of the FFT sea (JONSWAP, TMA, Pierson-Moskowitz or Elfouhaily) in absolute units, not scaled to Cox &amp; Munk. Wind dependent (Elfouhaily et al. 1997, scaled to Cox &amp; Munk): in strong wind the short sharp ripples carry most of the slope, the mid-sized waves are few. Constant: the same slope per octave at any wind (Phillips 1958), scaled to Cox &amp; Munk">Spectrum shape</span>
         <div class="column">
           <div class="segmented" role="group" aria-label="Shape of the ripple spectrum">
             <button class="clickable" :class="{ 'button-active': settings.spectrum == 'sea' }" :aria-pressed="settings.spectrum == 'sea'"

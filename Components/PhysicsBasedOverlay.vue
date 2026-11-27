@@ -1,7 +1,8 @@
 <template>
-  <!-- Forcing of the digital twin (Generation > Digital twin), bottom-left of the screen while it is on -->
-  <div v-if="tw.enabled && tw.driver == 'wind'" class="twin-overlay" role="status" aria-label="Digital twin: wind driven">
-    <div class="twin-title">Digital twin · wind driven</div>
+  <!-- Forcing of the physics-based sea (Generation > Physics-based), bottom-left of the screen while it is on. While
+       it has the wind and the waves of a real place (Generation > Digital twin), the title is that place -->
+  <div v-if="pb.enabled && pb.driver == 'wind'" class="twin-overlay" role="status" :aria-label="title">
+    <div class="twin-title" :title="place ? 'Wind and wave height of this place, now (Generation > Digital twin)' : ''">{{ title }}</div>
     <div class="twin-main">
       <!-- Compass, north up. Wedge: where the waves come from (±σ1 at the peak), arrow: where the wind blows to -->
       <svg class="twin-compass" viewBox="-30 -30 60 60" width="60" height="60" aria-hidden="true">
@@ -9,26 +10,26 @@
         <g>
           <text class="north" x="0" y="-18.5" text-anchor="middle" dominant-baseline="middle">N</text>
           <path class="wedge" :d="wedgePath"></path>
-          <g :transform="'rotate(' + (tw.windDir + 180) + ')'">
+          <g :transform="'rotate(' + (pb.windDir + 180) + ')'">
             <line x1="0" y1="16" x2="0" y2="-12" class="shaft"></line>
             <path d="M -6 -9 L 0 -19 L 6 -9 Z" class="head"></path>
           </g>
         </g>
       </svg>
       <div class="twin-values">
-        <div class="twin-wind"><wind-speed :value="tw.windSpeed"></wind-speed></div>
-        <div class="twin-line">from {{ compass(tw.windDir) }}</div>
-        <div class="twin-line" :title="spreadTitle">spread {{ fmt(sigmaPeak, 0) }}°<template v-if="tw.spreadModel != 'constant'"> at T<sub>p</sub></template></div>
+        <div class="twin-wind"><wind-speed :value="pb.windSpeed"></wind-speed></div>
+        <div class="twin-line">from {{ compass(pb.windDir) }}</div>
+        <div class="twin-line" :title="spreadTitle">spread {{ fmt(sigmaPeak, 0) }}°<template v-if="pb.spreadModel != 'constant'"> at T<sub>p</sub></template></div>
       </div>
     </div>
     <!-- Derived from the wind: less visible -->
     <div class="twin-derived">
       H<sub>m0</sub> {{ fmt(sea.Hm0, 2) }} m · T<sub>p</sub> {{ fmt(sea.Tp, 1) }} s ·
-      {{ tw.model == 'pm' ? 'Pierson–Moskowitz' : tw.model == 'tma' ? 'TMA, ' + fmtFetch(tw.fetchKm) + ' km, ' + (tw.depthM ?? 30) + ' m deep'
-        : (tw.model == 'elfouhaily' ? 'Elfouhaily, ' : 'JONSWAP, ') + fmtFetch(tw.fetchKm) + ' km' }}
+      {{ pb.model == 'pm' ? 'Pierson–Moskowitz' : pb.model == 'tma' ? 'TMA, ' + fmtFetch(pb.fetchKm) + ' km, ' + (pb.depthM ?? 30) + ' m deep'
+        : (pb.model == 'elfouhaily' ? 'Elfouhaily, ' : 'JONSWAP, ') + fmtFetch(pb.fetchKm) + ' km' }}
     </div>
-    <div v-if="!inSync" class="twin-derived twin-warning" title="Generation > Advanced was changed by hand since: the sea does not follow this wind">
-      Advanced edited by hand
+    <div v-if="!inSync" class="twin-derived twin-warning" title="Generation > Graphics-based was changed by hand since: the sea does not follow this wind">
+      Graphics-based edited by hand
     </div>
   </div>
 </template>
@@ -40,7 +41,7 @@
 import WindSpeed from './WindSpeed.vue';
 
 export default {
-  name: "DigitalTwinOverlay",
+  name: "PhysicsBasedOverlay",
   mounted() {
     ['OceanEntity_wavesChanged', 'OceanEntity_ripplesChanged', 'OceanEntity_foamChanged'].forEach(e => window.eventBus.on(e, this.refresh));
     this.refresh();
@@ -50,36 +51,44 @@ export default {
   },
   data() {
     return {
-      tw: window.digitalTwin,
+      pb: window.physicsBased,
+      twin: window.digitalTwin,
       inSync: true,
     }
   },
   computed: {
-    sea() { return window.DigitalTwin.windSeaOf(this.tw); },
+    // The real place whose wind and waves the sea still has, or ''
+    place() {
+      const a = this.twin.applied, pb = this.pb;
+      if (!a || pb.windSpeed != a.windSpeed || pb.windDir != a.windDir || Math.abs(pb.fetchKm - a.fetchKm) > 1e-6 || pb.model != a.model) return '';
+      return this.twin.names[0] || window.DigitalTwinData.formatLatLon(this.twin.lat, this.twin.lon, 1);
+    },
+    title() { return this.place ? 'Digital twin · ' + this.place : 'Physics-based · wind driven'; },
+    sea() { return window.PhysicsBased.windSeaOf(this.pb); },
     // Spread at the peak (the same at every frequency for the constant spreading)
     sigmaPeak() {
-      const sp = window.DigitalTwin.spreadingOf(this.tw);
+      const sp = window.PhysicsBased.spreadingOf(this.pb);
       return sp.sigma1(sp.fp);
     },
     spreadTitle() {
-      const m = window.DirectionalSpreading.SPREAD_MODELS.find(m => m.id == this.tw.spreadModel);
+      const m = window.DirectionalSpreading.SPREAD_MODELS.find(m => m.id == this.pb.spreadModel);
       return 'Directional spreading: ' + (m ? m.title : '') + '. σ1 at the peak period.';
     },
     // Sector of ±sigma1 around the direction the waves come from, in the compass (radius 24)
     wedgePath() {
-      const half = Math.min(170, Math.max(2, this.sigmaPeak)) * Math.PI / 180, from = this.tw.windDir * Math.PI / 180, r = 24;
+      const half = Math.min(170, Math.max(2, this.sigmaPeak)) * Math.PI / 180, from = this.pb.windDir * Math.PI / 180, r = 24;
       const pt = a => `${(r * Math.sin(a)).toFixed(2)} ${(-r * Math.cos(a)).toFixed(2)}`;
       return `M 0 0 L ${pt(from - half)} A ${r} ${r} 0 ${half > Math.PI / 2 ? 1 : 0} 1 ${pt(from + half)} Z`;
     },
-    target() { return window.DigitalTwin.targetOf(this.tw); },
+    target() { return window.PhysicsBased.targetOf(this.pb); },
   },
   watch: {
     target() { this.$nextTick(this.refresh); },
-    'tw.enabled'() { this.$nextTick(this.refresh); },
+    'pb.enabled'() { this.$nextTick(this.refresh); },
   },
   methods: {
     refresh() {
-      this.inSync = !this.tw.enabled || window.DigitalTwin.inSync(this.tw, window.sceneManager);
+      this.inSync = !this.pb.enabled || window.PhysicsBased.inSync(this.pb, window.sceneManager);
     },
     compass(deg) {
       deg = ((deg % 360) + 360) % 360;
