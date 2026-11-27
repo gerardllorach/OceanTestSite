@@ -151,6 +151,10 @@ class OceanEntity {
         u_smallLevels: {value: new THREE.Vector2(4, 5)},
         u_smallThreshold: {value: new THREE.Vector2(-1e3, -1e3)},
         u_smallWidth: {value: new THREE.Vector2(1, 1)},
+        u_smallShape: {value: 1},                                        // 0: thin breaking crests .. 1: patches
+        u_smallCrestLevels: {value: new THREE.Vector2(1, 2)},            // Their 'crests' end (Foam.js calibration)
+        u_smallCrestOffset: {value: new THREE.Vector2(0.01, 0.01)},
+        u_smallCrestWidth: {value: new THREE.Vector2(0.05, 0.05)},
         u_smallExpected: {value: 0},
         u_smallFoam: {value: DEFAULT_FOAM_SETTINGS.smallFoam},           // Ripple foam trail drawn (0: off)
         u_smallCrest: {value: DEFAULT_FOAM_SETTINGS.smallCrest},         // Their breaking crest drawn (0: off)
@@ -551,7 +555,7 @@ class OceanEntity {
 
   // partial: {enabled, mode ('wind' | 'shape'), amount, scaleSplit ('quantile' | 'phillips'), threshold, lead,
   // persistence, collapse, radius (x wavelength), trailDamping, rippleDamping, surge, small (small breakers from the ripples), spray,
-  // smallCrest, smallFoam, smallFoamScale, smallFoamGrow, smallFoamLifetime, smallFoamVariation, smallFoamSpread, sprayAmount, sprayLarge, sprayFoam, sprayFoamPatch, sprayFoamLifetime, sprayFoamScale,
+  // smallThreshold, smallShape, smallLead, smallCrest, smallFoam, smallFoamScale, smallFoamGrow, smallFoamLifetime, smallFoamVariation, smallFoamSpread, sprayAmount, sprayLarge, sprayFoam, sprayFoamPatch, sprayFoamLifetime, sprayFoamScale,
   // sprayFoamRadius, sprayFoamFull, sprayFoamLog, sprayFoamMax (Assets/Ocean/Spray.js)}
   setFoamSettings(partial) {
     const wasEnabled = this.foamSettings.enabled;
@@ -622,6 +626,10 @@ class OceanEntity {
       u.u_smallLevels.value.set(small.levels[0], small.levels[1]);
       u.u_smallThreshold.value.set(small.scales[0].threshold, small.scales[1].threshold);
       u.u_smallWidth.value.set(small.scales[0].width, small.scales[1].width);
+      u.u_smallShape.value = small.shape;
+      u.u_smallCrestLevels.value.set(small.crestLevels[0], small.crestLevels[1]);
+      u.u_smallCrestOffset.value.set(small.crestOffset[0], small.crestOffset[1]);
+      u.u_smallCrestWidth.value.set(small.crestWidth[0], small.crestWidth[1]);
       u.u_smallExpected.value = small.expected;
     }
     u.u_foamSurge.value = c ? c.surge : 0;
@@ -629,7 +637,7 @@ class OceanEntity {
     u.u_smallCrest.value = this.foamSettings.smallCrest ?? DEFAULT_FOAM_SETTINGS.smallCrest;
     // The breaking crest of the small breakers is ahead of the crest by its phase speed x the breaking lead (as the
     // large breakers): they travel with the wind (the ripples)
-    if (small) u.u_smallLead.value = (c.lead || 0) * Math.sqrt(9.81 * (small.lambdas[0] + small.lambdas[1]) / 2 / (2 * Math.PI));
+    if (small) u.u_smallLead.value = small.leadDistance; // Their own lead (or the Breaking lead) x their speed
     u.u_smallFoamScale.value = this.foamSettings.smallFoamScale ?? DEFAULT_FOAM_SETTINGS.smallFoamScale;
     u.u_sprayFoamScale.value = this.foamSettings.sprayFoamScale ?? DEFAULT_FOAM_SETTINGS.sprayFoamScale;
     u.u_sprayFoamFull.value = Math.max(0.01, this.foamSettings.sprayFoamFull ?? DEFAULT_FOAM_SETTINGS.sprayFoamFull);

@@ -23,7 +23,8 @@ const RIPPLE_FOAM_SUPPRESS = [0.05, 0.3]; // Large-breaker foam (Foam.js state .
 // Uniforms of the ocean material read here: shared objects, so the pass follows every change of the ocean
 const OCEAN_UNIFORMS = ['u_fftEnabled', 'u_fftSlopes', 'u_fftExtra', 'u_fftSize', 'u_fftN', 'u_rippleEnabled',
   'u_rippleSlopes', 'u_rippleExtra', 'u_rippleSize', 'u_rippleN', 'u_rippleStrain', 'u_foamEnabled', 'u_foam',
-  'u_smallLevels', 'u_smallThreshold', 'u_smallWidth', 'u_seaSigmaJ'];
+  'u_smallLevels', 'u_smallThreshold', 'u_smallWidth', 'u_seaSigmaJ', 'u_windDirection', 'u_smallLead',
+  'u_smallShape', 'u_smallCrestLevels', 'u_smallCrestOffset', 'u_smallCrestWidth'];
 
 const quadVertex = /* glsl */`
   void main() { gl_Position = vec4(position.xy, 0.0, 1.0); }
@@ -48,7 +49,13 @@ const updateFragment = /* glsl */`
   uniform vec2 u_smallLevels;
   uniform vec2 u_smallThreshold;
   uniform vec2 u_smallWidth;
+  uniform float u_smallShape;          // 0: thin breaking crests .. 1: patches
+  uniform vec2 u_smallCrestLevels;    // 'Crests' end: mip levels, line threshold and ramp of the shorter ripples' crests
+  uniform vec2 u_smallCrestOffset;
+  uniform vec2 u_smallCrestWidth;
   uniform float u_seaSigmaJ;
+  uniform vec2 u_windDirection; // Direction the ripples travel
+  uniform float u_smallLead;    // m: the foam is made this far ahead of the breaking crest (as the crest drawn)
 
   uniform sampler2D u_previous;
   uniform ivec2 u_shift;     // Texels the window moved
@@ -95,7 +102,8 @@ const updateFragment = /* glsl */`
         seaJ = (1.0 + a.z) * (1.0 + a.w) - dxz * dxz;
       }
       mat2 rippleT = u_rippleStrain > 0.0 ? inverseStretch(u_rippleStrain * longStrain) : mat2(1.0);
-      float source = smallBreakerSource(x0, seaJ, rippleT, 1.0);
+      // The crest that breaks u_smallLead behind: the foam is made ahead of it (the ocean shader draws the crest there)
+      float source = smallBreakerSource(x0 - u_windDirection * u_smallLead, seaJ, rippleT, 1.0);
       if (u_foamEnabled)
         source *= 1.0 - smoothstep(${RIPPLE_FOAM_SUPPRESS[0].toFixed(2)}, ${RIPPLE_FOAM_SUPPRESS[1].toFixed(2)}, textureLod(u_foam, uv, 0.0).r);
       v += (1.0 - exp(-u_grow * u_dt * source)) * (1.0 - v);

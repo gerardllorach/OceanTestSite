@@ -73,6 +73,10 @@ export const DEFAULT_FOAM_SETTINGS = {
   rippleDamping: 0.8,    // How much the foam smooths the ripples under it (0: off, the ripples stay sharp)
   surge: 2,              // Forward surge of a collapsing crest, times its height (0: off)
   small: true,           // Small breakers from the ripples (waves of ~1-4 m): their foam and their spray
+  smallThreshold: null,  // Jacobian below which a small breaker (ripple) breaks; null: the same as the whitecaps
+  smallShape: 1,         // 0: foam on thin breaking ripple crests (fine Jacobian, sharp threshold) .. 1: patches (the
+                         // Jacobian of the ~1-2 m waves, soft threshold)
+  smallLead: null,       // s: their foam is made this far ahead of the crest (x their speed); null: the Breaking lead
   smallCrest: 0.05,      // Breaking crest of the small breakers (while it breaks, a little ahead): 0 off .. 1 dense
   smallFoam: 0.7,        // Their foam trail (RippleFoam.js): 0 off .. 1 dense
   smallFoamScale: 2.5,   // Their lace pattern, finer than the large whitecaps' (x scale of the detail)
@@ -98,6 +102,8 @@ export const FOAM_SCALE_SPLITS = ['quantile', 'phillips'];
 export const FOAM_LEVELS = 4;         // Scales of the FFT sea: mip levels 0..3 of its maps
 const SMALL_LEVELS = 2;               // Scales of the ripples: waves of ~1 m and ~2 m
 const SMALL_SHORTEST = 1;             // m, the shortest small breaker
+const SMALL_CREST_SHORTEST = 0.25;    // m: the crest lines inside a breaking patch are those of the ripples of ~25-50 cm
+const SMALL_CREST_LINE = [1.0, 0.5];  // A crest line where their Jacobian is below -1 sigma (full at -1.5 sigma): ~16%
 
 const G = 9.8;
 const ACTIVE_SHARE = 0.2;             // Share of the whitecap coverage that is actively breaking (stage A)
@@ -238,9 +244,33 @@ export function foamCalibration(fftSea, windSpeed, settings = DEFAULT_FOAM_SETTI
     b.sigmaJ = b.sigma;
   });
   const seaBands = bands.filter(b => !b.small);
+  // Small breakers: their own threshold, when set (both modes)
+  const smallThreshold = Number(s.smallThreshold);
+  if (s.smallThreshold != null && isFinite(smallThreshold))
+    bands.filter(b => b.small).forEach(b => {
+      b.threshold = smallThreshold;
+      b.fraction = b.sigma > 1e-6 ? normalCdf((b.threshold - 1) / b.sigma) : 0;
+    });
   if (mode == 'shape') activeFraction = Math.min(1, bands.reduce((a, b) => Math.max(a, b.fraction), 0));
   if (small.enabled) {
     small.scales = bands.filter(b => b.small);
+    // Their phase speed (deep water, mean of the two scales) and how far ahead their foam is made: lead x speed
+    small.speed = Math.sqrt(9.81 * (small.lambdas[0] + small.lambdas[1]) / 2 / (2 * Math.PI));
+    const smallLead = Number(s.smallLead);
+    small.leadSeconds = s.smallLead != null && isFinite(smallLead) ? Math.max(0, smallLead) : Math.max(0, Number(s.lead) || 0);
+    small.leadDistance = small.leadSeconds * small.speed;
+    small.threshold = small.scales.length ? small.scales[0].threshold : null;
+    // 'Crests' end (smallShape 0): inside a breaking patch, only the crest lines of the shorter ripples turn white:
+    // where the Jacobian of the ripples of one octave (~25-50 cm: mip level l minus level l + 1) is below
+    // -SMALL_CREST_LINE[0] of its standard deviation (the octaves are independent: sigma^2 = s(l)^2 - s(l + 1)^2)
+    const rdx = ripples.L / ripples.N;
+    const crestFirst = Math.max(0, Math.min(small.levels[0] - 1, Math.round(Math.log2(SMALL_CREST_SHORTEST / (4 * rdx)))));
+    small.crestLevels = [crestFirst, crestFirst + 1];
+    const [sA, sB] = divergenceSigmas(ripples, small.crestLevels.map(l => 4 * rdx * Math.pow(2, l)));
+    const bandSigma = Math.sqrt(Math.max(0, sA * sA - sB * sB));
+    small.crestOffset = [SMALL_CREST_LINE[0] * bandSigma, SMALL_CREST_LINE[0] * bandSigma];
+    small.crestWidth = [Math.max(1e-3, SMALL_CREST_LINE[1] * bandSigma), Math.max(1e-3, SMALL_CREST_LINE[1] * bandSigma)];
+    small.shape = Math.min(1, Math.max(0, Number(s.smallShape ?? 1)));
     // Mean coverage of the small breakers where they are finer than the pixel: P(J below the middle of the ramp)
     small.expected = Math.min(0.5, small.scales.reduce((a, b) =>
       Math.max(a, b.sigma > 1e-6 ? normalCdf((b.threshold - 0.5 * b.width - 1) / b.sigma) : 0), 0));

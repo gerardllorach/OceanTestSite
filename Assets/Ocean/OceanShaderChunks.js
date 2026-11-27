@@ -43,7 +43,8 @@ export const FOAM_DISPLACEMENT_GLSL = /* glsl */`
 `;
 
 // RIPPLES STRAINED BY THE LONG WAVES and SMALL BREAKERS. Uniforms: u_rippleSlopes, u_rippleExtra, u_rippleSize,
-// u_rippleN, u_smallLevels, u_smallThreshold, u_smallWidth, u_seaSigmaJ
+// u_rippleN, u_smallLevels, u_smallThreshold, u_smallWidth, u_seaSigmaJ, and the 'crests' end: u_smallShape,
+// u_smallCrestLevels, u_smallCrestOffset, u_smallCrestWidth
 export const SMALL_BREAKERS_GLSL = /* glsl */`
   // Principal stretches of the symmetric matrix I + e, e = (xx, zz, xz): (largest, smallest)
   vec2 principalStretch(vec3 e) {
@@ -87,6 +88,9 @@ export const SMALL_BREAKERS_GLSL = /* glsl */`
   //    (up to x2.8 on the steepest long-wave crests, down to x0.4 in their troughs), and they do not break where
   //    the long waves stretch the surface
   //  - their threshold varies smoothly from tile to tile (period-free noise, +-1 ramp width)
+  //  - u_smallShape: which part of a breaking patch turns white. 1 (patches): all of it. 0 (crests): only the crest
+  //    lines of the shorter ripples in it, where the Jacobian of one octave of ripples (~25-50 cm: mip level
+  //    u_smallCrestLevels.x minus .y) is below -u_smallCrestOffset.x (ramp u_smallCrestWidth.x)
   // Breaking strength 0..1 at rest position xz. seaJ: Jacobian of the FFT sea there; rippleT: inverse strain of the
   // ripples by the long waves; rippleDamp: their damping under the foam
   float smallBreakerSource(vec2 xz, float seaJ, mat2 rippleT, float rippleDamp) {
@@ -95,7 +99,8 @@ export const SMALL_BREAKERS_GLSL = /* glsl */`
     float gate = smoothstep(-0.5, 0.5, longSqueeze);
     float jitter = 2.0 * (valueNoise(xz / u_rippleSize + 17.0) - 0.5);
     vec2 ruv = xz / u_rippleSize + 0.5 / u_rippleN;
-    float source = 0.0;
+    float source = 0.0, band = 0.0;
+    bool bandDone = false;
     for (int i = 0; i < 2; i++) {
       float level = i == 0 ? u_smallLevels.x : u_smallLevels.y;
       vec4 a = textureLod(u_rippleSlopes, ruv, level);
@@ -105,7 +110,27 @@ export const SMALL_BREAKERS_GLSL = /* glsl */`
       float j = 1.0 - modulation * (1.0 - ((1.0 + rJ[0][0]) * (1.0 + rJ[1][1]) - offDiagonal * offDiagonal));
       float width = 2.0 * (i == 0 ? u_smallWidth.x : u_smallWidth.y); // Soft: thin foam at the edges
       float threshold = (i == 0 ? u_smallThreshold.x : u_smallThreshold.y) + jitter * width;
-      source = max(source, clamp((threshold - j) / width, 0.0, 1.0));
+      float s = clamp((threshold - j) / width, 0.0, 1.0);
+      if (u_smallShape < 0.999 && s > 0.0) {
+        // Crest lines of the shorter ripples inside the breaking patch: the Jacobian of one octave of ripples (the
+        // difference of two mip levels), once
+        if (!bandDone) {
+          float jb[2];
+          for (int b = 0; b < 2; b++) {
+            float lb = b == 0 ? u_smallCrestLevels.x : u_smallCrestLevels.y;
+            vec4 af = textureLod(u_rippleSlopes, ruv, lb);
+            float dxzf = textureLod(u_rippleExtra, ruv, lb).x;
+            mat2 rJf = rippleT * mat2(af.z, dxzf, dxzf, af.w) * rippleDamp;
+            float offf = 0.5 * (rJf[0][1] + rJf[1][0]);
+            jb[b] = (1.0 + rJf[0][0]) * (1.0 + rJf[1][1]) - offf * offf;
+          }
+          band = modulation * (jb[0] - jb[1]); // Below 0 on the crests of these ripples
+          bandDone = true;
+        }
+        float line = clamp((-band - u_smallCrestOffset.x) / u_smallCrestWidth.x, 0.0, 1.0);
+        s *= mix(line, 1.0, u_smallShape);
+      }
+      source = max(source, s);
     }
     return source * gate;
   }

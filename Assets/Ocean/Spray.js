@@ -88,7 +88,7 @@ const OCEAN_UNIFORMS = ['u_fftEnabled', 'u_fftDisplacement', 'u_fftSlopes', 'u_f
   'u_rippleEnabled', 'u_rippleDisplacement', 'u_rippleSlopes', 'u_rippleExtra', 'u_rippleSize', 'u_rippleN',
   'u_rippleStrain', 'u_foamEnabled', 'u_foam', 'u_foamCollapse', 'u_foamRadiusLod', 'u_collapseStrength',
   'u_trailDamping', 'u_foamSurge', 'u_seaDirection', 'u_smallEnabled', 'u_smallLevels', 'u_smallThreshold',
-  'u_smallWidth', 'u_seaSigmaJ', 'u_foamLambda0', 'u_windDirection', 'u_sunDirection', 'u_sunColor', 'u_skyCube', 'u_skyReady'];
+  'u_smallWidth', 'u_smallShape', 'u_smallCrestLevels', 'u_smallCrestOffset', 'u_smallCrestWidth', 'u_seaSigmaJ', 'u_foamLambda0', 'u_windDirection', 'u_sunDirection', 'u_sunColor', 'u_skyCube', 'u_skyReady'];
 
 const OCEAN_DECLARATIONS = /* glsl */`
   uniform bool u_fftEnabled;
@@ -116,6 +116,10 @@ const OCEAN_DECLARATIONS = /* glsl */`
   uniform vec2 u_smallLevels;
   uniform vec2 u_smallThreshold;
   uniform vec2 u_smallWidth;
+  uniform float u_smallShape;          // 0: thin breaking crests .. 1: patches
+  uniform vec2 u_smallCrestLevels;    // 'Crests' end: mip levels, line threshold and ramp of the shorter ripples' crests
+  uniform vec2 u_smallCrestOffset;
+  uniform vec2 u_smallCrestWidth;
   uniform float u_seaSigmaJ;
   uniform float u_foamLambda0;
   uniform vec2 u_windDirection;

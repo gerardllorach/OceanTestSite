@@ -387,6 +387,10 @@ export const OceanProjectedGridFragShader = /* glsl */`
   uniform vec2 u_smallLevels;      // Mip levels of the ripple maps: the waves longer than ~1 m and ~2 m
   uniform vec2 u_smallThreshold;   // Jacobian below which they break
   uniform vec2 u_smallWidth;       // From no foam to full foam
+  uniform float u_smallShape;          // 0: thin breaking crests .. 1: patches
+  uniform vec2 u_smallCrestLevels;    // 'Crests' end: mip levels, line threshold and ramp of the shorter ripples' crests
+  uniform vec2 u_smallCrestOffset;
+  uniform vec2 u_smallCrestWidth;
   uniform float u_smallExpected;   // Their mean coverage, where they are finer than the pixel
   uniform float u_smallFoam;       // Ripple whitecaps drawn: 0 off .. 1 dense (their foam value is source x this)
   uniform float u_smallFoamScale;  // Their lace pattern, x the scale of the detail
@@ -782,8 +786,13 @@ ${FOAM_STATE_GLSL}
       vec2 ruv = xz / u_rippleSize + 0.5 / u_rippleN;
       float pixelLod = log2(max(max(length(dFdx(ruv)), length(dFdy(ruv))) * u_rippleN, 1e-6));
       float far = min(1.0, u_smallExpected * u_smallCrest / 0.75 + u_smallFoam * trailMean) * largeMask;
-      smallCoverage = mix(foamPattern(xz * u_smallFoamScale, windU, max(u_smallCrest * crest, u_smallFoam * trail)).x,
-                          far, clamp(pixelLod - u_smallLevels.y, 0.0, 1.0));
+      // The breaking crest: through the lace for patches; solid at the 'crests' end (u_smallShape 0), where it is a thin
+      // line along the ripple crest that the holes of the lace would break up. The trail: always the lace
+      float crestFoam = u_smallCrest * crest;
+      float laced = foamPattern(xz * u_smallFoamScale, windU, max(crestFoam * u_smallShape, u_smallFoam * trail)).x;
+      float near = max(laced, crestFoam * (1.0 - u_smallShape));
+      smallCoverage = mix(near,
+                          far, clamp(pixelLod - mix(u_smallCrestLevels.x, u_smallLevels.y, u_smallShape), 0.0, 1.0));
       smallSource = max(u_smallCrest * crest, 0.6 * u_smallFoam * trail); // Thickness: the crest is thick, fresh foam
     }
     // SPRAY FOAM: the droplets that fell back (Assets/Ocean/Spray.js), merged where they landed close together. Drawn
