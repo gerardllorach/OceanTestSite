@@ -59,12 +59,17 @@
       <div class="container-horizontal">
         <span title="Width of the directional distribution of the ripples. Narrow: long-crested ripples aligned with their direction. Wide: short-crested, from all directions">Directional spread</span>
         <div class="column">
-          <label class="checkbox-label" title="From the ratio of crosswind to upwind slopes of Cox & Munk, and broader for shorter ripples">
-            <input type="checkbox" :checked="settings.spreadMode != 'custom'" @change="toggleAutoSpread($event.target.checked)"> Auto (Cox–Munk)
-          </label>
+          <div class="segmented" role="group" aria-label="Directional spread of the ripples">
+            <button class="clickable" :class="{ 'button-active': spreadModeShown == 'wind' }" :aria-pressed="spreadModeShown == 'wind'"
+              title="Narrower with more wind: 60° at 7 kn, 15° from 30 kn (linear in knots)" @click="change({ spreadMode: 'wind' })">Wind</button>
+            <button class="clickable" :class="{ 'button-active': spreadModeShown == 'auto' }" :aria-pressed="spreadModeShown == 'auto'"
+              title="From the ratio of crosswind to upwind slopes of Cox & Munk" @click="change({ spreadMode: 'auto' })">Cox–Munk</button>
+            <button class="clickable" :class="{ 'button-active': spreadModeShown == 'custom' }" :aria-pressed="spreadModeShown == 'custom'"
+              @click="setCustomSpread()">Custom</button>
+          </div>
           <div v-if="settings.spreadMode == 'custom'"><input type="range" min="5" max="150" step="1" :value="settings.spread"
               @input="change({ spread: Number($event.target.value) })"><span>{{ settings.spread }}°</span></div>
-          <span v-else-if="ripples" class="derived-value">{{ fmt(ripples.spread, 0) }}°, broader for shorter ripples</span>
+          <span v-else-if="ripples" class="derived-value">{{ fmt(ripples.spread, 0) }}°<template v-if="ripples.spreadMode == 'sea'"> (spreading of the sea)</template></span>
         </div>
       </div>
       <!-- Strength: only without Auto (Cox-Munk); Auto keeps the full Cox-Munk slope -->
@@ -208,7 +213,7 @@ export default {
   },
   data() {
     return {
-      settings: { mode: 'seaState', windSpeed: 7, windDir: 0, enabled: true, directionMode: 'wind', direction: 0, spreadMode: 'auto', spread: 30, strength: 1, strain: 1, lightWind: 'coxMunk', spectrum: 'saturation', randomAmplitudes: true, detail: true },
+      settings: { mode: 'seaState', windSpeed: 7, windDir: 0, enabled: true, directionMode: 'wind', direction: 0, spreadMode: 'wind', spread: 30, strength: 1, strain: 1, lightWind: 'coxMunk', spectrum: 'saturation', randomAmplitudes: true, detail: true },
       ripples: null,
       rippleGrid: true,  // Ripples drawn (FFT or loop)
       rippleFFT: true,   // Ripple FFT (the strain needs it)
@@ -230,6 +235,8 @@ export default {
     }
   },
   computed: {
+    // Spread mode as resolved by the ripples ('sea' under the twin shows none active)
+    spreadModeShown() { return this.ripples ? this.ripples.spreadMode : (this.settings.spreadMode || 'wind'); },
     slopeRows() {
       const s = this.ripples.slopes;
       return [
@@ -282,9 +289,10 @@ export default {
       if (this.settings.directionMode == 'custom') return;
       this.change({ directionMode: 'custom', direction: this.ripples ? Math.round(this.ripples.windDir) : 0 });
     },
-    // Custom spread, starting from the current (auto) one
-    toggleAutoSpread: function (auto) {
-      this.change(auto ? { spreadMode: 'auto' } : { spreadMode: 'custom', spread: this.ripples ? Math.round(this.ripples.spread) : 30 });
+    // Custom spread, starting from the current one
+    setCustomSpread: function () {
+      if (this.settings.spreadMode == 'custom') return;
+      this.change({ spreadMode: 'custom', spread: this.ripples ? Math.round(this.ripples.spread) : 30 });
     },
     change: function (partial) {
       Object.assign(this.settings, partial);

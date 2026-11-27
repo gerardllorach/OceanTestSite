@@ -71,8 +71,6 @@
             @click="set({ model: 'elfouhaily' })">Elfouhaily</button>
         </div>
       </div>
-      <p class="note">The ripples follow this spectrum strictly: they continue it below the shortest wave of the FFT sea,
-        in absolute units (not scaled to Cox &amp; Munk).</p>
       <!-- JONSWAP, TMA, Elfouhaily: fetch; JONSWAP, TMA: gamma; TMA: depth -->
       <template v-if="st.model != 'pm'">
         <div class="container-horizontal">
@@ -111,7 +109,14 @@
           <input type="checkbox" :checked="st.driveRipples" @change="set({ driveRipples: $event.target.checked })"> Same wind
         </label>
       </div>
-      <div class="container-horizontal" v-if="false">
+      <div class="container-horizontal">
+        <span title="On: the ripples continue the spectrum of the sea below its shortest FFT wave, in absolute units (strict, not scaled to Cox & Munk). Off: the constant ripple spectrum (the same slope per octave at any wind, Phillips 1958), scaled to the Cox & Munk slopes">Ripple spectrum</span>
+        <label class="checkbox-label">
+          <input type="checkbox" :checked="st.strictRipples" @change="set({ strictRipples: $event.target.checked })"> Follow the sea spectrum
+        </label>
+      </div>
+      <!-- Light wind: only with the Cox & Munk ripples (a strict sea spectrum has its own light-wind behaviour) -->
+      <div class="container-horizontal" v-if="!st.strictRipples">
         <span title="Cox & Munk keep some slope even with no wind. On: 5% of the Cox & Munk slopes up to 1.3 m/s (onset of wind waves on clean water, Kahma & Donelan 1988), the full Cox & Munk slopes from 3 m/s, a smooth step between">Ripples in light wind</span>
         <label class="checkbox-label">
           <input type="checkbox" :checked="st.calmLightWind" @change="set({ calmLightWind: $event.target.checked })"> Calm
@@ -213,9 +218,10 @@
         </tr>
         <tr>
           <td>Ripples &gt; Spectrum</td>
-          <td colspan="3" class="active">The spectrum of the sea, continued (strict): no Cox &amp; Munk scaling, no light-wind
-            onset other than the spectrum's own</td>
-          <td>Sea spectrum</td>
+          <td colspan="3" class="active"><template v-if="st.strictRipples">The spectrum of the sea, continued (strict): no Cox &amp; Munk
+            scaling, no light-wind onset other than the spectrum's own</template><template v-else>Constant (the same slope per
+            octave at any wind), scaled to Cox &amp; Munk (“Follow the sea spectrum” off)</template></td>
+          <td>{{ st.strictRipples ? 'Sea spectrum' : 'Constant' }}</td>
         </tr>
         <tr :class="{ off: !st.driveStrainFoam }">
           <td>Ripples &gt; Strained by the waves</td>

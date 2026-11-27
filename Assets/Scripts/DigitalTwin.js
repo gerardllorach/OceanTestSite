@@ -2,7 +2,8 @@
 // For now only from the wind ("Wind driven"): a Pierson-Moskowitz, JONSWAP, TMA (JONSWAP in water of finite depth) or
 // Elfouhaily wind sea (Assets/Ocean/WindSea.js, Elfouhaily.js), a directional spreading
 // (Assets/Ocean/DirectionalSpreading.js), and the wind of the ripples and the whitecaps.
-// Strict: the ripples continue the spectrum of the sea (RippleSpectrum.js spectrum 'sea'), with no Cox & Munk scaling.
+// Ripples: the constant spectrum scaled to Cox & Munk (RippleSpectrum.js spectrum 'saturation', default), or with
+// strictRipples the spectrum of the sea continued (spectrum 'sea'), with no Cox & Munk scaling.
 //
 // The state is shared (main.js makes it reactive as window.digitalTwin): the panel edits it, the overlay at the
 // bottom-left of the screen shows it while the twin is on. Pure module: the conversions and what Generation should have.
@@ -28,6 +29,7 @@ export const DEFAULT_TWIN_STATE = {
   gamma: 3.3,          // JONSWAP peak enhancement
   spreadModel: 'goda', spread: 30, smax: 40, // Directional spreading (see DirectionalSpreading.js): Goda & Suzuki, wind waves
   driveRipples: true,  // The ripples (and so the whitecaps) take the same wind
+  strictRipples: false, // The ripples follow the spectrum of the sea (strict); off: constant spectrum, Cox & Munk
   driveStrainFoam: true, // Ripple strain and breaking threshold from the wind (strainFor, breakingThresholdFor)
   calmLightWind: true,   // Ripples: 'onset' in light wind (5% of Cox-Munk up to 1.3 m/s, all of it from 3 m/s), see RippleSpectrum
 };
@@ -81,11 +83,10 @@ export function spreadingOf(st) {
 export function targetOf(st) {
   const sea = windSeaOf(st), pm = st.model == 'pm', elf = st.model == 'elfouhaily', tma = st.model == 'tma';
   const U = st.windSpeed;
-  // Strict: the ripples continue the spectrum of the sea
-  const ripples = { spectrum: 'sea' };
-  // Driven ripples continue the directional spreading of the sea (RippleSpectrum.js spreadMode 'sea'): a narrow sea
-  // (e.g. Goda s_max 100, offshore wind) has narrow ripples too
-  if (st.driveRipples) Object.assign(ripples, { mode: 'wind', windSpeed: U, windDir: st.windDir, spreadMode: 'sea' });
+  // The ripples continue the spectrum of the sea (strict), or the constant spectrum scaled to Cox & Munk
+  const ripples = { spectrum: st.strictRipples ? 'sea' : 'saturation' };
+  // Driven ripples: spread from the wind (RippleSpectrum.js spreadMode 'wind', spreadForWind): narrower with more wind
+  if (st.driveRipples) Object.assign(ripples, { mode: 'wind', windSpeed: U, windDir: st.windDir, spreadMode: 'wind' });
   if (st.driveStrainFoam) ripples.strain = strainFor(U);
   ripples.lightWind = st.calmLightWind ? 'onset' : 'coxMunk';
   return {

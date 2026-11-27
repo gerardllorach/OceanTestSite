@@ -8,10 +8,10 @@
 // a single wave model). The sea state analysis adds them at the rest position, like the FFT sea.
 //
 // Spectrum: F(k) = B(k) k^-3, with B the saturation (slope variance per unit log k), and a directional spreading around
-// the wind that is broader for shorter ripples. In the wavevector plane
+// the wind that narrows as the wind strengthens (spreadForWind). In the wavevector plane
 //   Psi(kx, kz) = F(k) D(theta) / k = B(k) k^-4 D(theta)     (the 1/k is the Jacobian from polar to Cartesian)
 // B(k) (settings.spectrum):
-//  - 'sea' (strict, the digital twin): the ripples continue the spectrum of the FFT sea (JONSWAP, Pierson-Moskowitz,
+//  - 'sea' (strict, the digital twin's "Follow the sea spectrum"): the ripples continue the spectrum of the FFT sea (JONSWAP, Pierson-Moskowitz,
 //    TMA or Elfouhaily: its S(f), Assets/Ocean/SeaSpectrum.js) with its directional spreading, in absolute units: no
 //    Cox & Munk budget. The grid carries all it resolves; only the slope finer than the grid (up to k = 370 rad/m for
 //    the gravity-wave spectra, whose f^-5 tail has no end of its own, and to 4000 rad/m for Elfouhaily) is the tail
@@ -59,8 +59,9 @@ export const DEFAULT_RIPPLE_SETTINGS = {
   // Directionality
   directionMode: 'wind', // 'wind': the ripples come from the wind direction (or the mean wave direction). 'custom'
   direction: 0,          // Custom direction the ripples come FROM (deg clockwise from north)
-  spreadMode: 'auto',    // 'auto': spread from the Cox-Munk cross/up slope ratio, broader for shorter ripples. 'custom'.
-                         // 'sea': the spreading of the FFT sea continued to the ripples ('auto' without an FFT sea)
+  spreadMode: 'wind',    // 'wind' (default): narrower with more wind (spreadForWind: 60 deg at 7 kn, 15 deg from 30 kn).
+                         // 'auto': from the Cox-Munk cross/up slope ratio. 'custom'. 'sea': the spreading of the FFT sea
+                         // continued to the ripples ('wind' without an FFT sea)
   spread: 30,            // Custom directional spread (deg, width of the wrapped normal distribution), the same for all
   strength: 1,           // Custom only: fraction of the slope budget given to the ripples and the tail (0: glassy surface)
   // Light wind: 'coxMunk' keeps the Cox-Munk slopes at any wind (their fit has slopes even at 0 m/s); 'onset' keeps
@@ -203,8 +204,9 @@ function fftSlopeVariance(fft, dirDeg) {
 }
 
 // Strict tail: the slope of the sea's spectrum finer than the grid, from kCut to its end (Elfouhaily: ELF_K_END,
-// gravity-wave spectra: STRICT_K_END), split along / across the ripple direction with the sea's spreading at kCut
-function strictTail(saturation, kCut, fft, windDir) {
+// gravity-wave spectra: STRICT_K_END), split along / across the ripple direction with the ripples' directional
+// distribution at kCut (`directional(k, from)`)
+function strictTail(saturation, kCut, fft, windDir, directional) {
   const isElf = fft.settings.spectrum == 'elfouhaily';
   const kEnd = Math.max(kCut, isElf ? ELF_K_END : STRICT_K_END);
   // Slope variance = integral of B(k) d(ln k)
@@ -213,16 +215,30 @@ function strictTail(saturation, kCut, fft, windDir) {
   for (let i = 0; i <= n; i++) total += (i == 0 || i == n ? 0.5 : 1) * rippleSaturation(Math.exp(lo + i * h), saturation);
   total *= h;
   if (!(total > 0)) return { up: 0, cross: 0 };
-  // <cos^2> of the directions about the ripple direction, with the spreading of the sea at the frequency of kCut
-  const f = Math.sqrt(G * kCut) / TWO_PI, seaDir = (Number(fft.settings.Mdir) || 0) * DEG2RAD, rel0 = seaDir - windDir * DEG2RAD;
+  const share = upwindShare(directional, kCut, windDir);
+  return { up: total * share, cross: total * (1 - share) };
+}
+
+// Upwind share <cos^2> of the slope of the ripples of wavenumber k about the ripple direction (deg, from)
+function upwindShare(directional, k, windDir) {
+  const w = windDir * DEG2RAD;
   let sum = 0, up = 0;
   for (let i = 0; i < 360; i++) {
     const th = (i + 0.5) / 360 * TWO_PI - Math.PI;
-    const d = fft.spreading.D(f, th);
-    sum += d; up += d * Math.cos(th + rel0) * Math.cos(th + rel0);
+    const d = directional(k, w + th);
+    sum += d; up += d * Math.cos(th) * Math.cos(th);
   }
-  const share = sum > 0 ? up / sum : 0.5;
-  return { up: total * share, cross: total * (1 - share) };
+  return sum > 0 ? up / sum : 0.5;
+}
+
+// Directional spread of the ripples for the wind U10 (m/s), spreadMode 'wind': the stronger the wind, the more the
+// ripples align with it. Linear in knots between WIND_SPREAD_KNOTS (60 deg at 7 kn, 15 deg at 30 kn), constant outside
+export const WIND_SPREAD_KNOTS = [7, 30];
+export const WIND_SPREAD_DEG = [60, 15];
+export function spreadForWind(U) {
+  const kn = (Number(U) || 0) * 1.94384;
+  const t = clamp((kn - WIND_SPREAD_KNOTS[0]) / (WIND_SPREAD_KNOTS[1] - WIND_SPREAD_KNOTS[0]), 0, 1);
+  return WIND_SPREAD_DEG[0] + (WIND_SPREAD_DEG[1] - WIND_SPREAD_DEG[0]) * t;
 }
 
 // Generate the ripple cascade for the discrete waves `waves` ([{hm0, T, dir, phase}]), the settings and the FFT sea
@@ -266,9 +282,10 @@ export function generateRipples(waves, settings = {}, fft = null, N = RIPPLE_N) 
   const kCut = RIPPLE_K_FRACTION * Math.PI * N / L;
 
   // Directional spread around the ripple direction: wrapped normal of width sigmaTheta.
+  //  - wind (default): spreadForWind(U10), the same for all the ripples: broad in light wind, aligned with a strong wind.
+  //    As custom, the total slope stays the Cox-Munk one and its split follows the spread
   //  - auto: chosen so that the cross / up ratio of the slopes, <sin^2> / <cos^2> = (1 - e) / (1 + e) with
-  //    e = exp(-2 sigma^2), matches the budget, and broader for shorter ripples (towards +60% at the shortest), as
-  //    observed for short wind waves. The tail then completes Cox-Munk along both axes.
+  //    e = exp(-2 sigma^2), matches the budget. The tail then completes Cox-Munk along both axes.
   //  - custom: the same width for all the ripples. The total slope stays the Cox-Munk one, but its split between
   //    upwind and crosswind follows the chosen spread (a narrow spread gives long-crested ripples)
   //  The ratio is kept within 0.02..0.98 (sigma ~8 to ~87 deg): when the waves already carry the whole crosswind
@@ -278,15 +295,14 @@ export function generateRipples(waves, settings = {}, fft = null, N = RIPPLE_N) 
   //    longest ripples (a single width for the analysis, InputSpectrum.rippleDensity)
   const ratio = budget.up > 0 ? clamp(budget.cross / budget.up, 0.02, 0.98) : 0.98;
   const seaSpreading = s.spreadMode == 'sea' && fft && fft.spreading ? fft.spreading : null;
-  const spreadMode = seaSpreading ? 'sea' : s.spreadMode == 'custom' ? 'custom' : 'auto';
+  const spreadMode = seaSpreading ? 'sea' : ['custom', 'auto'].includes(s.spreadMode) ? s.spreadMode : 'wind';
   const autoSpread = spreadMode == 'auto';
   const fOfK = k => Math.sqrt(G * k) / TWO_PI;
   const sigmaTheta = spreadMode == 'sea' ? seaSpreading.sigma1(fOfK(kMin)) * DEG2RAD
     : autoSpread ? Math.sqrt(-0.5 * Math.log((1 - ratio) / (1 + ratio)))
+    : spreadMode == 'wind' ? spreadForWind(windSpeed) * DEG2RAD
     : clamp(Number(s.spread) || 30, 1, 180) * DEG2RAD;
   const seaDirRad = seaSpreading ? (Number(fft.settings.Mdir) || 0) * DEG2RAD : 0;
-  const spreadGrowth = autoSpread ? 0.6 : 0;
-  const logRange = Math.log(kCut / kMin);
 
   // Shape of the spectrum, and the share of the slope budget on the grid (the rest: the tail, roughness)
   // 'sea' needs an FFT sea; without one, 'saturation'
@@ -312,8 +328,7 @@ export function generateRipples(waves, settings = {}, fft = null, N = RIPPLE_N) 
       return seaSpreading.D(fOfK(k), relSea);
     }
     const rel = Math.atan2(Math.sin(from - windRadD), Math.cos(from - windRadD));
-    const sigma = autoSpread ? Math.min(1.6, sigmaTheta * (1 + spreadGrowth * Math.log(k / kMin) / logRange)) : sigmaTheta;
-    return wrappedNormal(rel, sigma);
+    return wrappedNormal(rel, sigmaTheta);
   };
 
   const amp = new Float64Array(N * N), phase = new Float64Array(N * N), omega = new Float64Array(N * N);
@@ -373,11 +388,19 @@ export function generateRipples(waves, settings = {}, fft = null, N = RIPPLE_N) 
       phase: wrap360(c.phase * RAD2DEG), chop: 1, k: c.k, wavelength: TWO_PI / c.k });
   }
 
-  // Tail: the rest of the budget along each axis (roughness only). With a custom spread, what the grid carries in
-  // excess along one axis is taken from the tail of the other one, so that the total stays Cox-Munk
+  // Tail: the rest of the budget (roughness only).
+  //  - auto: along each axis, so that the total is Cox-Munk along both
+  //  - wind, custom, sea: the rest of the total budget, split with the spread of the shortest ripples (the roughness
+  //    continues them: aligned with a strong wind too). The total slope stays Cox-Munk, its split follows the spread
+  //  - strict: the sea's spectrum finer than the grid, split the same way
   let tail = { up: Math.max(0, budget.up - ripplesSlopes.up), cross: Math.max(0, budget.cross - ripplesSlopes.cross) };
-  const excess = strict ? 0 : Math.max(0, ripplesSlopes.up - budget.up) + Math.max(0, ripplesSlopes.cross - budget.cross);
-  if (strict) tail = strictTail(saturation, kCut, fft, windDir);
+  let excess = 0;
+  if (strict) tail = strictTail(saturation, kCut, fft, windDir, directional);
+  else if (!autoSpread) {
+    const rest = Math.max(0, budget.up + budget.cross - ripplesSlopes.up - ripplesSlopes.cross);
+    const share = upwindShare(directional, kCut, windDir);
+    tail = { up: rest * share, cross: rest * (1 - share) };
+  } else excess = Math.max(0, ripplesSlopes.up - budget.up) + Math.max(0, ripplesSlopes.cross - budget.cross);
   if (excess > 0) {
     const t = tail.up + tail.cross;
     const keep = t > 0 ? Math.max(0, t - excess) / t : 0;
@@ -406,8 +429,8 @@ export function generateRipples(waves, settings = {}, fft = null, N = RIPPLE_N) 
     numComponents: all.length,
     // Continuous spectrum the grid samples (rippleDirectionalDensity in Assets/Ocean/InputSpectrum.js):
     // Psi(kx, kz) = scale^2 B(k) k^-4 D(theta; sigma(k)) for kMin <= k <= kCut, B = rippleSaturation(k, spectrum)
-    // (strict 'sea': scale 1, D the sea's spreading)
-    spectrum: { scale, sigmaTheta, spreadGrowth, logRange, shape, params: saturation.params, density: saturation.density },
+    // (strict 'sea': scale 1; spreadMode 'sea': D the sea's spreading)
+    spectrum: { scale, sigmaTheta, shape, params: saturation.params, density: saturation.density },
     // Share of the ripple slope on the grid (the rest: the tail)
     explicitFraction: strict ? (ripplesSlopes.up + ripplesSlopes.cross) / Math.max(1e-12, ripplesSlopes.up + ripplesSlopes.cross + tail.up + tail.cross) : explicitFraction,
     strict,

@@ -65,8 +65,7 @@ function rippleDensity(state, f, theta, band) {
   if (!band || f < band[0] || f > band[1]) return 0;
   const r = state.ripples, sp = r.spectrum;
   const k = kOf(f);
-  const sigma = r.autoSpread ? Math.min(1.6, sp.sigmaTheta * (1 + sp.spreadGrowth * Math.log(k / r.kMin) / sp.logRange)) : sp.sigmaTheta;
-  const D = wrappedNormal(wrapPi(theta - r.windDir * DEG2RAD), sigma);
+  const D = wrappedNormal(wrapPi(theta - r.windDir * DEG2RAD), sp.sigmaTheta);
   return rippleNorm(r, band) * rippleS(r, f) * D;
 }
 
