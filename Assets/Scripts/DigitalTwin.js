@@ -18,7 +18,7 @@ export const DEFAULT_TWIN_STATE = {
   windDir: 0,          // Where the wind comes FROM, deg clockwise from north
   fetchKm: 100,        // JONSWAP
   gamma: 3.3,          // JONSWAP peak enhancement
-  spreadModel: 'goda', spread: 30, smax: 10, // Directional spreading (see DirectionalSpreading.js): Goda & Suzuki, wind waves
+  spreadModel: 'goda', spread: 30, smax: 40, // Directional spreading (see DirectionalSpreading.js): Goda & Suzuki, wind waves
   driveRipples: true,  // The ripples (and so the whitecaps) take the same wind
   driveStrainFoam: true, // Ripple strain and breaking threshold from the wind (strainFor, breakingThresholdFor)
   calmLightWind: true,   // Ripples: 'onset' in light wind (5% of Cox-Munk up to 1.3 m/s, all of it from 3 m/s), see RippleSpectrum

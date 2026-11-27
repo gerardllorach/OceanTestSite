@@ -72,9 +72,14 @@ export const DEFAULT_FOAM_SETTINGS = {
   trailDamping: 0.5,     // How much the foam trail damps the waves that pass through it (0: off)
   surge: 2,              // Forward surge of a collapsing crest, times its height (0: off)
   small: true,           // Small breakers from the ripples (waves of ~1-4 m): their foam and their spray
-  smallFoam: 0.5,        // Ripple whitecaps drawn: 0 off (the small breakers still throw spray) .. 1 dense
+  smallCrest: 0.05,      // Breaking crest of the small breakers (while it breaks, a little ahead): 0 off .. 1 dense
+  smallFoam: 0.7,        // Their foam trail (RippleFoam.js): 0 off .. 1 dense
   smallFoamScale: 2.5,   // Their lace pattern, finer than the large whitecaps' (x scale of the detail)
-  spray: true,           // Spray droplets from the breakers (Assets/Ocean/Spray.js), near the camera
+  smallFoamGrow: 6,      // 1/s: how fast ripple foam builds up where a crest breaks (it saturates; RippleFoam.js)
+  smallFoamLifetime: 1.5, // s: how long it lasts (e-folding), so it leaves a trail behind the crest
+  smallFoamVariation: 0.5, // 0..1: the fading time varies in space and time (x0.5 to x2 at 0.5): it changes shape
+  smallFoamSpread: 0.01, // m^2/s: it spreads a little as it fades
+  spray: false,          // Spray droplets from the breakers (Assets/Ocean/Spray.js), near the camera (off for now)
   sprayAmount: 1,        // Multiplies the emission (which grows with the wind)
   sprayLarge: true,      // Spray from the large breakers too (not only the small ones)
   sprayFoam: true,       // The droplets that land turn into foam (merged where they land close together)

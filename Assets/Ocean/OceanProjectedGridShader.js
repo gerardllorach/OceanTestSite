@@ -390,6 +390,14 @@ export const OceanProjectedGridFragShader = /* glsl */`
   uniform float u_smallFoam;       // Ripple whitecaps drawn: 0 off .. 1 dense (their foam value is source x this)
   uniform float u_smallFoamScale;  // Their lace pattern, x the scale of the detail
   uniform float u_sprayFoamScale;  // Lace pattern of the spray foam, x the scale of the detail
+  // Ripple foam with memory (Assets/Ocean/RippleFoam.js): the foam of the small breakers (0..1), around the camera, at
+  // the rest position: it fades and leaves a trail. Beyond its window, the small breakers without memory
+  uniform bool u_rippleFoamEnabled;
+  uniform sampler2D u_rippleFoam;
+  uniform vec3 u_rippleFoamWindow; // (min x, min z, side) in metres
+  uniform float u_rippleFoamMeanLod; // Its last mip level: the mean over the window
+  uniform float u_smallCrest;      // Breaking crest of the small breakers drawn: 0 off .. 1 dense
+  uniform float u_smallLead;       // m: their crest foam is this far ahead (along the wind: the ripples travel with it)
   uniform float u_sprayFoamFull;   // Summed droplet area that makes the maximum foam
   uniform float u_sprayFoamLog;    // Steepness of the logarithm: how much foam the first droplets make
   uniform float u_sprayFoamMax;    // Maximum of the spray foam
@@ -708,15 +716,30 @@ ${FOAM_STATE_GLSL}
     unresolved += toWindFrame(transformTensor(rippleT, rippleTensor * (rippleDamp * rippleDamp)), windU); // Ripples finer than the pixel + tail
 
     // SMALL BREAKERS (waves of ~1-4 m, Assets/Ocean/Foam.js; smallBreakerSource in OceanShaderChunks.js): the
-    // strained ripples while their crest breaks. Where they are finer than the pixel, their mean coverage
+    // strained ripples where their crest breaks. Two stages, like the whitecaps:
+    //  - breaking crest: while it breaks, a little ahead of the crest (u_smallLead), dense white; everywhere, no memory
+    //  - trail: the foam left behind (RippleFoam.js, with memory, around the camera): it fades and changes shape. Beyond
+    //    its window, its mean over the window: the far sea is as whitish as the near sea
+    // Drawn with a finer lace than the large whitecaps; where they are finer than the pixel, their mean coverage. None
+    // on the foam of the large breakers
     float smallSource = 0.0, smallCoverage = 0.0;
     if (u_smallEnabled && u_rippleEnabled) {
-      smallSource = smallBreakerSource(xz, seaJ, rippleT, rippleDamp);
+      float largeMask = 1.0 - smoothstep(0.05, 0.3, foamState.r);
+      float crest = smallBreakerSource(xz - windU * u_smallLead, seaJ, rippleT, rippleDamp) * largeMask;
+      float trail = 0.0, trailMean = 0.0;
+      if (u_rippleFoamEnabled) {
+        vec2 fuv = (xz - u_rippleFoamWindow.xy) / u_rippleFoamWindow.z;
+        float memory = smoothstep(0.0, 0.08, min(min(fuv.x, fuv.y), min(1.0 - fuv.x, 1.0 - fuv.y)));
+        trailMean = textureLod(u_rippleFoam, vec2(0.5), u_rippleFoamMeanLod).r;
+        trail = mix(trailMean, memory > 0.0 ? texture2D(u_rippleFoam, fuv).r : 0.0, memory) * largeMask;
+      }
+      smallSource = max(crest, trail);
       vec2 ruv = xz / u_rippleSize + 0.5 / u_rippleN;
       float pixelLod = log2(max(max(length(dFdx(ruv)), length(dFdy(ruv))) * u_rippleN, 1e-6));
-      // Small whitecaps are thin and lacy: a finer lace than the large ones, at most u_smallFoam of the pattern
-      smallCoverage = mix(foamPattern(xz * u_smallFoamScale, windU, u_smallFoam * smallSource).x,
-                          u_smallExpected * u_smallFoam / 0.75, clamp(pixelLod - u_smallLevels.y, 0.0, 1.0));
+      float far = min(1.0, u_smallExpected * u_smallCrest / 0.75 + u_smallFoam * trailMean) * largeMask;
+      smallCoverage = mix(foamPattern(xz * u_smallFoamScale, windU, max(u_smallCrest * crest, u_smallFoam * trail)).x,
+                          far, clamp(pixelLod - u_smallLevels.y, 0.0, 1.0));
+      smallSource = max(u_smallCrest * crest, 0.6 * u_smallFoam * trail); // Thickness: the crest is thick, fresh foam
     }
     // SPRAY FOAM: the droplets that fell back (Assets/Ocean/Spray.js), merged where they landed close together. Drawn
     // with the same lacy pattern as the whitecaps, finer (u_sprayFoamScale), fading out at the edges of its window
@@ -783,7 +806,7 @@ ${FOAM_STATE_GLSL}
     // through the foam). Under it, the bubble cloud brightens the water, seen along the refracted ray at a depth of
     // ~0.15 the wavelength of the breakers (0.3 to 4 m). Large and small foam add up
     float allFoam = 1.0 - (1.0 - foamCoverage) * (1.0 - smallCoverage) * (1.0 - sprayCoverage);
-    foamThickness = max(foamThickness, max(0.6 * u_smallFoam * smallSource, 0.6 * sprayFoam));
+    foamThickness = max(foamThickness, max(smallSource, 0.6 * sprayFoam));
     vec3 foamColor = vec3(0.0);
     if (u_foamEnabled) {
       vec3 skyAmbient = skyReflection(vec3(0.0, 1.0, 0.0), 1.5);
