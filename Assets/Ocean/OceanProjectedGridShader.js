@@ -374,6 +374,7 @@ export const OceanProjectedGridFragShader = /* glsl */`
   uniform float u_foamDetailSize;  // Tile of the detail (m)
   uniform float u_foamDetailN;     // Its texels
   uniform float u_foamStretch;     // Stretch of the detail along the wind (foam streaks in strong winds)
+  uniform float u_foamRippleDamping; // How much the foam damps the ripples under it (0: not at all)
   uniform float u_foamThreshold;   // Jacobian below which a crest of scale 0 breaks (debug view)
   // Shared with the vertex shader: highp, as there (SIMPLE_SHADING makes the fragment shader mediump)
   uniform sampler2D u_foamCollapse; // See the vertex shader
@@ -565,6 +566,31 @@ ${SMALL_BREAKERS_GLSL}
   }
   #endif
 
+  // DETAIL RIPPLES (RippleSpectrum.js generateDetailRipples): the centimetre ripples finer than the ripple grid, a
+  // looping texture like the ripple loop above (same texels), on a tile of u_detailSize metres sampled rotated by
+  // u_detailRotation (cos, sin) so that its repeat is not aligned with the axes. Its slopes are along / across the
+  // ripple direction. Near the camera they draw sharp centimetre ripples; farther, the mipmaps turn them into their
+  // slope variance: the roughness they replace (the CPU takes them out of u_rippleTailSigma2)
+  #ifdef DETAIL_RIPPLES
+  uniform mediump sampler2DArray u_detailLoop;
+  uniform bool u_detailEnabled;
+  uniform vec3 u_detailFrames;     // (frame a, frame b, weight of b)
+  uniform float u_detailScale;     // Slope of texel value 1
+  uniform float u_detailSize;      // Tile (m)
+  uniform vec2 u_detailRotation;   // (cos, sin) of the rotation of the pattern
+
+  void sampleDetailLoop(highp vec2 xz, out vec2 slope, out vec2 variance) {
+    highp vec2 uv = mat2(u_detailRotation.x, u_detailRotation.y, -u_detailRotation.y, u_detailRotation.x) * xz / u_detailSize;
+    vec4 t = mix(texture(u_detailLoop, vec3(uv, u_detailFrames.x)),
+                 texture(u_detailLoop, vec3(uv, u_detailFrames.y)), u_detailFrames.z);
+    vec2 s = (t.xy * 2.0 - 1.0) * u_detailScale; // (along, across) the ripple direction
+    vec2 m2 = t.zw * (u_detailScale * u_detailScale);
+    variance = max(vec2(0.0), m2 - s * s);
+    vec2 w = u_windDirection;
+    slope = vec2(w.x * s.x - w.y * s.y, w.y * s.x + w.x * s.y);
+  }
+  #endif
+
   // T V T^t for a symmetric tensor v = (xx, zz, xz)
   vec3 transformTensor(mat2 T, vec3 v) {
     mat2 R = T * mat2(v.x, v.z, v.z, v.y) * mat2(T[0][0], T[1][0], T[0][1], T[1][1]);
@@ -611,6 +637,15 @@ ${FOAM_STATE_GLSL}
       sampleRippleLoop(v_WorldPosition.xz, rippleSlope, rippleVariance);
       vec2 slope = -N.xz / max(N.y, 0.05) + rippleSlope;
       N = normalize(vec3(-slope.x, 1.0, -slope.y));
+    }
+    #endif
+    #ifdef DETAIL_RIPPLES
+    if (u_detailEnabled) {
+      vec2 detailSlope, detailVariance;
+      sampleDetailLoop(v_WorldPosition.xz, detailSlope, detailVariance);
+      vec2 slope = -N.xz / max(N.y, 0.05) + detailSlope;
+      N = normalize(vec3(-slope.x, 1.0, -slope.y));
+      rippleVariance += detailVariance;
     }
     #endif
     if (underwater) N = -N;
@@ -685,8 +720,8 @@ ${FOAM_STATE_GLSL}
       foamCoverage = f.x;
       foamThickness = f.y;
     }
-    // Foam damps the short waves: smoother ripples under it
-    float rippleDamp = 1.0 - 0.8 * foamCoverage;
+    // Foam damps the short waves: smoother ripples under it (u_foamRippleDamping: up to this fraction, 0: off)
+    float rippleDamp = 1.0 - u_foamRippleDamping * foamCoverage;
 
     // Ripples strained by the long waves (Gerstner + FFT sea; see principalStretch). Their slope gets 1 / J twice:
     //  - amplitude (Longuet-Higgins & Stewart): the inverse of the whole long-wave strain
@@ -713,6 +748,16 @@ ${FOAM_STATE_GLSL}
       rippleS *= rippleDamp; rippleDxz *= rippleDamp;
       cs += rippleS; cDxz += rippleDxz;
     }
+    // Detail ripples (centimetre, finer than the ripple grid): their slope, strained and damped like the ripples, and
+    // their variance finer than the pixel
+    #ifdef DETAIL_RIPPLES
+    if (u_detailEnabled) {
+      vec2 detailSlope, detailVariance;
+      sampleDetailLoop(xz, detailSlope, detailVariance);
+      cs.xy += (rippleT * detailSlope) * rippleDamp;
+      rippleTensor += fromWindFrame(detailVariance, windU);
+    }
+    #endif
     unresolved += toWindFrame(transformTensor(rippleT, rippleTensor * (rippleDamp * rippleDamp)), windU); // Ripples finer than the pixel + tail
 
     // SMALL BREAKERS (waves of ~1-4 m, Assets/Ocean/Foam.js; smallBreakerSource in OceanShaderChunks.js): the

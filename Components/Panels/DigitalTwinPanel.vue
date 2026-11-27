@@ -63,18 +63,30 @@
             @click="set({ model: 'pm' })">Pierson–Moskowitz</button>
           <button class="clickable" :class="{ 'button-active': st.model == 'jonswap' }" :aria-pressed="st.model == 'jonswap'"
             @click="set({ model: 'jonswap' })">JONSWAP</button>
+          <button class="clickable" :class="{ 'button-active': st.model == 'tma' }" :aria-pressed="st.model == 'tma'"
+            title="JONSWAP times the Kitaigorodskii depth attenuation (Bouws et al. 1985; Horvath 2015): the long waves are damped in shallow water"
+            @click="set({ model: 'tma' })">TMA</button>
+          <button class="clickable" :class="{ 'button-active': st.model == 'elfouhaily' }" :aria-pressed="st.model == 'elfouhaily'"
+            title="Unified spectrum of long and short waves (Elfouhaily et al. 1997): in strong wind the short sharp waves grow much more than the mid-sized ones"
+            @click="set({ model: 'elfouhaily' })">Elfouhaily</button>
         </div>
       </div>
-      <!-- JONSWAP: fetch and gamma -->
-      <template v-if="st.model == 'jonswap'">
+      <p class="note">The ripples follow this spectrum strictly: they continue it below the shortest wave of the FFT sea,
+        in absolute units (not scaled to Cox &amp; Munk).</p>
+      <!-- JONSWAP, TMA, Elfouhaily: fetch; JONSWAP, TMA: gamma; TMA: depth -->
+      <template v-if="st.model != 'pm'">
         <div class="container-horizontal">
           <span title="Distance over which the wind blows over the water (from the coast, or the size of the storm)">Fetch</span>
           <div><input type="range" min="0" max="1" step="0.001" :value="fetchToSlider(st.fetchKm)"
               @input="set({ fetchKm: sliderToFetch(Number($event.target.value)) })"><span>{{ fmtFetch(st.fetchKm) }} km</span></div>
         </div>
-        <div class="container-horizontal">
+        <div class="container-horizontal" v-if="st.model != 'elfouhaily'">
           <span title="Peak enhancement of the JONSWAP spectrum: 3.3 on average (Hasselmann et al. 1973), 1 = Pierson-Moskowitz shape">Peak enhancement γ</span>
           <div><input type="range" min="1" max="7" step="0.1" :value="st.gamma" @input="set({ gamma: Number($event.target.value) })"><span>{{ fmt(st.gamma, 1) }}</span></div>
+        </div>
+        <div class="container-horizontal" v-if="st.model == 'tma'">
+          <span title="Water depth: the waves whose frequency is below ~2 sqrt(g / h) / (2 pi) are damped (Kitaigorodskii depth attenuation), and they travel slower (finite-depth dispersion)">Depth</span>
+          <div><input type="range" min="5" max="200" step="1" :value="st.depthM ?? 30" @input="set({ depthM: Number($event.target.value) })"><span>{{ fmt(st.depthM ?? 30, 0) }} m</span></div>
         </div>
       </template>
       <!-- Directional spreading -->
@@ -99,7 +111,7 @@
           <input type="checkbox" :checked="st.driveRipples" @change="set({ driveRipples: $event.target.checked })"> Same wind
         </label>
       </div>
-      <div class="container-horizontal">
+      <div class="container-horizontal" v-if="false">
         <span title="Cox & Munk keep some slope even with no wind. On: 5% of the Cox & Munk slopes up to 1.3 m/s (onset of wind waves on clean water, Kahma & Donelan 1988), the full Cox & Munk slopes from 3 m/s, a smooth step between">Ripples in light wind</span>
         <label class="checkbox-label">
           <input type="checkbox" :checked="st.calmLightWind" @change="set({ calmLightWind: $event.target.checked })"> Calm
@@ -120,10 +132,12 @@
       <span>H<sub>m0</sub> <b>{{ fmt(sea.Hm0, 2) }} m</b></span>
       <span>T<sub>p</sub> <b>{{ fmt(sea.Tp, 1) }} s</b></span>
       <span title="Phase speed of the peak waves over the wind speed: ~1.2 for a fully developed sea, under 1 for a young, growing sea">Wave age c<sub>p</sub>/U<sub>10</sub> <b>{{ fmt(age, 2) }}</b></span>
-      <span v-if="st.model == 'jonswap'" title="g X / U10^2">Dimensionless fetch <b>{{ fmtFetchless(sea.dimensionlessFetch) }}</b></span>
+      <span v-if="st.model == 'tma'" title="Hm0 of the JONSWAP sea in deep water, before the depth attenuation">Deep water H<sub>m0</sub> <b>{{ fmt(sea.HmDeep, 2) }} m</b></span>
+      <span v-if="st.model == 'elfouhaily'" title="Inverse wave age U10 / cp: 0.84 fully developed, up to 5 for a very young sea">Ω <b>{{ fmt(sea.Omega, 2) }}</b></span>
+      <span v-if="st.model != 'pm'" title="g X / U10^2">Dimensionless fetch <b>{{ fmtFetchless(sea.dimensionlessFetch) }}</b></span>
       <span><b>{{ sea.fullyDeveloped ? 'Fully developed' : 'Growing sea' }}</b></span>
     </div>
-    <p v-if="st.model == 'jonswap' && sea.fullyDeveloped && st.windSpeed > 0" class="note">
+    <p v-if="(st.model == 'jonswap' || st.model == 'tma') && sea.fullyDeveloped && st.windSpeed > 0" class="note">
       Past ~{{ fmtFetch(fdFetch) }} km, a <wind-speed :value="st.windSpeed"></wind-speed> wind makes a fully developed sea: the JONSWAP
       growth stops and H<sub>m0</sub>, T<sub>p</sub> are the Pierson–Moskowitz ones (γ stays as set).</p>
     <p v-if="belowFFT" class="note">
@@ -143,7 +157,8 @@
         <tr>
           <th>Generation slider</th>
           <th :class="{ active: st.model == 'pm' }">Pierson–Moskowitz</th>
-          <th :class="{ active: st.model == 'jonswap' }">JONSWAP</th>
+          <th :class="{ active: st.model == 'jonswap' || st.model == 'tma' }">JONSWAP (TMA)</th>
+          <th :class="{ active: st.model == 'elfouhaily' }">Elfouhaily</th>
           <th>Now</th>
         </tr>
       </thead>
@@ -151,60 +166,66 @@
         <tr>
           <td>FFT sea &gt; H<sub>m0</sub></td>
           <td :class="{ active: st.model == 'pm' }">0.22 U<sub>10</sub><sup>2</sup> / g</td>
-          <td :class="{ active: st.model == 'jonswap' }">1.6·10<sup>−3</sup> √X̃ · U<sub>10</sub><sup>2</sup> / g, with X̃ = g X / U<sub>10</sub><sup>2</sup>
-            (X: fetch). Pierson–Moskowitz past X̃ ≈ {{ fmtFetchless(fullyDevelopedFetch) }}</td>
+          <td :class="{ active: st.model == 'jonswap' || st.model == 'tma' }">1.6·10<sup>−3</sup> √X̃ · U<sub>10</sub><sup>2</sup> / g, with X̃ = g X / U<sub>10</sub><sup>2</sup>
+            (X: fetch). Pierson–Moskowitz past X̃ ≈ {{ fmtFetchless(fullyDevelopedFetch) }}. TMA: H<sub>m0</sub> of
+            S<sub>JONSWAP</sub>(ω) Φ(ω√(h/g)), Φ = ω<sub>h</sub><sup>2</sup>/2 (ω<sub>h</sub> ≤ 1),
+            1 − (2 − ω<sub>h</sub>)<sup>2</sup>/2 (ω<sub>h</sub> &lt; 2), 1 above</td>
+          <td :class="{ active: st.model == 'elfouhaily' }">4 √∫ k<sup>−3</sup> (B<sub>l</sub> + B<sub>h</sub>) dk, with
+            Ω = 0.84 tanh((X̃/2.2·10<sup>4</sup>)<sup>0.4</sup>)<sup>−0.75</sup></td>
           <td>{{ fmt(sea.Hm0, 2) }} m</td>
         </tr>
         <tr>
           <td>FFT sea &gt; Peak period T<sub>p</sub></td>
           <td :class="{ active: st.model == 'pm' }">“Fully developed” ticked: ω<sub>p</sub> = 0.877 g / U<sub>19.5</sub>,
             from H<sub>m0</sub> (≈ 0.75 U<sub>10</sub> s)</td>
-          <td :class="{ active: st.model == 'jonswap' }">f<sub>p</sub> = 3.5 X̃<sup>−0.33</sup> g / U<sub>10</sub>, so
+          <td :class="{ active: st.model == 'jonswap' || st.model == 'tma' }">f<sub>p</sub> = 3.5 X̃<sup>−0.33</sup> g / U<sub>10</sub>, so
             T<sub>p</sub> = U<sub>10</sub> X̃<sup>0.33</sup> / (3.5 g)</td>
+          <td :class="{ active: st.model == 'elfouhaily' }">k<sub>p</sub> = g (Ω / U<sub>10</sub>)<sup>2</sup></td>
           <td>{{ fmt(sea.Tp, 1) }} s</td>
         </tr>
         <tr>
           <td>FFT sea &gt; Peak enhancement γ</td>
           <td :class="{ active: st.model == 'pm' }">1</td>
-          <td :class="{ active: st.model == 'jonswap' }">γ slider (3.3 on average)</td>
-          <td>{{ fmt(st.model == 'pm' ? 1 : st.gamma, 1) }}</td>
+          <td :class="{ active: st.model == 'jonswap' || st.model == 'tma' }">γ slider (3.3 on average)</td>
+          <td :class="{ active: st.model == 'elfouhaily' }">Its own: 1.7 + 6 log<sub>10</sub> Ω (Ω &gt; 1)</td>
+          <td>{{ st.model == 'elfouhaily' ? '–' : fmt(st.model == 'pm' ? 1 : st.gamma, 1) }}</td>
         </tr>
         <tr>
           <td>FFT sea &gt; Mean direction (from)</td>
-          <td colspan="2" class="active">Wind from</td>
+          <td colspan="3" class="active">Wind from</td>
           <td>{{ compass(st.windDir) }}</td>
         </tr>
         <tr>
           <td>FFT sea &gt; Directional spreading</td>
-          <td colspan="2" class="active">The spreading chosen above, and its σ<sub>1</sub> (constant) or s<sub>max</sub>
+          <td colspan="3" class="active">The spreading chosen above, and its σ<sub>1</sub> (constant) or s<sub>max</sub>
             (Goda &amp; Suzuki)</td>
           <td>{{ spreadTitle }}</td>
         </tr>
         <tr :class="{ off: !spreadUsesWind }">
           <td>FFT sea &gt; Wind for the spreading</td>
-          <td colspan="2" class="active">{{ spreadUsesWind ? 'U10 (sets the wave age U10/cp of the spreading)' : 'Not used by this spreading' }}</td>
+          <td colspan="3" class="active">{{ spreadUsesWind ? 'U10 (sets the wave age U10/cp of the spreading)' : 'Not used by this spreading' }}</td>
           <td><wind-speed v-if="spreadUsesWind" :value="st.windSpeed"></wind-speed><template v-else>–</template></td>
         </tr>
         <tr :class="{ off: !st.driveRipples }">
           <td>Ripples &gt; Source, Wind speed, Wind from</td>
-          <td colspan="2" class="active">{{ st.driveRipples ? 'Wind, U10 and the wind direction. The whitecaps take the wind of the ripples' : 'Not changed (“Same wind” off)' }}</td>
+          <td colspan="3" class="active">{{ st.driveRipples ? 'Wind, U10 and the wind direction. The whitecaps take the wind of the ripples' : 'Not changed (“Same wind” off)' }}</td>
           <td><wind-speed v-if="st.driveRipples" :value="st.windSpeed"></wind-speed><template v-else>–</template></td>
         </tr>
         <tr>
-          <td>Ripples &gt; Light wind</td>
-          <td colspan="2" class="active">{{ st.calmLightWind ? 'Calm in light wind: ×0.05 up to 1.3 m/s, ×1 (Cox & Munk) from 3 m/s, smooth step between'
-            : 'Cox & Munk at every wind' }}</td>
-          <td>{{ st.calmLightWind ? '×' + fmt(lightFactor, 2) : '×1' }}</td>
+          <td>Ripples &gt; Spectrum</td>
+          <td colspan="3" class="active">The spectrum of the sea, continued (strict): no Cox &amp; Munk scaling, no light-wind
+            onset other than the spectrum's own</td>
+          <td>Sea spectrum</td>
         </tr>
         <tr :class="{ off: !st.driveStrainFoam }">
           <td>Ripples &gt; Strained by the waves</td>
-          <td colspan="2" class="active">×1 at 5 kn or less, ×10 at 25 kn or more, linear in knots between
+          <td colspan="3" class="active">×1 at 5 kn or less, ×10 at 25 kn or more, linear in knots between
             (×1 + 9 (U<sub>kn</sub> − 5) / 20)</td>
           <td>{{ st.driveStrainFoam ? '×' + fmt(strain, 1) : '–' }}</td>
         </tr>
         <tr :class="{ off: !st.driveStrainFoam }">
           <td>Whitecaps &gt; Breaking from, Breaking threshold</td>
-          <td colspan="2" class="active">Wave shape, with J &lt; 0.6 at 5 kn or less and J &lt; 0.8 at 25 kn or more, linear in
+          <td colspan="3" class="active">Wave shape, with J &lt; 0.6 at 5 kn or less and J &lt; 0.8 at 25 kn or more, linear in
             knots between (0.6 + 0.2 (U<sub>kn</sub> − 5) / 20)</td>
           <td>{{ st.driveStrainFoam ? 'J < ' + fmt(threshold, 2) : '–' }}</td>
         </tr>
@@ -216,7 +237,11 @@
     <p class="footnote">Pierson, W. J. &amp; Moskowitz, L. (1964). A proposed spectral form for fully developed wind seas
       based on the similarity theory of S. A. Kitaigorodskii. J. Geophys. Res. 69(24), 5181–5190.<br>
       Hasselmann, K. et al. (1973). Measurements of wind-wave growth and swell decay during the Joint North Sea Wave
-      Project (JONSWAP). Dtsch. Hydrogr. Z. A8(12).</p>
+      Project (JONSWAP). Dtsch. Hydrogr. Z. A8(12).<br>
+      Bouws, E. et al. (1985). Similarity of the wind wave spectrum in finite depth water. J. Geophys. Res. 90(C1), 975–986.
+      Horvath, C. J. (2015). Empirical directional wave spectra for computer graphics. DigiPro '15, 29–39.<br>
+      Elfouhaily, T. et al. (1997). A unified directional spectrum for long and short wind-driven waves. J. Geophys. Res.
+      102(C7), 15781–15796.</p>
   </div>
 </template>
 

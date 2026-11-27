@@ -10,8 +10,20 @@
 // direction, so the sea is short-crested and does not repeat. Seeded: the same settings give the same waves.
 //
 // The components stop where the surface ripples (Assets/Ocean/RippleSpectrum.js) start, at RIPPLE_K_MIN.
+//
+// Spectrum (settings.spectrum):
+//  - 'jonswap' (default): JONSWAP of height Hm0 and peak Tp (gamma 1: Pierson-Moskowitz)
+//  - 'elfouhaily': the unified spectrum of Elfouhaily et al. 1997 (Assets/Ocean/Elfouhaily.js) for the wind
+//    spectrumWind and inverse wave age Omega: Hm0 and Tp follow from it (the Hm0 and Tp settings are ignored)
+// Depth (settings.depth, m; null: deep water): TMA (Bouws et al. 1985; Horvath 2015, "Empirical Directional Wave
+// Spectra for Computer Graphics"): the spectrum times the Kitaigorodskii depth attenuation Phi(omega_h),
+// omega_h = omega sqrt(h / g), in the approximation of Thompson & Vincent (1983), < 4% error:
+//   Phi = omega_h^2 / 2 (omega_h <= 1),  1 - (2 - omega_h)^2 / 2 (1 < omega_h < 2),  1 above
+// With a depth the FFT sea uses the finite-depth dispersion w^2 = g k tanh(k h) (the discrete waves, the ripples and
+// the shader stay in deep water: the ripples are deep at any depth, Phi = 1 there).
 
 import { RIPPLE_K_MIN } from '/OceanTestSite/Assets/Ocean/RippleSpectrum.js';
+import { elfouhailyParams, elfouhailyS } from '/OceanTestSite/Assets/Ocean/Elfouhaily.js';
 import { spreadingExponent, createSpreading, windOfSea, SPREAD_MODEL_IDS } from '/OceanTestSite/Assets/Ocean/DirectionalSpreading.js';
 export { spreadingExponent };
 
@@ -36,7 +48,15 @@ export const DEFAULT_SEA_SETTINGS = {
   count: 40,    // Number of components (Gerstner waves)
   seed: 1,
   choppiness: 1, // FFT: horizontal displacement factor (Tessendorf's lambda). 1: every component is a trochoid
+  spectrum: 'jonswap',   // 'jonswap' or 'elfouhaily' (see above)
+  spectrumWind: 10,      // 'elfouhaily': U10 (m/s)
+  Omega: null,           // 'elfouhaily': inverse wave age U10 / cp (null: 0.84, fully developed)
+  depth: null,           // m, null: deep water. With a depth: TMA (depth attenuation) and finite-depth dispersion
+  // FFT: Rayleigh-distributed amplitudes (Tessendorf 2001, Horvath 2015: Gaussian complex amplitudes) instead of the
+  // expected one: wave groups and occasional steeper, sharper crests
+  randomAmplitudes: true,
 };
+export const SEA_SPECTRA = ['jonswap', 'elfouhaily'];
 
 // Frequency where the ripples take over (deep water: f = sqrt(g k) / 2 pi): ~0.61 Hz, 1.6 s, 4.2 m
 export const SPLIT_FREQUENCY = Math.sqrt(G * RIPPLE_K_MIN) / (2 * Math.PI);
@@ -84,13 +104,55 @@ function shapeIntegral(gamma) {
   return shapeIntegralCache.get(gamma);
 }
 
+// Kitaigorodskii depth attenuation (TMA), Thompson & Vincent (1983) approximation; 1 in deep water (depth null)
+export function depthAttenuation(f, depth) {
+  if (!(depth > 0)) return 1;
+  const wh = 2 * Math.PI * f * Math.sqrt(depth / G);
+  return wh <= 1 ? 0.5 * wh * wh : wh < 2 ? 1 - 0.5 * (2 - wh) * (2 - wh) : 1;
+}
+
+// Dispersion: angular frequency of wavenumber k, and dw/dk, in water of depth `depth` (null: deep)
+export function dispersion(k, depth = null) {
+  if (!(depth > 0) || k * depth > 20) { const w = Math.sqrt(G * k); return { w, dwdk: 0.5 * w / k }; }
+  const t = Math.tanh(k * depth), w = Math.sqrt(G * k * t), sech = 1 / Math.cosh(k * depth);
+  return { w, dwdk: G * (t + k * depth * sech * sech) / (2 * w) };
+}
+
+// Elfouhaily variance density in frequency (deep water): S(f) = S(k) dk/df, k = (2 pi f)^2 / g, dk/df = 8 pi^2 f / g
+function elfouhailyDensity(f, params) {
+  const k = Math.pow(2 * Math.PI * f, 2) / G;
+  return elfouhailyS(k, params) * 8 * Math.PI * Math.PI * f / G;
+}
+
+// Variance of a density over (0.2 fp .. 40 fp), log-spaced trapezoids
+function integrateDensity(density, fp) {
+  const n = 3000, lo = Math.log(0.2 * fp), hi = Math.log(40 * fp);
+  let sum = 0;
+  for (let i = 0; i < n; i++) {
+    const f0 = Math.exp(lo + (hi - lo) * i / n), f1 = Math.exp(lo + (hi - lo) * (i + 1) / n);
+    sum += 0.5 * (density(f0) + density(f1)) * (f1 - f0);
+  }
+  return sum;
+}
+
 // Resolved settings: defaults, and the peak period of a fully developed sea when Tp is not given
 export function resolveSeaSettings(settings = {}) {
   const s = { ...DEFAULT_SEA_SETTINGS, ...settings };
+  if (!SEA_SPECTRA.includes(s.spectrum)) s.spectrum = 'jonswap';
+  s.depth = Number(s.depth) > 0 ? Number(s.depth) : null;
+  s.randomAmplitudes = s.randomAmplitudes !== false;
+  if (s.spectrum == 'elfouhaily') {
+    // Hm0 and Tp from the spectrum
+    s.elfouhaily = elfouhailyParams(s.spectrumWind, s.Omega);
+    s.Tp = s.elfouhaily.Tp;
+    s.Hm0 = 4 * Math.sqrt(integrateDensity(f => elfouhailyDensity(f, s.elfouhaily), 1 / s.Tp));
+  }
   s.Hm0 = Math.max(0.01, Number(s.Hm0) || 0.01);
   s.TpAuto = !(s.Tp > 0);
   if (s.TpAuto) s.Tp = fullyDevelopedPeakPeriod(s.Hm0);
   s.gamma = Math.max(1, Number(s.gamma) || 1);
+  // Hm0 of the spectrum drawn (below Hm0 in shallow water: the depth attenuation)
+  s.Hm0Spectrum = s.depth ? 4 * Math.sqrt(integrateDensity(f => spectralDensity(f, s), 1 / s.Tp)) : s.Hm0;
   s.count = Math.max(1, Math.round(s.count));
   s.choppiness = Math.max(0, Number(s.choppiness ?? 1));
   if (!SEA_METHODS.includes(s.method)) s.method = 'fft';
@@ -107,12 +169,18 @@ export function seaSpreading(settings) {
   return createSpreading({ model: s.spreadModel, spread: s.spread, windSpeed: s.spreadWindResolved, smax: s.spreadSmax }, 1 / s.Tp);
 }
 
-// Variance density S(f) (m^2/Hz) of the target spectrum: integrates to (Hm0 / 4)^2
+// Variance density S(f) (m^2/Hz) of the target spectrum: integrates to (Hm0 / 4)^2 in deep water (less with a depth)
 export function spectralDensity(f, settings) {
   const s = settings.TpAuto === undefined ? resolveSeaSettings(settings) : settings;
-  const fp = 1 / s.Tp;
-  const m0 = Math.pow(s.Hm0 / 4, 2);
-  return m0 * jonswapShape(f, fp, s.gamma) / (shapeIntegral(s.gamma) * Math.pow(fp, -4));
+  if (!(f > 0)) return 0;
+  let S;
+  if (s.spectrum == 'elfouhaily' && s.elfouhaily) S = elfouhailyDensity(f, s.elfouhaily);
+  else {
+    const fp = 1 / s.Tp;
+    const m0 = Math.pow(s.Hm0 / 4, 2);
+    S = m0 * jonswapShape(f, fp, s.gamma) / (shapeIntegral(s.gamma) * Math.pow(fp, -4));
+  }
+  return S * depthAttenuation(f, s.depth);
 }
 
 
@@ -173,8 +241,10 @@ export function generateSea(settings = {}) {
 //   Psi(kx, kz) = E(f, theta) * cg / (2 pi k)        (m^4)
 // E(f, theta) = S(f) D(theta) is the directional spectrum (m^2/Hz/rad), cg / (2 pi) = df/dk the Jacobian from f to k
 // and 1 / k the Jacobian from polar (k, theta) to Cartesian (kx, kz).
-// Amplitudes are deterministic (sqrt of the expected variance) with random phases, so the realisation follows the
-// target spectrum closely (Tessendorf draws Gaussian amplitudes instead, which adds Rayleigh scatter).
+// Amplitudes: with randomAmplitudes (default) Rayleigh distributed, a sqrt(-ln u) (the modulus of Tessendorf's
+// Gaussian complex amplitude, the same mean variance): wave groups and occasional steeper crests, as in the sea.
+// Without, deterministic (sqrt of the expected variance): the realisation follows the target spectrum closely.
+// With a depth, the finite-depth dispersion: f and cg = dw/dk from w^2 = g k tanh(k h).
 
 export const FFT_N = 512;          // Grid size (texture size)
 export const FFT_MIN_SIZE = 512;   // Minimum tile size (m)
@@ -209,29 +279,32 @@ export function generateFFTSea(settings = {}, N = FFT_N) {
   const L = fftTileSize(s.Tp);
   const dk = 2 * Math.PI / L;
   const kCut = FFT_K_FRACTION * Math.PI * N / L;
-  const fCut = Math.sqrt(G * kCut) / (2 * Math.PI);
+  const fCut = dispersion(kCut, s.depth).w / (2 * Math.PI);
   const spreading = seaSpreading(s);
   const meanDir = s.Mdir * DEG2RAD;
   const rand = mulberry32(s.seed + 31337);
+  const randAmp = mulberry32(s.seed + 4241); // Own stream: the toggle changes only the amplitudes
 
   const amp = new Float64Array(N * N), phases = new Float64Array(N * N), omega = new Float64Array(N * N);
   let variance = 0;
   for (let m = 0; m < N; m++) {
     for (let n = 0; n < N; n++) {
       const phase = rand() * 2 * Math.PI; // Drawn for every texel: the phases do not depend on the cut
+      const rayleigh = Math.sqrt(-Math.log(1 - randAmp())); // Mean square 1
       const nn = n < N / 2 ? n : n - N, mm = m < N / 2 ? m : m - N;
       const kx = nn * dk, kz = mm * dk, k = Math.hypot(kx, kz);
       if (k == 0 || k > kCut) continue;
-      const f = Math.sqrt(G * k) / (2 * Math.PI);
+      const disp = dispersion(k, s.depth);
+      const f = disp.w / (2 * Math.PI);
       // Direction the component comes FROM (clockwise from north), from its travel direction (kx, kz) / k
       const from = Math.atan2(-kx / k, kz / k);
       let rel = from - meanDir;
       rel = Math.atan2(Math.sin(rel), Math.cos(rel));
       const D = spreading.D(f, rel);                                          // 1/rad
       const E = spectralDensity(f, s) * D;                                    // m^2/Hz/rad
-      const cg = 0.5 * Math.sqrt(G / k);
+      const cg = disp.dwdk;
       const psi = E * cg / (2 * Math.PI * k);                                 // m^4
-      const a = Math.sqrt(2 * psi * dk * dk);
+      const a = Math.sqrt(2 * psi * dk * dk) * (s.randomAmplitudes ? rayleigh : 1);
       amp[m * N + n] = a;
       phases[m * N + n] = phase;
       variance += a * a / 2;
@@ -251,7 +324,7 @@ export function generateFFTSea(settings = {}, N = FFT_N) {
       if (!(a > 0)) continue;
       const nn = n < N / 2 ? n : n - N, mm = m < N / 2 ? m : m - N;
       const kx = nn * dk, kz = mm * dk, k = Math.hypot(kx, kz);
-      const w = Math.sqrt(G * k);
+      const w = dispersion(k, s.depth).w;
       omega[i] = w;
       const v = 0.5 * a * a;
       slopeTensor.xx += v * kx * kx; slopeTensor.zz += v * kz * kz; slopeTensor.xz += v * kx * kz;
@@ -273,6 +346,7 @@ export function generateFFTSea(settings = {}, N = FFT_N) {
 
   return {
     settings: s, N, L, dk, kCut, fCut, spreading,
+    density: f => spectralDensity(f, s), // S(f) of the spectrum (m^2/Hz), continued by the strict ripples
     amp, phase: phases, omega, choppiness: s.choppiness, components, slopeTensor,
     numComponents: all.length,
     realizedHm0: 4 * Math.sqrt(totalVariance),

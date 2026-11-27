@@ -84,6 +84,11 @@
               @input="change({ trailDamping: Number($event.target.value) })"><span>{{ Math.round(settings.trailDamping * 100) }}%</span></div>
         </div>
         <div class="container-horizontal">
+          <span title="How much the foam smooths the ripples under it (surfactants and bubbles damp the short waves). 0: off, the ripples stay sharp under the foam">Ripples under foam</span>
+          <div><input type="range" min="0" max="1" step="0.05" :value="settings.rippleDamping ?? 0.8"
+              @input="change({ rippleDamping: Number($event.target.value) })"><span>{{ Math.round((settings.rippleDamping ?? 0.8) * 100) }}% smoother</span></div>
+        </div>
+        <div class="container-horizontal">
           <span title="Radius of the collapse and of the trail damping around a breaker, ahead, behind and to the sides, times its wavelength: small breakers soften a small area, large ones a large area">Softening radius</span>
           <div><input type="range" min="0.1" max="1" step="0.05" :value="settings.radius"
               @input="change({ radius: Number($event.target.value) })"><span>×{{ settings.radius.toFixed(2) }} wavelength</span></div>
@@ -267,7 +272,7 @@ export default {
   data() {
     return {
       settings: { enabled: true, mode: 'shape', amount: 1, scaleSplit: 'quantile', threshold: 0.6, lead: 0.3, persistence: 1,
-        collapse: 0.6, radius: 0.75, trailDamping: 0.5, surge: 2, small: true, smallCrest: 0.05, smallFoam: 0.7, smallFoamScale: 2.5, smallFoamGrow: 6, smallFoamLifetime: 1.5,
+        collapse: 0.6, radius: 0.75, trailDamping: 0.5, rippleDamping: 0.8, surge: 2, small: true, smallCrest: 0.05, smallFoam: 0.7, smallFoamScale: 2.5, smallFoamGrow: 6, smallFoamLifetime: 1.5,
         smallFoamVariation: 0.5, smallFoamSpread: 0.01, spray: false, sprayAmount: 1, sprayLarge: true, sprayFoam: true, sprayFoamPatch: 4, sprayFoamLifetime: 0.6,
         sprayFoamScale: 2.5, sprayFoamRadius: 0.25, sprayFoamFull: 3, sprayFoamLog: 30, sprayFoamMax: 0.85 },
       calibration: null,

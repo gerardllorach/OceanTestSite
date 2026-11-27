@@ -14,15 +14,17 @@
 // From cheapest to most realistic (the panel lists them in this order)
 // gerstnerCount: number of Gerstner components of the sea without FFT (the count can still be changed in the panel)
 // rippleLoop: ripples from a precomputed looping field (Assets/Ocean/RippleLoop.js) instead of the ripple FFT
+// detailRipples: the centimetre ripples finer than the ripple grid as a looping normal texture (RippleSpectrum.js
+//   generateDetailRipples), instead of roughness only
 // opaque: draw the ocean opaque and front faces only. Where the waves fold over in screen space (oblique views, ~45°),
 //   the hidden back slopes are then culled, and mobile GPUs can skip hidden fragments (Apple HSR, Mali FPK, Adreno
 //   LRZ only work on opaque geometry). The shader always writes alpha 1, so the image does not change. Front faces
 //   are enough above and below the water: the projected grid is built along the camera rays, so the undisplaced
 //   surface always faces the camera and only the folds turn away
 export const QUALITY_PRESETS = {
-  low: { label: 'Low', fft: false, simpleShading: true, gerstnerCount: 10, gridVertices: 300000, opaque: true, rippleLoop: true },
-  medium: { label: 'Medium', fft: true, seaN: 256, rippleN: 256, halfFloat: true, gridVertices: 500000, sprayN: 256, sprayFoamN: 512, rippleFoamN: 512, rippleFoamExtent: 64 },
-  high: { label: 'High', fft: true, seaN: 512, rippleN: 256, halfFloat: false, gridVertices: 1000000, sprayN: 512, sprayFoamN: 1024, rippleFoamN: 1024, rippleFoamExtent: 96 },
+  low: { label: 'Low', fft: false, simpleShading: true, gerstnerCount: 10, gridVertices: 300000, opaque: true, rippleLoop: true, detailRipples: true },
+  medium: { label: 'Medium', fft: true, seaN: 256, rippleN: 256, halfFloat: true, gridVertices: 500000, sprayN: 256, sprayFoamN: 512, rippleFoamN: 512, rippleFoamExtent: 64, detailRipples: true },
+  high: { label: 'High', fft: true, seaN: 512, rippleN: 256, halfFloat: false, gridVertices: 1000000, sprayN: 512, sprayFoamN: 1024, rippleFoamN: 1024, rippleFoamExtent: 96, detailRipples: true },
 };
 
 // Options of the simple shading ('low'), switched on one by one to add realism on phones. Each one is a shader

@@ -6,7 +6,7 @@ import { OceanGrid } from '/OceanTestSite/Assets/Ocean/OceanGrid.js';
 import {OceanProjectedGridVertShader, OceanProjectedGridFragShader} from '/OceanTestSite/Assets/Ocean/OceanProjectedGridShader.js';
 
 import { OceanParameters } from '/OceanTestSite/Assets/Ocean/OceanParams.js';
-import { DEFAULT_RIPPLE_SETTINGS, RIPPLE_N, generateRipples, travelVector } from '/OceanTestSite/Assets/Ocean/RippleSpectrum.js';
+import { DEFAULT_RIPPLE_SETTINGS, RIPPLE_N, generateRipples, generateDetailRipples, travelVector } from '/OceanTestSite/Assets/Ocean/RippleSpectrum.js';
 import { FFT_N } from '/OceanTestSite/Assets/Ocean/SeaSpectrum.js';
 import { FFTOcean } from '/OceanTestSite/Assets/Ocean/FFTOcean.js';
 import { FoamSimulation, DEFAULT_FOAM_SETTINGS, FOAM_DETAIL_N, FOAM_DETAIL_SIZE, foamCalibration, foamDetailTexture, foamRadiusLod } from '/OceanTestSite/Assets/Ocean/Foam.js';
@@ -107,6 +107,14 @@ class OceanEntity {
         u_rippleLoopEnabled: {value: false},
         u_rippleLoopFrames: {value: new THREE.Vector3(0, 1, 0)},
         u_rippleLoopScale: {value: 1},
+        // Detail ripples (centimetre ripples finer than the ripple grid, RippleSpectrum.generateDetailRipples): a
+        // looping normal texture of u_detailSize metres, sampled rotated by u_detailRotation (cos, sin)
+        u_detailLoop: {value: null},
+        u_detailEnabled: {value: false},
+        u_detailFrames: {value: new THREE.Vector3(0, 1, 0)},
+        u_detailScale: {value: 1},
+        u_detailSize: {value: 0.2},
+        u_detailRotation: {value: new THREE.Vector2(1, 0)},
         u_windDirection: {value: new THREE.Vector2(0, 1)},
         // Spacing of the grid vertices (mesh units, before the viewport scale): the vertex shader only displaces the
         // geometry with ripples that are at least ~4 vertices long
@@ -131,6 +139,7 @@ class OceanEntity {
         u_foamDetailSize: {value: FOAM_DETAIL_SIZE},
         u_foamDetailN: {value: FOAM_DETAIL_N},
         u_foamStretch: {value: 1},
+        u_foamRippleDamping: {value: DEFAULT_FOAM_SETTINGS.rippleDamping}, // Ripples smoothed under the foam
         u_foamThreshold: {value: -1e3},
         u_collapseStrength: {value: DEFAULT_FOAM_SETTINGS.collapse}, // Crest that has broken: loses height
         u_trailDamping: {value: DEFAULT_FOAM_SETTINGS.trailDamping}, // Foam trail: damps the waves through it
@@ -355,6 +364,7 @@ class OceanEntity {
   shaderDefines() {
     const defines = {};
     if (this.quality.rippleLoop) defines.RIPPLE_LOOP = '';
+    if (this.quality.detailRipples) defines.DETAIL_RIPPLES = '';
     if (!this.quality.simpleShading) return defines;
     defines.SIMPLE_SHADING = '';
     Object.keys(SHADING_OPTIONS).forEach(key => { if (this.shadingOptions[key]) defines[SHADING_OPTIONS[key].define] = ''; });
@@ -513,7 +523,7 @@ class OceanEntity {
     this.ripples = generateRipples(this.getDiscreteWaves(), settings, this.getFFTSea(), N);
     if (this.oceanTile) {
       const u = this.oceanTile.material.uniforms;
-      u.u_rippleTailSigma2.value.set(this.ripples.tailSigma2.up, this.ripples.tailSigma2.cross);
+      this.setRippleTail();
       const [ux, uz] = travelVector(this.ripples.windDir);
       u.u_windDirection.value.set(ux, uz);
       u.u_rippleEnabled.value = this.ripples.enabled && !!this.rippleFFT; // FFT ripple textures
@@ -524,6 +534,7 @@ class OceanEntity {
         if (this.ripples.enabled) this.rippleFFT.update(this.time);
       }
       this.updateRippleLoop();
+      this.updateDetailRipples();
     }
     if (window.eventBus) window.eventBus.emit('OceanEntity_ripplesChanged', this.ripples);
     // The foam depends on the wind of the ripples and on the FFT sea
@@ -539,7 +550,7 @@ class OceanEntity {
   foamGainClock = 0;     // s since the last adjustment
 
   // partial: {enabled, mode ('wind' | 'shape'), amount, scaleSplit ('quantile' | 'phillips'), threshold, lead,
-  // persistence, collapse, radius (x wavelength), trailDamping, surge, small (small breakers from the ripples), spray,
+  // persistence, collapse, radius (x wavelength), trailDamping, rippleDamping, surge, small (small breakers from the ripples), spray,
   // smallCrest, smallFoam, smallFoamScale, smallFoamGrow, smallFoamLifetime, smallFoamVariation, smallFoamSpread, sprayAmount, sprayLarge, sprayFoam, sprayFoamPatch, sprayFoamLifetime, sprayFoamScale,
   // sprayFoamRadius, sprayFoamFull, sprayFoamLog, sprayFoamMax (Assets/Ocean/Spray.js)}
   setFoamSettings(partial) {
@@ -599,6 +610,7 @@ class OceanEntity {
     u.u_foamEnabled.value = !!(this.foam && c && this.foamSettings.enabled);
     u.u_foamThreshold.value = c ? c.threshold : -1e3;
     u.u_foamStretch.value = c ? c.streak : 1;
+    u.u_foamRippleDamping.value = Math.min(1, Math.max(0, this.foamSettings.rippleDamping ?? DEFAULT_FOAM_SETTINGS.rippleDamping));
     u.u_collapseStrength.value = c ? c.collapse : 0;
     u.u_trailDamping.value = c ? c.trailDamping : 0;
     u.u_foamRadiusLod.value = c ? foamRadiusLod(c) : 0;
@@ -670,6 +682,49 @@ class OceanEntity {
     };
     if (!this.rippleLoop) build();
     else this.rippleLoopTimer = setTimeout(build, 150);
+  }
+
+  // Roughness of the ripples finer than the grid: the tail, minus what the detail texture draws (when it is on)
+  setRippleTail() {
+    const u = this.oceanTile.material.uniforms, t = this.ripples.tailSigma2;
+    const d = u.u_detailEnabled.value && this.detail ? this.detail.slopes : { up: 0, cross: 0 };
+    u.u_rippleTailSigma2.value.set(Math.max(0, t.up - d.up), Math.max(0, t.cross - d.cross));
+  }
+
+  // DETAIL RIPPLES: rebuilt like the ripple loop (at once the first time, then 150 ms after the last change)
+  detailRipplesActive() {
+    return !!this.quality.detailRipples && this.ripples && this.ripples.enabled && this.rippleSettings.detail !== false;
+  }
+  updateDetailRipples() {
+    const u = this.oceanTile.material.uniforms;
+    clearTimeout(this.detailTimer);
+    if (!this.detailRipplesActive()) {
+      u.u_detailEnabled.value = false;
+      this.setRippleTail();
+      if (!this.quality.detailRipples && this.detailLoop) { this.detailLoop.dispose(); this.detailLoop = null; this.detailKey = null; }
+      return;
+    }
+    const r = this.ripples;
+    const key = JSON.stringify([r.settings, r.windDir, r.L, r.N, r.kCut, r.heightVariance, r.tailSigma2]);
+    if (key == this.detailKey && this.detailLoop) { u.u_detailEnabled.value = !!this.detail; this.setRippleTail(); return; }
+    const build = () => {
+      if (!this.detailRipplesActive() || this.ripples !== r) return; // Superseded
+      const t0 = performance.now();
+      this.detail = generateDetailRipples(r);
+      this.detailKey = key;
+      if (!this.detail) { u.u_detailEnabled.value = false; this.setRippleTail(); return; }
+      if (!this.detailLoop) this.detailLoop = new RippleLoop();
+      this.detailLoop.build(this.detail, this.detail.windU);
+      this.detailBuildMs = performance.now() - t0;
+      u.u_detailLoop.value = this.detailLoop.texture;
+      u.u_detailScale.value = this.detailLoop.scale;
+      u.u_detailSize.value = this.detail.L;
+      u.u_detailRotation.value.set(Math.cos(this.detail.rotation), Math.sin(this.detail.rotation));
+      u.u_detailEnabled.value = true;
+      this.setRippleTail();
+    };
+    if (!this.detailLoop) build();
+    else this.detailTimer = setTimeout(build, 150);
   }
 
   // SUN
@@ -827,6 +882,8 @@ class OceanEntity {
       // Ripple field loop: the two frames to blend at this time
       if (this.rippleLoop && oceanTile.material.uniforms.u_rippleLoopEnabled.value)
         oceanTile.material.uniforms.u_rippleLoopFrames.value.fromArray(this.rippleLoop.framesAt(this.time));
+      if (this.detailLoop && oceanTile.material.uniforms.u_detailEnabled.value)
+        oceanTile.material.uniforms.u_detailFrames.value.fromArray(this.detailLoop.framesAt(this.time));
 
       this.gridEntity.update(oceanTile);
 

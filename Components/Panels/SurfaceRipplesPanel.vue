@@ -88,6 +88,34 @@
         </div>
       </div>
 
+      <!-- SHAPE OF THE SPECTRUM -->
+      <div class="container-horizontal">
+        <span title="Sea spectrum (strict, set by the digital twin): the ripples continue the spectrum of the FFT sea (JONSWAP, TMA, Pierson-Moskowitz or Elfouhaily) in absolute units, not scaled to Cox &amp; Munk. Wind dependent (Elfouhaily et al. 1997, scaled to Cox &amp; Munk): in strong wind the short sharp ripples carry most of the slope, the mid-sized waves are few. Constant: the same slope per octave at any wind (Phillips 1958), scaled to Cox &amp; Munk">Spectrum shape</span>
+        <div class="column">
+          <div class="segmented" role="group" aria-label="Shape of the ripple spectrum">
+            <button class="clickable" :class="{ 'button-active': settings.spectrum == 'sea' }" :aria-pressed="settings.spectrum == 'sea'"
+              :disabled="!rippleFFT" @click="change({ spectrum: 'sea' })">Sea spectrum</button>
+            <button class="clickable" :class="{ 'button-active': settings.spectrum == 'elfouhaily' }" :aria-pressed="settings.spectrum == 'elfouhaily'"
+              @click="change({ spectrum: 'elfouhaily' })">Wind dependent</button>
+            <button class="clickable" :class="{ 'button-active': !settings.spectrum || settings.spectrum == 'saturation' }" :aria-pressed="!settings.spectrum || settings.spectrum == 'saturation'"
+              @click="change({ spectrum: 'saturation' })">Constant</button>
+          </div>
+          <span v-if="ripples && ripples.explicitFraction != null" class="derived-value">{{ Math.round(ripples.explicitFraction * 100) }}% of
+            the ripple slope in the grid, the rest finer (roughness)<template v-if="ripples.strict && ripples.slopes">; total slope
+            {{ Math.round((ripples.slopes.total.up + ripples.slopes.total.cross) / Math.max(1e-9, ripples.slopes.coxMunk.up + ripples.slopes.coxMunk.cross) * 100) }}% of Cox &amp; Munk</template></span>
+        </div>
+      </div>
+      <div class="container-horizontal">
+        <span title="On: each ripple gets a Rayleigh-distributed amplitude (as the FFT sea): groups and occasional sharper ripples. Off: the expected amplitude">Random amplitudes</span>
+        <label class="checkbox-label"><input type="checkbox" :checked="settings.randomAmplitudes !== false"
+            @change="change({ randomAmplitudes: $event.target.checked })"> Rayleigh</label>
+      </div>
+      <div class="container-horizontal">
+        <span title="The ripples finer than the ripple grid (~9 cm down to a few mm, the capillary-gravity waves) drawn as a looping normal texture near the camera, at their real speed; farther, they are roughness as before. Off: roughness only. Their slope is taken from the roughness: the total stays the same">Centimetre ripples</span>
+        <label class="checkbox-label"><input type="checkbox" :checked="settings.detail !== false"
+            @change="change({ detail: $event.target.checked })"> Drawn near the camera</label>
+      </div>
+
       <!-- STRAIN BY THE LONG WAVES -->
       <div class="container-horizontal">
         <span title="The long waves squeeze the surface on their crests and stretch it in their troughs, and the ripples with it: steeper and shorter on the crests, longer and smoother in the troughs, only across the long-wave crests (Longuet-Higgins & Stewart 1960). ×0: off, ×1: physical, above: exaggerated">Strained by the waves</span>
@@ -180,7 +208,7 @@ export default {
   },
   data() {
     return {
-      settings: { mode: 'seaState', windSpeed: 7, windDir: 0, enabled: true, directionMode: 'wind', direction: 0, spreadMode: 'auto', spread: 30, strength: 1, strain: 1, lightWind: 'coxMunk' },
+      settings: { mode: 'seaState', windSpeed: 7, windDir: 0, enabled: true, directionMode: 'wind', direction: 0, spreadMode: 'auto', spread: 30, strength: 1, strain: 1, lightWind: 'coxMunk', spectrum: 'saturation', randomAmplitudes: true, detail: true },
       ripples: null,
       rippleGrid: true,  // Ripples drawn (FFT or loop)
       rippleFFT: true,   // Ripple FFT (the strain needs it)

@@ -70,6 +70,7 @@ export const DEFAULT_FOAM_SETTINGS = {
   collapse: 0.6,         // How much a crest that has broken loses height (0: off)
   radius: 0.75,          // Radius of the collapse and of the trail damping, times the breaking wavelength
   trailDamping: 0.5,     // How much the foam trail damps the waves that pass through it (0: off)
+  rippleDamping: 0.8,    // How much the foam smooths the ripples under it (0: off, the ripples stay sharp)
   surge: 2,              // Forward surge of a collapsing crest, times its height (0: off)
   small: true,           // Small breakers from the ripples (waves of ~1-4 m): their foam and their spray
   smallCrest: 0.05,      // Breaking crest of the small breakers (while it breaks, a little ahead): 0 off .. 1 dense

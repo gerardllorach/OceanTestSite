@@ -30,6 +30,14 @@
         <span title="Peak enhancement: 1 = Pierson-Moskowitz (fully developed), 3.3 = mean JONSWAP (growing sea)">Peak enhancement γ</span>
         <div><input type="range" min="1" max="7" step="0.1" :value="s.gamma" @input="change({ gamma: Number($event.target.value) })"><span>{{ fmt(s.gamma, 1) }}</span></div>
       </div>
+      <p v-if="s.spectrum == 'elfouhaily'" class="note">Elfouhaily spectrum (set by the digital twin, U<sub>10</sub>
+        {{ fmt(s.spectrumWind, 1) }} m/s, Ω {{ fmt(s.Omega || 0.84, 2) }}): H<sub>m0</sub>, T<sub>p</sub> and γ come from it.
+        <button class="clickable" @click="change({ spectrum: 'jonswap' })">Back to JONSWAP</button></p>
+      <div class="container-horizontal">
+        <span title="Deep: no effect. A depth: TMA spectrum (Bouws et al. 1985, Horvath 2015), the spectrum times the Kitaigorodskii depth attenuation (the long waves are damped), and the finite-depth dispersion of the FFT sea">Depth</span>
+        <div><input type="range" min="0" max="200" step="1" :value="s.depth || 0"
+            @input="change({ depth: Number($event.target.value) > 0 ? Number($event.target.value) : null })"><span>{{ s.depth > 0 ? fmt(s.depth, 0) + ' m (TMA)' : 'Deep' }}</span></div>
+      </div>
       <div class="container-horizontal">
         <span>Mean direction (from)</span>
         <div class="knob-row">
@@ -76,6 +84,11 @@
       <div class="container-horizontal">
         <span title="Horizontal displacement of the components (Tessendorf's lambda). 1: every component is a trochoid (Gerstner wave). 0: sinusoids, no horizontal motion">Choppiness λ</span>
         <div><input type="range" min="0" max="1.5" step="0.05" :value="s.choppiness" @input="change({ choppiness: Number($event.target.value) })"><span>{{ fmt(s.choppiness, 2) }}</span></div>
+      </div>
+      <div class="container-horizontal">
+        <span title="On: each component gets a Rayleigh-distributed amplitude (Tessendorf 2001, Horvath 2015: Gaussian complex amplitudes), as in the sea: wave groups and occasional steeper, sharper crests. Off: the expected amplitude, the realisation follows the spectrum closely">Random amplitudes</span>
+        <label class="checkbox-label"><input type="checkbox" :checked="s.randomAmplitudes !== false"
+            @change="change({ randomAmplitudes: $event.target.checked })"> Rayleigh</label>
       </div>
       <div class="container-horizontal">
         <span>Realisation</span>
@@ -158,7 +171,8 @@ export default {
   data() {
     return {
       s: { method: 'fft', Hm0: 1, Tp: null, gamma: 3.3, Mdir: 0, Spr1: 30, spreadModel: 'constant', spreadWind: null, spreadSmax: 10,
-        numComponents: 40, choppiness: 1, seed: 1 },
+        numComponents: 40, choppiness: 1, seed: 1,
+        spectrum: 'jonswap', spectrumWind: 10, Omega: null, depth: null, randomAmplitudes: true },
       spreadModels: window.DirectionalSpreading.SPREAD_MODELS,
       godaSmax: window.DirectionalSpreading.GODA_SMAX,
       spreadInfo: {},
@@ -188,7 +202,8 @@ export default {
       const p = window.sceneManager.ocean.oceanParams.oceanParameters;
       this.s = { method: p.method, Hm0: p.Hm0, Tp: p.Tp, gamma: p.gamma, Mdir: p.Mdir, Spr1: p.Spr1,
         spreadModel: p.spreadModel, spreadWind: p.spreadWind, spreadSmax: p.spreadSmax,
-        numComponents: p.numComponents, choppiness: p.choppiness, seed: p.seed };
+        numComponents: p.numComponents, choppiness: p.choppiness, seed: p.seed, spectrum: p.spectrum || 'jonswap',
+        spectrumWind: p.spectrumWind, Omega: p.Omega, depth: p.depth, randomAmplitudes: p.randomAmplitudes !== false };
       const sea = window.sceneManager.getSea();
       this.isSpectral = !!sea;
       this.sea = sea ? { settings: { ...sea.settings }, realizedHm0: sea.realizedHm0, fLo: sea.fLo, fHi: sea.fHi, steepnessSum: sea.steepnessSum } : null;

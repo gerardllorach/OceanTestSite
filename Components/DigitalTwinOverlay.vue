@@ -24,7 +24,8 @@
     <!-- Derived from the wind: less visible -->
     <div class="twin-derived">
       H<sub>m0</sub> {{ fmt(sea.Hm0, 2) }} m · T<sub>p</sub> {{ fmt(sea.Tp, 1) }} s ·
-      {{ tw.model == 'pm' ? 'Pierson–Moskowitz' : 'JONSWAP, ' + fmtFetch(tw.fetchKm) + ' km' }}
+      {{ tw.model == 'pm' ? 'Pierson–Moskowitz' : tw.model == 'tma' ? 'TMA, ' + fmtFetch(tw.fetchKm) + ' km, ' + (tw.depthM ?? 30) + ' m deep'
+        : (tw.model == 'elfouhaily' ? 'Elfouhaily, ' : 'JONSWAP, ') + fmtFetch(tw.fetchKm) + ' km' }}
     </div>
     <div v-if="!inSync" class="twin-derived twin-warning" title="Sea State > Generation was changed by hand since: the sea does not follow this wind">
       Generation edited by hand
